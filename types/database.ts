@@ -348,10 +348,25 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      stylist_match_verification_snapshots: {
+        // 承認時点の主要4項目のみを保持する変更検知用の記録。
+        // 「4項目すべてを資料が証明した」という意味は持たない
+        // （0022_performance_salary_offers.sqlのコメント参照）。
+        Row: {
+          id: string; stylist_user_id: string; evidence_document_id: string | null;
+          avg_monthly_technical_sales: number | null; avg_monthly_clients: number | null;
+          avg_monthly_named_clients: number | null; average_ticket: number | null;
+          verified_by: string | null; verified_at: string; created_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       salary_offers: {
         Row: {
           id: string; salon_user_id: string; stylist_user_id: string;
-          monthly_guarantee: number; performance_addition: number; guarantee_months: number;
+          monthly_guarantee: number; performance_addition: number;
+          performance_condition: string | null; guarantee_months: number;
           salon_message: string | null; status: string; response_reason: string | null;
           response_note: string | null; responded_at: string | null;
           created_at: string; updated_at: string;
@@ -627,7 +642,10 @@ export type Database = {
         Returns: Database["public"]["Tables"]["stylist_match_profiles"]["Row"];
       };
       create_salary_offer: {
-        Args: { p_stylist_user_id: string; p_monthly_guarantee: number; p_performance_addition: number; p_guarantee_months: number; p_salon_message: string | null };
+        Args: {
+          p_stylist_user_id: string; p_monthly_guarantee: number; p_performance_addition: number;
+          p_guarantee_months: number; p_performance_condition: string | null; p_salon_message: string | null;
+        };
         Returns: Database["public"]["Tables"]["salary_offers"]["Row"];
       };
       respond_salary_offer: {

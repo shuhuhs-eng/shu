@@ -201,7 +201,7 @@ export default async function SalonMyPage() {
                         <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${
                           interest.match_profile.verification_status === "verified"
                             ? "bg-[#37755B]/15 text-[#285B45]"
-                            : interest.match_profile.verification_status === "needs_review" || interest.match_profile.verification_status === "rejected"
+                            : interest.match_profile.verification_status === "needs_review" || interest.match_profile.verification_status === "rejected" || interest.match_profile.verification_status === "reverification_needed"
                               ? "bg-[#C24545]/10 text-[#8A2E2E]"
                               : "bg-surface2 text-sub"
                         }`}>
@@ -209,7 +209,8 @@ export default async function SalonMyPage() {
                             self_reported: "自己申告",
                             submitted: "資料提出済み・確認中",
                             needs_review: "数字の確認が必要",
-                            verified: "実績確認済み",
+                            verified: "提出資料確認済み",
+                            reverification_needed: "実績変更のため再確認が必要",
                             rejected: "資料再提出が必要",
                           }[interest.match_profile.verification_status] ?? "自己申告"}
                         </span>
