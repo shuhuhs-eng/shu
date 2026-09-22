@@ -27,3 +27,22 @@ export async function getNotificationsForBell(
   ]);
   return { notifications: notifications ?? [], unreadCount: count ?? 0 };
 }
+
+export type UnreadNotificationRef = Pick<NotificationRow, "related_entity_type" | "related_entity_id">;
+
+/**
+ * サロン別/美容師別のカード単位バッジ用。未読通知の(related_entity_type,
+ * related_entity_id)だけを、件数上限なしで全件取得する。バッジの計算は
+ * 30件キャップの一覧に依存すると取りこぼすため、専用に分けている。
+ */
+export async function getUnreadNotificationRefs(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<UnreadNotificationRef[]> {
+  const { data } = await supabase
+    .from("notifications")
+    .select("related_entity_type, related_entity_id")
+    .eq("user_id", userId)
+    .eq("is_read", false);
+  return data ?? [];
+}

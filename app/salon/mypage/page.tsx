@@ -10,7 +10,8 @@ import { JOB_CHANGE_INTENT_LABELS } from "@/lib/validation/profile-options";
 import { CAREER_GOAL_LABELS, type CareerGoalCode } from "@/lib/match-profile/options";
 import { SalonOfferForm } from "@/components/salary-offers/salon-offer-form";
 import { NotificationBell } from "@/components/notifications/notification-bell";
-import { getNotificationsForBell } from "@/lib/notifications/get-notifications";
+import { getNotificationsForBell, getUnreadNotificationRefs } from "@/lib/notifications/get-notifications";
+import { CardNotificationBadge } from "@/components/notifications/card-notification-badge";
 
 type SalonCultureAiOutputRow = Database["public"]["Tables"]["salon_culture_ai_outputs"]["Row"];
 type ReceivedInterest = Database["public"]["Functions"]["get_received_salon_interests"]["Returns"][number];
@@ -107,6 +108,28 @@ export default async function SalonMyPage() {
   for (const offer of salaryOffers ?? []) if (!latestOfferByStylist.has(offer.stylist_user_id)) latestOfferByStylist.set(offer.stylist_user_id, offer);
 
   const { notifications, unreadCount } = await getNotificationsForBell(supabase, user.id);
+  const unreadRefs = await getUnreadNotificationRefs(supabase, user.id);
+
+  // ★カード単位バッジ(美容師ごと): その美容師のsalary_offers id群
+  // (related_entity_type='salary_offer')と、意思表示そのもの
+  // (related_entity_type='stylist_interest', related_entity_id=stylist_user_id)
+  // の両方を突き合わせる。DBスキーマ変更なしで集計できる。
+  function unreadEntitiesForStylist(stylistUserId: string) {
+    const offerIds = (salaryOffers ?? [])
+      .filter((o) => o.stylist_user_id === stylistUserId)
+      .map((o) => o.id);
+    const entities = [
+      ...offerIds.map((id) => ({ type: "salary_offer", id })),
+      { type: "stylist_interest", id: stylistUserId },
+    ];
+    const offerIdSet = new Set(offerIds);
+    const count = unreadRefs.filter(
+      (r) =>
+        (r.related_entity_type === "salary_offer" && r.related_entity_id && offerIdSet.has(r.related_entity_id)) ||
+        (r.related_entity_type === "stylist_interest" && r.related_entity_id === stylistUserId),
+    ).length;
+    return { count, entities };
+  }
 
   return (
     <main className="mx-auto max-w-[560px] px-5 py-12">
@@ -161,9 +184,15 @@ export default async function SalonMyPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="font-serif text-[16px] font-bold text-ink">
-                      {interest.public_name ?? "美容師"}
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-serif text-[16px] font-bold text-ink">
+                        {interest.public_name ?? "美容師"}
+                      </h3>
+                      {(() => {
+                        const { count, entities } = unreadEntitiesForStylist(interest.stylist_user_id);
+                        return <CardNotificationBadge count={count} entities={entities} />;
+                      })()}
+                    </div>
                     <p className="mt-1 text-[12px] text-sub">
                       {[interest.prefecture, interest.current_position].filter(Boolean).join(" / ") ||
                         "プロフィール情報未設定"}

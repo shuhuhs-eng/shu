@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { respondSalaryOffer } from "@/lib/salary-offers/actions";
+import { CardNotificationBadge } from "@/components/notifications/card-notification-badge";
 import type { Database } from "@/types/database";
 type Offer = Database["public"]["Tables"]["salary_offers"]["Row"];
 const REASONS = [["workdays","勤務日数・休日"],["guarantee_period","保証期間"],["role","役割・業務範囲"],["performance_basis","実績の評価方法"],["other","その他"]] as const;
@@ -10,13 +11,20 @@ const STATUS_LABELS: Record<string,string> = { accepted:"承諾", revision_reque
 // ★1サロンにつき1カード方針: このコンポーネントは「そのサロンの最新offer(offer)」
 // だけを回答対象として表示する。過去のoffer(history)は折りたたみ内に読み取り専用で
 // 表示するだけで、承諾/相談/辞退ボタンは一切出さない。
-export function StylistOfferCard({ offer, salonName, history }: { offer: Offer; salonName: string; history: Offer[] }) {
+// unreadCount/notificationEntitiesは呼び出し元(page.tsx)がnotificationsと
+// このサロンのofferId群を突き合わせて計算する（DBスキーマ変更なし）。
+export function StylistOfferCard({
+  offer, salonName, history, unreadCount, notificationEntities,
+}: {
+  offer: Offer; salonName: string; history: Offer[];
+  unreadCount: number; notificationEntities: { type: string; id: string }[];
+}) {
   const [reason,setReason]=useState<typeof REASONS[number][0]>("performance_basis"); const [note,setNote]=useState(""); const [busy,setBusy]=useState(false); const [msg,setMsg]=useState<string|null>(null);
   // 二段階方式: 最初のボタンでは確定させず、確認状態を経てから初めてrespondSalaryOfferを呼ぶ。
   // 「戻る」はDB送信前のUI状態を選択肢(choice)へ戻すだけで、送信済みstatusには一切影響しない。
   const [step,setStep]=useState<"choice"|"accept"|"consult"|"decline">("choice");
   async function answer(response:"accepted"|"revision_requested"|"declined") { setBusy(true); setMsg(null); const r=await respondSalaryOffer({offerId:offer.id,response,reason:response==="revision_requested"?reason:null,note:response==="revision_requested"?(note||null):null}); setBusy(false); setMsg(r.success?"回答を送信しました。":r.error); }
-  return <article className="rounded-2xl border border-line bg-surface p-5"><p className="eyebrow mb-1">実績オファー</p><h3 className="font-serif text-lg font-bold text-ink">{salonName}</h3><div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-lg bg-surface2 p-2"><p className="text-[10px] text-sub">月額保証</p><p className="mt-1 text-[13px] font-bold">{offer.monthly_guarantee.toLocaleString()}円</p></div><div className="rounded-lg bg-surface2 p-2"><p className="text-[10px] text-sub">実績加算</p><p className="mt-1 text-[13px] font-bold">{offer.performance_addition.toLocaleString()}円</p></div><div className="rounded-lg bg-surface2 p-2"><p className="text-[10px] text-sub">保証期間</p><p className="mt-1 text-[13px] font-bold">{offer.guarantee_months}か月</p></div></div>
+  return <article className="rounded-2xl border border-line bg-surface p-5"><p className="eyebrow mb-1">実績オファー</p><div className="flex items-center justify-between gap-2"><h3 className="font-serif text-lg font-bold text-ink">{salonName}</h3><CardNotificationBadge count={unreadCount} entities={notificationEntities} /></div><div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-lg bg-surface2 p-2"><p className="text-[10px] text-sub">月額保証</p><p className="mt-1 text-[13px] font-bold">{offer.monthly_guarantee.toLocaleString()}円</p></div><div className="rounded-lg bg-surface2 p-2"><p className="text-[10px] text-sub">実績加算</p><p className="mt-1 text-[13px] font-bold">{offer.performance_addition.toLocaleString()}円</p></div><div className="rounded-lg bg-surface2 p-2"><p className="text-[10px] text-sub">保証期間</p><p className="mt-1 text-[13px] font-bold">{offer.guarantee_months}か月</p></div></div>
   {offer.performance_addition > 0 && <div className="mt-3 rounded-lg border border-line bg-surface2 p-3"><p className="text-[10px] font-semibold text-sub">支給条件</p><p className="mt-1 text-[12px] leading-relaxed text-charcoal">{offer.performance_condition ?? "未記載"}</p></div>}
   {offer.salon_message&&<p className="mt-3 text-[12px] leading-relaxed text-charcoal">{offer.salon_message}</p>}<p className="mt-3 text-[10px] text-sub">これは面談前の条件提示であり、雇用契約の確定ではありません。</p>
   {offer.status==="pending"&&<>

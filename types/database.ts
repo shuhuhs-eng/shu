@@ -673,6 +673,11 @@ export type Database = {
         Args: Record<string, never>;
         Returns: number;
       };
+      mark_notifications_read_by_entities: {
+        // p_entitiesは [{type: string, id: string}, ...] のJSON配列。
+        Args: { p_entities: { type: string; id: string }[] };
+        Returns: number;
+      };
       get_public_salon_culture_detail: {
         // 引数は対象サロンのuser_idのみ。呼び出し美容師自身はRPC内部で
         // auth.uid()から取得する（stylist_user_idは引数に取らない）。

@@ -12,7 +12,7 @@ import type { AiOutputType, Database } from "@/types/database";
 import type { TraitScores } from "@/lib/diagnosis";
 import { StylistOfferCard } from "@/components/salary-offers/stylist-offer-card";
 import { NotificationBell } from "@/components/notifications/notification-bell";
-import { getNotificationsForBell } from "@/lib/notifications/get-notifications";
+import { getNotificationsForBell, getUnreadNotificationRefs } from "@/lib/notifications/get-notifications";
 
 type AiOutputRow = Database["public"]["Tables"]["diagnosis_ai_outputs"]["Row"];
 
@@ -106,14 +106,27 @@ export default async function StylistMyPage() {
     list.push(offer);
     offersBySalon.set(offer.salon_user_id, list);
   }
-  const groupedSalaryOffers = [...offersBySalon.entries()].map(([salonUserId, offers]) => ({
-    salonUserId,
-    salonName: salonNameById.get(salonUserId) ?? "サロン",
-    latest: offers[0],
-    history: offers.slice(1),
-  }));
-
   const { notifications, unreadCount } = await getNotificationsForBell(supabase, user.id);
+  const unreadRefs = await getUnreadNotificationRefs(supabase, user.id);
+
+  // ★カード単位バッジ: related_entity_type='salary_offer'の未読を、その
+  // サロンのoffer id群(最新+履歴)と突き合わせるだけでDBスキーマ変更なしに
+  // 集計できる（related_entity_idはsalary_offers.idそのもののため）。
+  const groupedSalaryOffers = [...offersBySalon.entries()].map(([salonUserId, offers]) => {
+    const offerIds = new Set(offers.map((o) => o.id));
+    const notificationEntities = [...offerIds].map((id) => ({ type: "salary_offer", id }));
+    const unreadForSalon = unreadRefs.filter(
+      (r) => r.related_entity_type === "salary_offer" && r.related_entity_id && offerIds.has(r.related_entity_id),
+    ).length;
+    return {
+      salonUserId,
+      salonName: salonNameById.get(salonUserId) ?? "サロン",
+      latest: offers[0],
+      history: offers.slice(1),
+      unreadCount: unreadForSalon,
+      notificationEntities,
+    };
+  });
 
   const showNewStylistDesign = !!coreTypeCode && !!latest;
 
@@ -245,7 +258,7 @@ export default async function StylistMyPage() {
 
       {groupedSalaryOffers.length > 0 && <section id="salary-offers" className="mt-4">
         <p className="eyebrow mb-2">届いた給与条件</p>
-        <div className="space-y-3">{groupedSalaryOffers.map((g) => <StylistOfferCard key={g.salonUserId} offer={g.latest} salonName={g.salonName} history={g.history} />)}</div>
+        <div className="space-y-3">{groupedSalaryOffers.map((g) => <StylistOfferCard key={g.salonUserId} offer={g.latest} salonName={g.salonName} history={g.history} unreadCount={g.unreadCount} notificationEntities={g.notificationEntities} />)}</div>
       </section>}
 
       {/* ★「あなたらしさ×サロンらしさ」MVP。既存の30問診断・8タイプ・

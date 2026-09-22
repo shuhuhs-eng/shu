@@ -80,16 +80,22 @@ export function NotificationBell({
 
   return (
     <div className="relative">
+      {/* ★未読の有無で視覚的な差を大きくする: 未読ありは赤地に白文字の
+          目立つピル、未読0件は控えめなニュートラル表示にする。単なる
+          小さいアイコンだけにせず「🔔 通知 3」の形でラベル+件数を出す。 */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="relative flex h-9 w-9 items-center justify-center rounded-full border border-line bg-surface"
-        aria-label="通知"
+        className={`flex items-center gap-2 rounded-full border px-4 py-2.5 text-[13px] font-bold transition-colors ${
+          unread > 0 ? "border-[#C24545] bg-[#C24545] text-white" : "border-line bg-surface text-ink"
+        }`}
+        aria-label={unread > 0 ? `通知 未読${unread}件` : "通知"}
       >
-        <Bell size={17} strokeWidth={1.75} className="text-ink" />
+        <Bell size={18} strokeWidth={2} />
+        <span>通知</span>
         {unread > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#C24545] px-1 text-[9px] font-bold text-white">
-            {unread > 9 ? "9+" : unread}
+          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-extrabold text-[#C24545]">
+            {unread > 99 ? "99+" : unread}
           </span>
         )}
       </button>
