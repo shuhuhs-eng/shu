@@ -17,6 +17,20 @@
 --   4. salary_offers に performance_condition（支給条件）を追加し、
 --      実績加算 > 0円の場合は必須にする。
 --
+-- ★適用前の最終修正（今回追加）:
+--   5. snapshotとの一致判定を、対応するstylist_evidence_documentsの
+--      review_statusが「現在も」verifiedであることまで見るように厳密化
+--      （verified→snapshot作成→後からrejectedに変更、というケースで
+--      古いsnapshotだけを根拠にverified扱いへ戻ってしまうのを防ぐ）。
+--   6. review_stylist_evidence_document()のreason検証で、NULLが
+--      チェックをすり抜けないようIS DISTINCT FROM／IS NULLで厳密化。
+--   7. respond_salary_offer()のrevision_requested時のreason検証も同様に、
+--      NULLがすり抜けないよう厳密化。
+--   8. 新設テーブル2つ（stylist_match_verification_snapshots /
+--      salary_offers）について、Supabaseのdefault privilegesで
+--      anon/authenticatedへ意図しない権限が付与される可能性に備え、
+--      revoke all → grant select のみを明示する。
+--
 -- ★実行安全性（今回追加）: このファイル全体を begin;/commit; で囲み、
 -- 途中のどの文が1つでも失敗しても0022全体がロールバックされ、
 -- 「途中までだけDBに反映された状態」が残らないようにしている。
@@ -195,6 +209,12 @@ create policy stylist_match_verification_snapshots_select_own on public.stylist_
   for select using (stylist_user_id = auth.uid());
 create policy stylist_match_verification_snapshots_select_admin on public.stylist_match_verification_snapshots
   for select using (public.is_platform_admin());
+-- ★Supabaseのdefault privilegesにより、新規publicテーブルへ
+-- anon/authenticatedが意図せずINSERT/UPDATE/DELETE権限を持つ可能性がある
+-- ため、まず明示的にrevoke allしてからselectのみを付与し直す。
+-- SECURITY DEFINER関数（review_stylist_evidence_document）はテーブル所有者
+-- 権限で実行されるため、この revoke は書き込み経路に影響しない。
+revoke all on public.stylist_match_verification_snapshots from anon, authenticated;
 grant select on public.stylist_match_verification_snapshots to authenticated;
 -- INSERT/UPDATE/DELETE権限はクライアントへ一切付与しない。
 -- 書き込みは review_stylist_evidence_document()（SECURITY DEFINER）経由のみ。
@@ -224,9 +244,18 @@ begin
   into v_document_count,v_submitted_count,v_verified_count
   from public.stylist_evidence_documents where stylist_user_id=new.stylist_user_id;
 
+  -- ★重要: snapshotの4項目が現在値と一致するだけでなく、そのsnapshotの
+  -- 元になった資料（evidence_document_id）が「現在も」review_status='verified'
+  -- であることまで確認する。verified→snapshot作成→後から同じ資料を
+  -- rejectedへ変更した場合、古いsnapshotだけを根拠に verified へ戻って
+  -- しまわないようにするため（stylist_evidence_documentsとevidence_
+  -- document_idでJOIN）。過去snapshot自体は削除しない。
   select exists (
-    select 1 from public.stylist_match_verification_snapshots s
+    select 1
+    from public.stylist_match_verification_snapshots s
+    join public.stylist_evidence_documents d on d.id = s.evidence_document_id
     where s.stylist_user_id = new.stylist_user_id
+      and d.review_status = 'verified'
       and s.avg_monthly_technical_sales is not distinct from new.avg_monthly_technical_sales
       and s.avg_monthly_clients is not distinct from new.avg_monthly_clients
       and s.avg_monthly_named_clients is not distinct from new.avg_monthly_named_clients
@@ -274,6 +303,11 @@ alter table public.salary_offers enable row level security;
 create policy salary_offers_select_participant on public.salary_offers for select using (
   salon_user_id = auth.uid() or stylist_user_id = auth.uid()
 );
+-- ★stylist_match_verification_snapshotsと同様、Supabaseのdefault
+-- privilegesによる意図しない付与に備え、明示的にrevoke all→grant selectのみ。
+-- SECURITY DEFINER関数（create_salary_offer/respond_salary_offer）は
+-- テーブル所有者権限で実行されるため、この revoke は書き込み経路に影響しない。
+revoke all on public.salary_offers from anon, authenticated;
 grant select on public.salary_offers to authenticated;
 create trigger trg_salary_offers_updated before update on public.salary_offers for each row execute function public.set_updated_at();
 
@@ -309,7 +343,14 @@ as $$
 declare v_uid uuid := auth.uid(); v_row public.salary_offers;
 begin
   if p_response not in ('accepted','revision_requested','declined') then raise exception 'invalid response'; end if;
-  if p_response='revision_requested' and p_reason not in ('workdays','guarantee_period','role','performance_basis','other') then raise exception 'reason required'; end if;
+  -- ★NULLがすり抜けないよう明示的にIS NULLを併記する（review_stylist_evidence_document
+  -- と同じ理由。p_reason not in (...) はp_reasonがNULLだとIFが発火しない）。
+  if p_response='revision_requested' and (
+    p_reason is null
+    or p_reason not in ('workdays','guarantee_period','role','performance_basis','other')
+  ) then
+    raise exception 'reason required';
+  end if;
   update public.salary_offers set status=p_response,
     response_reason=case when p_response='revision_requested' then p_reason end,
     response_note=case when p_response='revision_requested' then nullif(left(trim(coalesce(p_note,'')),500),'') end,
@@ -352,8 +393,16 @@ declare
 begin
   if not public.is_platform_admin() then raise exception 'admin access required'; end if;
   if p_decision not in ('verified','rejected') then raise exception 'invalid decision'; end if;
-  if p_decision = 'verified' and p_reason <> 'valid' then raise exception 'verified requires valid reason'; end if;
-  if p_decision = 'rejected' and p_reason not in ('unrelated','unreadable','insufficient','numbers_mismatch','suspected_tampering') then
+  -- ★NULLがすり抜けないよう IS DISTINCT FROM / IS NULL で厳密化する。
+  -- 通常の <> や not in は、比較対象がNULLだと結果がNULL（=偽扱い）に
+  -- なりIFが発火しないため、reasonを省略した呼び出しが素通りしてしまう。
+  if p_decision = 'verified' and p_reason is distinct from 'valid' then
+    raise exception 'verified requires valid reason';
+  end if;
+  if p_decision = 'rejected' and (
+    p_reason is null
+    or p_reason not in ('unrelated','unreadable','insufficient','numbers_mismatch','suspected_tampering')
+  ) then
     raise exception 'invalid rejection reason';
   end if;
 
