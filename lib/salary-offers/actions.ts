@@ -12,6 +12,9 @@ const offerSchema = z.object({
   guaranteeMonths: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12)]),
   message: z.string().trim().max(500).nullable(),
 }).refine(
+  (v) => v.performanceAddition % 1000 === 0,
+  { message: "実績加算は1,000円単位で入力してください。", path: ["performanceAddition"] },
+).refine(
   (v) => v.performanceAddition === 0 || (v.performanceCondition != null && v.performanceCondition.length > 0),
   { message: "実績加算を設定する場合は、支給条件を入力してください。", path: ["performanceCondition"] },
 );
