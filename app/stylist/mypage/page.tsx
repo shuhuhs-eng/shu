@@ -11,6 +11,8 @@ import { TraitScoreBars } from "@/components/diagnosis/trait-score-bars";
 import type { AiOutputType, Database } from "@/types/database";
 import type { TraitScores } from "@/lib/diagnosis";
 import { StylistOfferCard } from "@/components/salary-offers/stylist-offer-card";
+import { NotificationBell } from "@/components/notifications/notification-bell";
+import { getNotificationsForBell } from "@/lib/notifications/get-notifications";
 
 type AiOutputRow = Database["public"]["Tables"]["diagnosis_ai_outputs"]["Row"];
 
@@ -93,6 +95,26 @@ export default async function StylistMyPage() {
     : { data: [] };
   const salonNameById = new Map((offerSalons ?? []).map((salon) => [salon.user_id, salon.salon_name]));
 
+  // ★1サロンにつき1カード方針: DBのsalary_offersは1社から複数行あってよいが、
+  // UI側ではsalon_user_idごとにグルーピングし、最新の1件だけを回答対象として
+  // 表示する。salaryOffersは既にcreated_at降順のため、各salonで最初に現れる行が
+  // 必ず最新offerになる。DBスキーマ・RPCは一切変更していない。
+  type SalaryOfferRow = NonNullable<typeof salaryOffers>[number];
+  const offersBySalon = new Map<string, SalaryOfferRow[]>();
+  for (const offer of salaryOffers ?? []) {
+    const list = offersBySalon.get(offer.salon_user_id) ?? [];
+    list.push(offer);
+    offersBySalon.set(offer.salon_user_id, list);
+  }
+  const groupedSalaryOffers = [...offersBySalon.entries()].map(([salonUserId, offers]) => ({
+    salonUserId,
+    salonName: salonNameById.get(salonUserId) ?? "サロン",
+    latest: offers[0],
+    history: offers.slice(1),
+  }));
+
+  const { notifications, unreadCount } = await getNotificationsForBell(supabase, user.id);
+
   const showNewStylistDesign = !!coreTypeCode && !!latest;
 
   const traitScores: TraitScores | null = latest
@@ -111,6 +133,7 @@ export default async function StylistMyPage() {
       <div className="mb-2 flex items-center gap-2.5">
         <span className="eyebrow">Beauty Reach</span>
         <hr className="h-px flex-1 border-0 bg-line" />
+        <NotificationBell notifications={notifications} unreadCount={unreadCount} role="stylist" />
         <Link href="/" className="text-[12px] font-semibold text-sub underline shrink-0">
           ← HOME
         </Link>
@@ -220,9 +243,9 @@ export default async function StylistMyPage() {
         </Link>
       </section>
 
-      {(salaryOffers ?? []).length > 0 && <section className="mt-4">
+      {groupedSalaryOffers.length > 0 && <section id="salary-offers" className="mt-4">
         <p className="eyebrow mb-2">届いた給与条件</p>
-        <div className="space-y-3">{(salaryOffers ?? []).map((offer) => <StylistOfferCard key={offer.id} offer={{ ...offer, salonName: salonNameById.get(offer.salon_user_id) ?? "サロン" }} />)}</div>
+        <div className="space-y-3">{groupedSalaryOffers.map((g) => <StylistOfferCard key={g.salonUserId} offer={g.latest} salonName={g.salonName} history={g.history} />)}</div>
       </section>}
 
       {/* ★「あなたらしさ×サロンらしさ」MVP。既存の30問診断・8タイプ・

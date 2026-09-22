@@ -9,6 +9,8 @@ import type { AiOutputType, Database } from "@/types/database";
 import { JOB_CHANGE_INTENT_LABELS } from "@/lib/validation/profile-options";
 import { CAREER_GOAL_LABELS, type CareerGoalCode } from "@/lib/match-profile/options";
 import { SalonOfferForm } from "@/components/salary-offers/salon-offer-form";
+import { NotificationBell } from "@/components/notifications/notification-bell";
+import { getNotificationsForBell } from "@/lib/notifications/get-notifications";
 
 type SalonCultureAiOutputRow = Database["public"]["Tables"]["salon_culture_ai_outputs"]["Row"];
 type ReceivedInterest = Database["public"]["Functions"]["get_received_salon_interests"]["Returns"][number];
@@ -104,11 +106,14 @@ export default async function SalonMyPage() {
   const latestOfferByStylist = new Map<string, NonNullable<typeof salaryOffers>[number]>();
   for (const offer of salaryOffers ?? []) if (!latestOfferByStylist.has(offer.stylist_user_id)) latestOfferByStylist.set(offer.stylist_user_id, offer);
 
+  const { notifications, unreadCount } = await getNotificationsForBell(supabase, user.id);
+
   return (
     <main className="mx-auto max-w-[560px] px-5 py-12">
       <div className="mb-2 flex items-center gap-2.5">
         <span className="eyebrow">Beauty Reach</span>
         <hr className="h-px flex-1 border-0 bg-line" />
+        <NotificationBell notifications={notifications} unreadCount={unreadCount} role="salon" />
         <Link href="/" className="text-[12px] font-semibold text-sub underline shrink-0">
           ← HOME
         </Link>
@@ -132,7 +137,7 @@ export default async function SalonMyPage() {
         </div>
       </section>
 
-      <section className="mt-6 rounded-2xl border border-line bg-surface p-6">
+      <section id="interests" className="mt-6 rounded-2xl border border-line bg-surface p-6">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="eyebrow mb-1">話を聞いてみたい</p>

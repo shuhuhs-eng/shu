@@ -362,6 +362,19 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      notifications: {
+        // typeはDB側CHECK制約で許容値を列挙している(0023_notifications.sql参照)。
+        // 書き込みはcreate_notification/mark_notification_read/
+        // mark_all_notifications_read(いずれもSECURITY DEFINER)経由のみ。
+        Row: {
+          id: string; user_id: string; type: string; title: string; message: string;
+          related_entity_type: string | null; related_entity_id: string | null;
+          is_read: boolean; created_at: string; read_at: string | null;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       salary_offers: {
         Row: {
           id: string; salon_user_id: string; stylist_user_id: string;
@@ -651,6 +664,14 @@ export type Database = {
       respond_salary_offer: {
         Args: { p_offer_id: string; p_response: string; p_reason: string | null; p_note: string | null };
         Returns: Database["public"]["Tables"]["salary_offers"]["Row"];
+      };
+      mark_notification_read: {
+        Args: { p_notification_id: string };
+        Returns: Database["public"]["Tables"]["notifications"]["Row"];
+      };
+      mark_all_notifications_read: {
+        Args: Record<string, never>;
+        Returns: number;
       };
       get_public_salon_culture_detail: {
         // 引数は対象サロンのuser_idのみ。呼び出し美容師自身はRPC内部で
