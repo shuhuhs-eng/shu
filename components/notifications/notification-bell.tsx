@@ -80,21 +80,24 @@ export function NotificationBell({
 
   return (
     <div className="relative">
-      {/* ★未読の有無で視覚的な差を大きくする: 未読ありは赤地に白文字の
-          目立つピル、未読0件は控えめなニュートラル表示にする。単なる
-          小さいアイコンだけにせず「🔔 通知 3」の形でラベル+件数を出す。 */}
+      {/* ★視認性優先の大きめボタン: ベル26px・ボタン高さ50px・ラベル17pxで
+          「小さいアイコン」ではなく明確な通知ボタンとして見えるようにする。
+          未読ありは赤地+白文字+軽いリングで強く目立たせ、未読0件はサイズは
+          維持したまま配色だけ控えめにする（アニメーションは付けない）。 */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`flex items-center gap-2 rounded-full border px-4 py-2.5 text-[13px] font-bold transition-colors ${
-          unread > 0 ? "border-[#C24545] bg-[#C24545] text-white" : "border-line bg-surface text-ink"
+        className={`flex h-[50px] items-center gap-2.5 rounded-full border-2 px-5 font-bold transition-colors ${
+          unread > 0
+            ? "border-[#C24545] bg-[#C24545] text-white ring-4 ring-[#C24545]/15"
+            : "border-line bg-surface text-ink"
         }`}
         aria-label={unread > 0 ? `通知 未読${unread}件` : "通知"}
       >
-        <Bell size={18} strokeWidth={2} />
-        <span>通知</span>
+        <Bell size={26} strokeWidth={2} />
+        <span className="text-[17px]">通知</span>
         {unread > 0 && (
-          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-extrabold text-[#C24545]">
+          <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-white px-2 text-[14px] font-extrabold text-[#C24545]">
             {unread > 99 ? "99+" : unread}
           </span>
         )}
