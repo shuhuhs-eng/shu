@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #F4F0E7;
+  --surface: #FBF9F4;
+  --surface2: #F0EBE0;
+  --ink: #1A1714;
+  --charcoal: #3C372F;
+  --sub: #8B8478;
+  --line: #E5DFD3;
+  --gold: #9A7B41;
+}
+
+html { color-scheme: light; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* エディトリアルな小見出し（データ用フォント・レタースペース）。
+   next/font/google(Archivo)は廃止し、システムUIフォントを直接指定する
+   （ビルド時の外部フォント取得を発生させないため）。 */
+.eyebrow {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--sub);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
