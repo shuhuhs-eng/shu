@@ -16,7 +16,22 @@
 --      「承認後に数字が変わって再確認が必要になった」を区別する。
 --   4. salary_offers に performance_condition（支給条件）を追加し、
 --      実績加算 > 0円の場合は必須にする。
+--
+-- ★実行安全性（今回追加）: このファイル全体を begin;/commit; で囲み、
+-- 途中のどの文が1つでも失敗しても0022全体がロールバックされ、
+-- 「途中までだけDBに反映された状態」が残らないようにしている。
+-- ここに含まれるDDL（create table / alter table add column・constraint /
+-- create policy / create trigger / create or replace function /
+-- create unique index（非CONCURRENTLY）/ grant・revoke）は、
+-- PostgreSQL/Supabaseにおいてすべてトランザクション内で問題なく実行できる。
+-- トランザクション内で実行できない操作
+-- （例: CREATE INDEX CONCURRENTLY、ALTER TYPE ... ADD VALUEを同一
+-- トランザクション内で直後に使う場合など）はこのファイルには含まれていない
+-- （verification_statusはネイティブenum型ではなくCHECK制約のtext列であり、
+-- 対象外）。
 -- ============================================================================
+
+begin;
 
 alter table public.stylist_match_profiles
   add column wants_performance_offer boolean not null default false;
@@ -60,6 +75,13 @@ create trigger trg_evidence_requires_offer_opt_in
 -- このmigrationからは削除した。0022がまだ本番未適用のため、
 -- 一度も実行されないまま削除でき、本番データへの影響はない。
 
+-- ★意図的にIF EXISTSを付けていない: この制約は0019で明示的な名前で
+-- 作成されたものであり（PostgreSQLの自動生成名ではないため名前の推測揺れが
+-- ない）、0019〜0021が適用済みの本番には確実に存在するはずのもの。
+-- ここが失敗する場合は「想定している適用済みマイグレーション状態と
+-- 実際のDBの状態が食い違っている」ことを意味するため、IF EXISTSで
+-- 静かに読み飛ばすのではなく、migration全体を直ちに失敗させて
+-- （begin/commitにより自動的に全体ロールバックされる）気づけるようにする。
 alter table public.stylist_match_profiles drop constraint stylist_match_profile_results_core_required;
 alter table public.stylist_match_profiles add constraint stylist_match_profile_results_core_required check (
   not wants_performance_offer
@@ -407,3 +429,5 @@ end;
 $$;
 revoke all on function public.get_received_salon_interests() from public, anon;
 grant execute on function public.get_received_salon_interests() to authenticated;
+
+commit;
