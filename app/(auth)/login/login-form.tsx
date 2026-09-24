@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { signInAction } from "@/lib/auth/actions";
@@ -45,6 +45,24 @@ export function LoginForm({ mode }: Props) {
   const resetSuccess = searchParams.get("reset") === "success";
   const [state, formAction] = useActionState(signInAction, initialAuthActionState);
 
+  // ★ログイン失敗時に入力内容が全消去される問題の修正。
+  // Reactのform action（<form action={formAction}>）は、action完了後に
+  // 非制御な入力をリセットしてしまう仕様のため、メール・パスワードを
+  // 制御コンポーネント化し、明示的に管理する。
+  //   ・メールアドレス: 失敗理由を問わず常に保持する（再入力させない）。
+  //   ・パスワード: signInActionがSupabase認証自体に失敗した場合
+  //     （state.errorはあるがstate.fieldErrorsが無い＝バリデーションは
+  //     通ったが認証が失敗したケース）のみ空欄へ戻す。
+  //     入力形式エラー（fieldErrorsあり、例: メール形式不正・未入力）の
+  //     場合は、正常に入力済みのパスワードを不要に消さない。
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  useEffect(() => {
+    if (state.error && !state.fieldErrors) {
+      setPassword("");
+    }
+  }, [state]);
+
   const copy = mode ? COPY[mode] : null;
 
   return (
@@ -68,6 +86,8 @@ export function LoginForm({ mode }: Props) {
               label="メールアドレス"
               type="email"
               autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               errors={state.fieldErrors?.email}
             />
             <TextField
@@ -76,6 +96,8 @@ export function LoginForm({ mode }: Props) {
               label="パスワード"
               type="password"
               autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               errors={state.fieldErrors?.password}
             />
           </div>
