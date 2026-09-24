@@ -388,6 +388,31 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      scouts: {
+        // 0025で追加。SELECTはsalon_user_id/stylist_user_id本人のみ。
+        // 書き込みはsend_scout/mark_scout_read/respond_scout経由のみ。
+        Row: {
+          id: string; salon_user_id: string; stylist_user_id: string;
+          message: string; template_type: string | null; matching_score: number | null;
+          read_status: string; response_status: string; response_message: string | null;
+          sent_at: string; read_at: string | null; responded_at: string | null;
+          created_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      salon_scout_quotas: {
+        // 0025で追加。SELECTはsalon_user_id本人のみ。書き込みRPCはVer.1では
+        // 用意しない（行が無いサロンはsend_scout側でデフォルト値として扱う）。
+        Row: {
+          salon_user_id: string; monthly_free_limit: number; additional_credits: number;
+          updated_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       diagnosis_results: {
         // AI生成物(ai_essence等)は持たない。diagnosis_ai_outputs を参照。
         Row: {
@@ -567,6 +592,31 @@ export type Database = {
           } | null;
         };
       };
+      calculate_salon_stylist_match: {
+        // 0025で追加。引数は対象美容師のuser_idのみ。呼び出しサロン自身は
+        // RPC内部でauth.uid()から取得する。0025で新設した内部専用関数
+        // calculate_match_axes()に計算を委譲しており、同じペアであれば
+        // calculate_stylist_salon_matchと完全に同じ戻り値になる
+        // （数式・キー名は完全に共通のため、ここも同一のReturns shape）。
+        Args: {
+          p_stylist_user_id: string;
+        };
+        Returns: {
+          available: boolean;
+          reason: string | null;
+          overall_score: number | null;
+          axis_scores: {
+            education: number | null;
+            challenge: number | null;
+            personal_brand: number | null;
+            collaboration: number | null;
+            autonomy: number | null;
+            work_flexibility: number | null;
+            relationship_distance: number | null;
+            hierarchy: number | null;
+          } | null;
+        };
+      };
       set_favorite_salon: {
         Args: { p_salon_user_id: string; p_favorite: boolean };
         Returns: boolean;
@@ -664,6 +714,62 @@ export type Database = {
       respond_salary_offer: {
         Args: { p_offer_id: string; p_response: string; p_reason: string | null; p_note: string | null };
         Returns: Database["public"]["Tables"]["salary_offers"]["Row"];
+      };
+      get_public_stylists_for_scout: {
+        // 0025で追加。引数なし（呼び出しサロン自身はRPC内部でauth.uid()から
+        // 取得する）。対象条件（role=stylist・visibility=PUBLIC・
+        // scout_enabled）を満たす美容師を、matchの相性が高い順に返す。
+        // matchはcalculate_stylist_salon_match/calculate_salon_stylist_matchと
+        // 同じReturns shape（内部で共通のcalculate_match_axes()を使うため）。
+        Args: Record<string, never>;
+        Returns: Array<{
+          stylist_user_id: string;
+          public_name: string | null;
+          prefecture: string | null;
+          desired_work_location: string | null;
+          experience_years: number | null;
+          current_position: string | null;
+          specialties: string[];
+          job_change_intent: JobChangeIntent;
+          bio: string | null;
+          match: {
+            available: boolean;
+            reason: string | null;
+            overall_score: number | null;
+            axis_scores: {
+              education: number | null;
+              challenge: number | null;
+              personal_brand: number | null;
+              collaboration: number | null;
+              autonomy: number | null;
+              work_flexibility: number | null;
+              relationship_distance: number | null;
+              hierarchy: number | null;
+            } | null;
+          };
+          previous_interest_at: string | null;
+          previous_scout_count: number;
+          previous_scout_last_sent_at: string | null;
+        }>;
+      };
+      send_scout: {
+        // 0025で追加。role guard・対象確認・scout_enabled確認・月間枠チェック・
+        // matching_score算出はすべてRPC内部（SQL側）で行う。再スカウトも
+        // 常に新しい行としてinsertされる（unique制約なし）。
+        Args: {
+          p_stylist_user_id: string;
+          p_message: string;
+          p_template_type: string | null;
+        };
+        Returns: Database["public"]["Tables"]["scouts"]["Row"];
+      };
+      mark_scout_read: {
+        Args: { p_scout_id: string };
+        Returns: Database["public"]["Tables"]["scouts"]["Row"];
+      };
+      respond_scout: {
+        Args: { p_scout_id: string; p_response: string; p_response_message: string | null };
+        Returns: Database["public"]["Tables"]["scouts"]["Row"];
       };
       mark_notification_read: {
         Args: { p_notification_id: string };

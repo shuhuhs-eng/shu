@@ -160,6 +160,16 @@ export default async function SalonMyPage() {
         </div>
       </section>
 
+      {/* ★スカウト機能Ver.1への導線。/stylist/salonsの「サロンを探す」導線に
+          対称する形で追加。既存セクション（サロン概要・興味を送ってくれた
+          美容師）の間には一切変更を加えていない。 */}
+      <Link
+        href="/salon/stylists"
+        className="mt-4 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-3.5 text-[14px] font-semibold text-ink"
+      >
+        美容師を探す
+      </Link>
+
       <section id="interests" className="mt-6 rounded-2xl border border-line bg-surface p-6">
         <div className="flex items-center justify-between gap-3">
           <div>

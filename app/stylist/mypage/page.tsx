@@ -11,6 +11,7 @@ import { TraitScoreBars } from "@/components/diagnosis/trait-score-bars";
 import type { AiOutputType, Database } from "@/types/database";
 import type { TraitScores } from "@/lib/diagnosis";
 import { StylistOfferCard } from "@/components/salary-offers/stylist-offer-card";
+import { StylistScoutCard } from "@/components/scouts/stylist-scout-card";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { getNotificationsForBell, getUnreadNotificationRefs } from "@/lib/notifications/get-notifications";
 
@@ -106,6 +107,41 @@ export default async function StylistMyPage() {
     list.push(offer);
     offersBySalon.set(offer.salon_user_id, list);
   }
+  // ★スカウト機能Ver.1。salaryOffersと完全に同じ「1サロン1カード」方針で
+  // salon_user_idごとにグルーピングする。DBのscoutsは1社から複数行あって
+  // よいが、UI側では最新の1件だけを回答対象として表示し、過去分は
+  // StylistScoutCard側の折りたたみ履歴に渡す。notifications（scout_received/
+  // scout_responded）との連携は今回のスコープ外（次フェーズ）。
+  // ★最新判定の決定性: sent_atだけでは同時刻insertが理論上タイになり得るため、
+  // sent_at desc → created_at desc → id desc の順で並べ、最新1件が常に
+  // 一意に決まるようにする(id descは同時刻・同created_atが重なった場合の
+  // 最終的なタイブレーカー)。
+  const { data: scouts } = await supabase
+    .from("scouts")
+    .select("*")
+    .eq("stylist_user_id", user.id)
+    .order("sent_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+  const scoutSalonIds = [...new Set((scouts ?? []).map((s) => s.salon_user_id))];
+  const { data: scoutSalons } = scoutSalonIds.length > 0
+    ? await supabase.from("salon_profiles").select("user_id,salon_name").in("user_id", scoutSalonIds)
+    : { data: [] };
+  const scoutSalonNameById = new Map((scoutSalons ?? []).map((salon) => [salon.user_id, salon.salon_name]));
+  type ScoutRow = NonNullable<typeof scouts>[number];
+  const scoutsBySalon = new Map<string, ScoutRow[]>();
+  for (const scout of scouts ?? []) {
+    const list = scoutsBySalon.get(scout.salon_user_id) ?? [];
+    list.push(scout);
+    scoutsBySalon.set(scout.salon_user_id, list);
+  }
+  const groupedScouts = [...scoutsBySalon.entries()].map(([salonUserId, list]) => ({
+    salonUserId,
+    salonName: scoutSalonNameById.get(salonUserId) ?? "サロン",
+    latest: list[0],
+    history: list.slice(1),
+  }));
+
   const { notifications, unreadCount } = await getNotificationsForBell(supabase, user.id);
   const unreadRefs = await getUnreadNotificationRefs(supabase, user.id);
 
@@ -255,6 +291,11 @@ export default async function StylistMyPage() {
           {hasMatchProfile ? "登録内容を見直す" : "希望条件を登録する"}
         </Link>
       </section>
+
+      {groupedScouts.length > 0 && <section id="scouts" className="mt-4">
+        <p className="eyebrow mb-2">届いたスカウト</p>
+        <div className="space-y-3">{groupedScouts.map((g) => <StylistScoutCard key={g.salonUserId} scout={g.latest} salonName={g.salonName} history={g.history} />)}</div>
+      </section>}
 
       {groupedSalaryOffers.length > 0 && <section id="salary-offers" className="mt-4">
         <p className="eyebrow mb-2">届いた給与条件</p>
