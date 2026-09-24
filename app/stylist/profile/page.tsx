@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getProfileFormInitialValues } from "@/lib/profile/get-initial-values";
@@ -25,6 +26,9 @@ export default async function StylistProfileEditPage() {
       <div className="mb-7 flex items-center gap-2.5">
         <span className="eyebrow">Beauty Reach</span>
         <hr className="h-px flex-1 border-0 bg-line" />
+        <Link href="/stylist/mypage" className="text-[12px] font-semibold text-sub underline shrink-0">
+          マイページへ戻る
+        </Link>
       </div>
 
       <h1 className="font-serif text-2xl font-bold text-ink">プロフィール編集</h1>

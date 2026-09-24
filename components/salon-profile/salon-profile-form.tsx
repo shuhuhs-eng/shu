@@ -209,7 +209,7 @@ export function SalonProfileForm({ mode, userId, initialValues, employeeSizeOpti
 
       {mode === "edit" && (
         <Link href="/salon/mypage" className="block text-center text-[13px] text-sub underline">
-          マイページに戻る
+          マイページへ戻る
         </Link>
       )}
     </form>
