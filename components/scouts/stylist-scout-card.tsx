@@ -90,10 +90,17 @@ export function StylistScoutCard({ scout, salonName, history }: Props) {
             <>
               {step === "choice" && (
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  <button disabled={busy} onClick={() => setStep("interested")} className="rounded-full bg-[#285B45] py-2 text-[11px] font-bold text-white">話を聞いてみたい</button>
-                  <button disabled={busy} onClick={() => setStep("question")} className="rounded-full border border-line py-2 text-[11px]">条件をもう少し知りたい</button>
-                  <button disabled={busy} onClick={() => setStep("considering")} className="rounded-full border border-line py-2 text-[11px]">今は検討中</button>
-                  <button disabled={busy} onClick={() => setStep("declined")} className="rounded-full border border-line py-2 text-[11px] text-sub">今回は見送る</button>
+                  {/* ★4択の視認性統一: どれか1つだけが過度に強調されないよう、
+                      4ボタンとも同じ形(rounded-full・同じpy・同じborder太さ・
+                      同じfont-weight・同じ文字サイズ)に揃え、色相だけを
+                      意味に応じて変える(色までは完全に統一しない)。
+                      「今回は見送る」もtext-subのような薄いトーンにはせず、
+                      他の3つと同じ濃さの配色にして「押せそうに見えない」状態を
+                      避けている。 */}
+                  <button disabled={busy} onClick={() => setStep("interested")} className="rounded-full border border-[#285B45]/30 bg-[#EAF3EC] py-2.5 text-[12px] font-bold text-[#1F5A3F]">話を聞いてみたい</button>
+                  <button disabled={busy} onClick={() => setStep("question")} className="rounded-full border border-[#2B5C88]/30 bg-[#E8EFF7] py-2.5 text-[12px] font-bold text-[#2B5C88]">条件をもう少し知りたい</button>
+                  <button disabled={busy} onClick={() => setStep("considering")} className="rounded-full border border-[#8A6A2E]/30 bg-[#F5EFE0] py-2.5 text-[12px] font-bold text-[#8A6A2E]">今は検討中</button>
+                  <button disabled={busy} onClick={() => setStep("declined")} className="rounded-full border border-[#8A2E2E]/30 bg-[#F5E9E9] py-2.5 text-[12px] font-bold text-[#8A2E2E]">今回は見送る</button>
                 </div>
               )}
               {step === "interested" && (
