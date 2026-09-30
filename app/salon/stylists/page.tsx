@@ -60,6 +60,26 @@ export default async function SalonStylistsPage() {
   }
   const stylists: PublicStylistForScout[] = stylistsData ?? [];
 
+  // ★美容師の回答状態(response_status/response_message/responded_at)を
+  // サロン側で確認できるようにする対応。scoutsテーブルはRLS
+  // （scouts_select_salon: salon_user_id = auth.uid()）で既に自分が送った
+  // 分だけSELECTできるため、新しいRPC・migrationを追加せず、既存の権限の
+  // まま直接テーブルを取得するだけで実現できる（0025は変更していない）。
+  // sent_at → created_at → id の順で決定的にソートし、stylist_user_idごとに
+  // 最初に現れる行（＝最新のスカウト）だけを採用する
+  // （StylistScoutCard側の最新判定と同じ考え方）。
+  const { data: sentScouts } = await supabase
+    .from("scouts")
+    .select("*")
+    .eq("salon_user_id", user.id)
+    .order("sent_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+  const latestScoutByStylist = new Map<string, NonNullable<typeof sentScouts>[number]>();
+  for (const s of sentScouts ?? []) {
+    if (!latestScoutByStylist.has(s.stylist_user_id)) latestScoutByStylist.set(s.stylist_user_id, s);
+  }
+
   return (
     <main className="mx-auto max-w-[640px] px-5 py-12">
       <div className="mb-7 flex items-center gap-2.5">
@@ -88,7 +108,12 @@ export default async function SalonStylistsPage() {
       ) : (
         <div className="mt-8 space-y-4">
           {stylists.map((stylist) => (
-            <SalonStylistCard key={stylist.stylist_user_id} stylist={stylist} remainingQuota={remainingQuota} />
+            <SalonStylistCard
+              key={stylist.stylist_user_id}
+              stylist={stylist}
+              remainingQuota={remainingQuota}
+              latestScout={latestScoutByStylist.get(stylist.stylist_user_id) ?? null}
+            />
           ))}
         </div>
       )}

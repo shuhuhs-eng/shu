@@ -20,8 +20,10 @@ export const SCOUT_RESPONSE_OPTIONS = [
 
 export type ScoutResponseType = (typeof SCOUT_RESPONSE_OPTIONS)[number]["value"];
 
+// ★サロン側・美容師側で表示を完全に統一するため、response_statusの
+// 日本語ラベルはこの1箇所だけで管理する（複製しない）。
 export const SCOUT_RESPONSE_LABELS: Record<string, string> = {
-  no_response: "未回答",
+  no_response: "回答待ち",
   interested: "話を聞いてみたい",
   question: "条件をもう少し知りたい",
   considering: "今は検討中",

@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { sendScout } from "@/lib/scouts/actions";
-import { SCOUT_TEMPLATES, type ScoutTemplateType } from "@/lib/scouts/options";
+import { SCOUT_TEMPLATES, SCOUT_RESPONSE_LABELS, type ScoutTemplateType } from "@/lib/scouts/options";
 import { JOB_CHANGE_INTENT_LABELS } from "@/lib/validation/profile-options";
 import { MATCH_AXIS_LABELS } from "@/lib/matching/types";
 import type { PublicStylistForScout } from "@/lib/scouts/types";
+import type { Database } from "@/types/database";
 
-type Props = { stylist: PublicStylistForScout; remainingQuota: number };
+type LatestScout = Database["public"]["Tables"]["scouts"]["Row"];
+
+type Props = { stylist: PublicStylistForScout; remainingQuota: number; latestScout: LatestScout | null };
 
 /**
  * サロン側「美容師を探す」一覧カード（/salon/stylists専用）。
@@ -24,7 +27,7 @@ type Props = { stylist: PublicStylistForScout; remainingQuota: number };
  * テンプレート文を挿入するだけで、送信前に自由に編集できる。実際に
  * 送信されるのはテキストエリアの最終的な内容（message）。
  */
-export function SalonStylistCard({ stylist, remainingQuota }: Props) {
+export function SalonStylistCard({ stylist, remainingQuota, latestScout }: Props) {
   const [message, setMessage] = useState("");
   const [templateType, setTemplateType] = useState<ScoutTemplateType | null>(null);
   const [step, setStep] = useState<"compose" | "confirm-resend">("compose");
@@ -111,6 +114,23 @@ export function SalonStylistCard({ stylist, remainingQuota }: Props) {
             <p className="mt-1">
               以前この美容師へスカウトしています（{stylist.previous_scout_count}回
               {stylist.previous_scout_last_sent_at && `・最終送信: ${new Date(stylist.previous_scout_last_sent_at).toLocaleDateString("ja-JP")}`}）
+            </p>
+          )}
+          {/* ★美容師の回答結果をサロン側で確認できるようにする対応。
+              latestScoutは直近に送った1件のスカウト（app/salon/stylists/page.tsx
+              が既存RLSの範囲でscoutsテーブルを直接取得して渡す。新しいRPC・
+              migrationは追加していない）。ラベルはlib/scouts/options.tsの
+              SCOUT_RESPONSE_LABELSを唯一の出典とし、美容師側カード
+              （StylistScoutCard）と表示文言を完全に統一する。 */}
+          {latestScout && (
+            <p className="mt-1 font-semibold text-ink">
+              直近の回答状況: {SCOUT_RESPONSE_LABELS[latestScout.response_status] ?? latestScout.response_status}
+              {latestScout.responded_at && `（${new Date(latestScout.responded_at).toLocaleString("ja-JP")}）`}
+            </p>
+          )}
+          {latestScout?.response_status === "question" && latestScout.response_message && (
+            <p className="mt-1 rounded-md bg-surface px-2.5 py-2 font-normal text-charcoal">
+              {latestScout.response_message}
             </p>
           )}
         </div>
