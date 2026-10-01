@@ -413,6 +413,35 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      salon_organizations: {
+        // 0026で追加。SELECTはis_organization_member()経由でアクセス可能な
+        // 会社のみ（0026 RLS）。legacy_salon_user_idは0027で追加（旧
+        // salon_profilesバックフィル専用のprovenance、新規登録ではNULL）。
+        // 書き込みはsave_salon_profile() RPC経由のみ。
+        Row: {
+          id: string; name: string; status: string;
+          legacy_salon_user_id: string | null;
+          created_at: string; updated_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      salon_stores: {
+        // 0026で追加。SELECTはis_store_accessible()経由でアクセス可能な
+        // 店舗のみ（0026 RLS）。legacy_salon_user_idは0027で追加（旧
+        // salon_profilesバックフィル専用のprovenance、新規登録ではNULL）。
+        // 書き込みはsave_salon_profile() RPC経由のみ。
+        Row: {
+          id: string; organization_id: string; store_name: string; status: string;
+          usage_status: string; prefecture: string | null; city: string | null;
+          legacy_salon_user_id: string | null;
+          created_at: string; updated_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       diagnosis_results: {
         // AI生成物(ai_essence等)は持たない。diagnosis_ai_outputs を参照。
         Row: {

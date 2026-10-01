@@ -170,6 +170,15 @@ export default async function SalonMyPage() {
         美容師を探す
       </Link>
 
+      {/* ★法人・複数店舗対応Phase 1への導線を1個追加するだけ。既存の
+          コンテンツ・DB取得・表示は一切移動・削除していない。 */}
+      <Link
+        href="/salon/company"
+        className="mt-3 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-3.5 text-[14px] font-semibold text-ink"
+      >
+        会社・店舗管理
+      </Link>
+
       <section id="interests" className="mt-6 rounded-2xl border border-line bg-surface p-6">
         <div className="flex items-center justify-between gap-3">
           <div>
