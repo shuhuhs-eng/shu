@@ -16,9 +16,9 @@ type Props = {
  * layers」方針（middleware＋各ページ側の両方でrole guardを行う等）に
  * 合わせ、ここでも同じ判定を独立して行っている。
  *
- * ★Phase 2時点では、Scout・matching・salary offer・profile・culture・
- * interests・notifications・quotaのいずれもこのページへ移植していない
- * （既存の/salon/mypage・/salon/profile・/salon/culture・/salon/stylists
+ * ★Phase 3Bで店舗プロフィール・店舗カルチャーへの導線2つを追加した。
+ * Scout・matching・salary offer・interests・notifications・quotaは
+ * 依然このページへ移植していない（既存の/salon/mypage・/salon/stylists
  * は無変更のまま、auth.uid()ベースで引き続き動作する）。
  */
 export default async function StoreWorkspacePage({ params }: Props) {
@@ -54,6 +54,23 @@ export default async function StoreWorkspacePage({ params }: Props) {
       <p className="mt-2 text-[13px] text-sub">
         {store.usage_status === "active" ? "Beauty Reach利用中" : "未利用"}
       </p>
+
+      <div className="mt-6 space-y-3">
+        <Link
+          href={`/salon/stores/${storeId}/profile`}
+          className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span className="font-serif text-[15px] font-bold text-ink">店舗プロフィール</span>
+          <span className="text-[12px] text-sub">編集する ›</span>
+        </Link>
+        <Link
+          href={`/salon/stores/${storeId}/culture`}
+          className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span className="font-serif text-[15px] font-bold text-ink">店舗カルチャー</span>
+          <span className="text-[12px] text-sub">編集する ›</span>
+        </Link>
+      </div>
 
       <div className="mt-6 rounded-2xl border border-dashed border-line bg-surface2 p-5">
         <p className="text-[13px] leading-relaxed text-charcoal">

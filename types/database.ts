@@ -487,6 +487,35 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      salon_store_profiles: {
+        // 0029で追加。店舗単位プロフィール。store_idが主軸（auth userはPKに
+        // しない）。SELECTはis_store_accessible()経由でアクセス可能な店舗のみ
+        // （0029 RLS）。書き込みはsave_salon_store_profile() RPC経由のみ(0030)。
+        Row: {
+          store_id: string; salon_name: string | null; visibility: ProfileVisibility;
+          prefecture: string | null; city: string | null; street_address: string | null;
+          culture_description: string | null; employee_size_code: string | null;
+          target_specialties: string[]; bio: string | null; hotpepper_url: string | null;
+        } & Timestamps;
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      salon_store_culture_profiles: {
+        // 0029で追加。店舗単位の「サロンらしさ」12軸診断。store_idが主軸
+        // （salon_user_idは持たない）。SELECTはis_store_accessible()経由で
+        // アクセス可能な店舗のみ（0029 RLS）。書き込みは
+        // save_salon_store_culture_profile() RPC経由のみ(0030)。
+        Row: {
+          id: string; store_id: string; status: SalonCultureStatus;
+          respondent_role: SalonCultureRespondentRole | null; respondent_user_id: string | null;
+          current_step: number; answers: Json; culture_axes: SalonCultureAxes | null;
+          value_priorities: string[] | null; comment: string | null; ai_summary: string | null;
+        } & Timestamps;
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -925,6 +954,39 @@ export type Database = {
       cleanup_expired_pending_diagnoses: {
         Args: Record<string, never>;
         Returns: number;
+      };
+      save_salon_store_profile: {
+        // 0030で追加。法人・複数店舗対応Phase 3B。店舗単位プロフィール保存の
+        // 唯一の経路。認可はis_store_accessible(p_store_id)のみで判定する。
+        Args: {
+          p_store_id: string;
+          p_salon_name: string;
+          p_visibility: ProfileVisibility;
+          p_prefecture: string;
+          p_city: string | null;
+          p_street_address: string | null;
+          p_culture_description: string | null;
+          p_employee_size_code: string | null;
+          p_target_specialties: string[];
+          p_bio: string | null;
+          p_hotpepper_url?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["salon_store_profiles"]["Row"];
+      };
+      save_salon_store_culture_profile: {
+        // 0030で追加。法人・複数店舗対応Phase 3B。店舗単位「サロンらしさ」
+        // 12軸診断保存の唯一の経路。p_answersは選択肢コード(1〜5)のみ。
+        // culture_axesの数値化・ai_summary生成はRPCがSQL側で行う。
+        Args: {
+          p_store_id: string;
+          p_status: SalonCultureStatus;
+          p_respondent_role: SalonCultureRespondentRole | null;
+          p_current_step: number;
+          p_answers: Json;
+          p_value_priorities: string[] | null;
+          p_comment: string | null;
+        };
+        Returns: Database["public"]["Tables"]["salon_store_culture_profiles"]["Row"];
       };
     };
     Enums: {
