@@ -17,9 +17,14 @@ type Props = {
  * 合わせ、ここでも同じ判定を独立して行っている。
  *
  * ★Phase 3Bで店舗プロフィール・店舗カルチャーへの導線2つを追加した。
- * Scout・matching・salary offer・interests・notifications・quotaは
+ * Phase 5で「美容師を探す」（/salon/stores/[storeId]/stylists、
+ * send_scout_v2・calculate_store_stylist_match使用）への導線を追加した。
+ * salary offer・interests・notifications・quotaの店舗単位表示は、
+ * 美容師向けstore公開読み取り経路（PUBLIC RLS）が未整備のため、
  * 依然このページへ移植していない（既存の/salon/mypage・/salon/stylists
- * は無変更のまま、auth.uid()ベースで引き続き動作する）。
+ * は無変更のまま、auth.uid()ベースで引き続き動作する。ただし/salon/stylists
+ * 自体は本番導線としては店舗選択へリダイレクトする。lib/scouts/
+ * actions.tsのsendStoreScout/sendScoutのコメント参照）。
  */
 export default async function StoreWorkspacePage({ params }: Props) {
   const { storeId } = await params;
@@ -57,6 +62,13 @@ export default async function StoreWorkspacePage({ params }: Props) {
 
       <div className="mt-6 space-y-3">
         <Link
+          href={`/salon/stores/${storeId}/stylists`}
+          className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span className="font-serif text-[15px] font-bold text-ink">美容師を探す</span>
+          <span className="text-[12px] text-sub">スカウトを送る ›</span>
+        </Link>
+        <Link
           href={`/salon/stores/${storeId}/profile`}
           className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
         >
@@ -74,7 +86,7 @@ export default async function StoreWorkspacePage({ params }: Props) {
 
       <div className="mt-6 rounded-2xl border border-dashed border-line bg-surface2 p-5">
         <p className="text-[13px] leading-relaxed text-charcoal">
-          この店舗ワークスペースは現在移行中です。スカウト・マッチング・給与オファー・採用進捗などの機能は、今後このページへ順次移設されます。それまでの間、これらの機能は引き続き既存のマイページからご利用いただけます。
+          給与オファーの提示・採用進捗の確認は現在準備中です。それまでの間、これらの機能は引き続き既存のマイページからご利用いただけます。
         </p>
       </div>
 

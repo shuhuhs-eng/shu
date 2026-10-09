@@ -2,7 +2,11 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { SALON_PHOTO_SIGNED_URL_EXPIRES_IN } from "@/lib/salon-photos/constants";
-import type { StylistSalonMatchResult, PublicSalonCultureDetailResult } from "@/lib/matching/types";
+import type {
+  StylistSalonMatchResult,
+  PublicSalonCultureDetailResult,
+  StoreStylistMatchResult,
+} from "@/lib/matching/types";
 import type { SalonPhotoCategory } from "@/types/database";
 
 /**
@@ -104,6 +108,51 @@ export async function getPublicSalonCultureDetail(
       valuePriorities: data.value_priorities,
       comment: data.comment,
       ai: data.ai,
+    };
+  }
+
+  return {
+    available: false,
+    reason: data.reason ?? "unknown",
+  };
+}
+
+/**
+ * 「店舗単位」の相性を、サロン側（店舗workspace）から対象美容師について
+ * 計算する（法人・複数店舗対応 Phase 5）。calculateStylistSalonMatch()と
+ * 同じ設計方針（RPCが計算・権限チェックのすべてを行う薄いラッパー、
+ * 強制キャストなしの型安全な絞り込み）を踏襲する。
+ *
+ * ★store_idはcaller(auth.uid())の所有物ではなく、呼び出し元
+ * （店舗workspaceのparams.storeId）が明示的に渡す値。アクセス権は
+ * calculate_store_stylist_match RPC内部のis_store_accessible(p_store_id)
+ * でのみ判定し、ここでは一切判定ロジックを複製しない。
+ */
+export async function calculateStoreStylistMatch(
+  storeId: string,
+  stylistUserId: string,
+): Promise<StoreStylistMatchResult | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("calculate_store_stylist_match", {
+    p_store_id: storeId,
+    p_stylist_user_id: stylistUserId,
+  });
+
+  if (error || !data) {
+    console.error("[calculateStoreStylistMatch] RPC failed", {
+      message: error?.message,
+      code: error?.code,
+      storeId,
+      stylistUserId,
+    });
+    return null;
+  }
+
+  if (data.available && data.overall_score != null && data.axis_scores != null) {
+    return {
+      available: true,
+      overall_score: data.overall_score,
+      axis_scores: data.axis_scores,
     };
   }
 

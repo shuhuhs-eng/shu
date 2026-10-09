@@ -391,12 +391,13 @@ export type Database = {
       scouts: {
         // 0025で追加。SELECTはsalon_user_id/stylist_user_id本人のみ。
         // 書き込みはsend_scout/mark_scout_read/respond_scout経由のみ。
+        // store_id/created_by_user_idは0032で追加済みの列（Phase 5で型定義を追従）。
         Row: {
           id: string; salon_user_id: string; stylist_user_id: string;
           message: string; template_type: string | null; matching_score: number | null;
           read_status: string; response_status: string; response_message: string | null;
           sent_at: string; read_at: string | null; responded_at: string | null;
-          created_at: string;
+          created_at: string; store_id: string | null; created_by_user_id: string | null;
         };
         Insert: Record<string, never>;
         Update: Record<string, never>;
@@ -675,6 +676,31 @@ export type Database = {
           } | null;
         };
       };
+      calculate_store_stylist_match: {
+        // 0031で追加。calculate_salon_stylist_matchのstore版。アクセス権は
+        // auth.uid()所有ではなくis_store_accessible(p_store_id)で判定する。
+        // 計算元はsalon_store_culture_profiles（store単位）。Returns shapeは
+        // calculate_salon_stylist_matchと完全に同一。
+        Args: {
+          p_store_id: string;
+          p_stylist_user_id: string;
+        };
+        Returns: {
+          available: boolean;
+          reason: string | null;
+          overall_score: number | null;
+          axis_scores: {
+            education: number | null;
+            challenge: number | null;
+            personal_brand: number | null;
+            collaboration: number | null;
+            autonomy: number | null;
+            work_flexibility: number | null;
+            relationship_distance: number | null;
+            hierarchy: number | null;
+          } | null;
+        };
+      };
       set_favorite_salon: {
         Args: { p_salon_user_id: string; p_favorite: boolean };
         Returns: boolean;
@@ -815,6 +841,17 @@ export type Database = {
         // matching_score算出はすべてRPC内部（SQL側）で行う。再スカウトも
         // 常に新しい行としてinsertされる（unique制約なし）。
         Args: {
+          p_stylist_user_id: string;
+          p_message: string;
+          p_template_type: string | null;
+        };
+        Returns: Database["public"]["Tables"]["scouts"]["Row"];
+      };
+      send_scout_v2: {
+        // 0034で追加。store単位Scout送信。quotaはorganization_scout_quotas
+        // （会社単位）。アクセス権はis_store_accessible(p_store_id)で判定。
+        Args: {
+          p_store_id: string;
           p_stylist_user_id: string;
           p_message: string;
           p_template_type: string | null;

@@ -37,6 +37,18 @@ export type StylistSalonMatchResult =
   | { available: true; overall_score: number; axis_scores: StylistSalonMatchAxisScores }
   | { available: false; reason: string };
 
+/**
+ * 店舗単位matching（calculate_store_stylist_match、法人・複数店舗対応
+ * Phase 5）の戻り値型。Returns shapeはcalculate_salon_stylist_matchと
+ * 完全に同一のため、同じ判別共用体パターンをそのまま適用する。
+ */
+export type StoreStylistMatchRpcReturns =
+  Database["public"]["Functions"]["calculate_store_stylist_match"]["Returns"];
+
+export type StoreStylistMatchResult =
+  | { available: true; overall_score: number; axis_scores: StylistSalonMatchAxisScores }
+  | { available: false; reason: string };
+
 /** 8軸それぞれの表示ラベル（axis_scoresのキー→日本語ラベル）。 */
 export const MATCH_AXIS_LABELS: Record<keyof StylistSalonMatchAxisScores, string> = {
   education: "教育・フォロー",
