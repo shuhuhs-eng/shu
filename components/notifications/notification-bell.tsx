@@ -20,14 +20,42 @@ const TYPE_LABELS: Record<string, string> = {
   evidence_rejected: "実績確認",
   interview_action_required: "次のアクション",
   stylist_interest_received: "意思表示",
+  hiring_interview_scheduled: "面談予定",
+  hiring_interview_rescheduled: "面談日時の変更",
+  hiring_status_updated: "選考状況",
+  hiring_offered: "内定",
+  hiring_hired: "採用",
+  hiring_declined_by_stylist: "選考の辞退",
 };
+
+/**
+ * 通知のlink_path（0038）をそのままリンク先に使ってよいか。DB側でも相対パスのみに
+ * 制約しているが、画面側でも「先頭が / で、// や \ で始まらない」ものだけを使う
+ * （外部URLや protocol-relative URL へは飛ばさない）。
+ */
+function safeLinkPath(path: string | null): string | null {
+  if (!path) return null;
+  if (!path.startsWith("/") || path.startsWith("//") || path.startsWith("/\\")) return null;
+  return path;
+}
 
 // 通知typeごとの遷移先。既存ページのセクションに#idを追加しているだけで、
 // 新しい画面は作っていない（stylist側の届いた給与条件＝/stylist/offers、届いたスカウト＝/stylist/scouts、
 // salon側の興味表明/給与オファーはどちらも同じ「興味を送ってくれた美容師」
 // セクション内に表示されるため両方とも#interestsへ遷移する）。
 function targetHref(notification: NotificationRow, role: "stylist" | "salon"): string {
+  // link_pathがあればそこへ（採用進捗の通知など）。無ければ従来のtype別遷移。
+  const linkPath = safeLinkPath(notification.link_path);
+  if (linkPath) return linkPath;
   switch (notification.type) {
+    case "hiring_interview_scheduled":
+    case "hiring_interview_rescheduled":
+    case "hiring_status_updated":
+    case "hiring_offered":
+    case "hiring_hired":
+      return "/stylist/applications";
+    case "hiring_declined_by_stylist":
+      return "/salon/company";
     case "salary_offer_received":
     case "salary_offer_revised":
       return "/stylist/offers";

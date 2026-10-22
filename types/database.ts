@@ -375,6 +375,8 @@ export type Database = {
           id: string; user_id: string; type: string; title: string; message: string;
           related_entity_type: string | null; related_entity_id: string | null;
           is_read: boolean; created_at: string; read_at: string | null;
+          // 0038で追加。通知の遷移先（アプリ内の相対パス）。nullなら従来どおりtypeごとの固定遷移先。
+          link_path: string | null;
         };
         Insert: Record<string, never>;
         Update: Record<string, never>;
