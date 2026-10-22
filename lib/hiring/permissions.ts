@@ -36,3 +36,24 @@ export async function canManageStoreHiringHint(
   if (orgRole === "area_manager" && storeResult.data) return true;
   return storeRole === "store_manager" || storeRole === "recruiter";
 }
+
+/**
+ * 会社横断の画面（/salon/company/hiring 等）に入れる会社レベルの役割。
+ * company_owner / company_admin / recruiting_admin は会社の全店舗、
+ * area_manager は担当店舗のみ。store_manager / recruiter / viewer（店舗レベルの
+ * 役割だけの担当者）は会社横断の画面には入れない。
+ * 自分の所属行（RLSで自分の行のみ読める）から判定する。middlewareとページの両方で使う。
+ */
+export async function hasCompanyLevelRole(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await supabase.from("organization_members").select("role").eq("user_id", userId).limit(1);
+  return (data ?? []).some(
+    (row) =>
+      row.role === "company_owner" ||
+      row.role === "company_admin" ||
+      row.role === "recruiting_admin" ||
+      row.role === "area_manager",
+  );
+}

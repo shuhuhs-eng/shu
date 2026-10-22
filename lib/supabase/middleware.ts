@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
+import { hasCompanyLevelRole } from "@/lib/hiring/permissions";
 
 /** ログイン必須のルート（本人のみ表示すべきページ）。前方一致で判定する。 */
 const AUTH_REQUIRED_PREFIXES = [
@@ -23,6 +24,7 @@ const AUTH_REQUIRED_PREFIXES = [
   "/salon/mypage",
   "/salon/profile",
   "/salon/culture",
+  "/salon/company/hiring",
 ];
 
 /** 未ログインのときだけ表示するルート。ログイン済みならトップへ戻す。 */
@@ -50,7 +52,14 @@ const GUEST_ONLY_PATHS = [
  * 必ずログイン済みである。
  */
 const STYLIST_ONLY_PREFIXES = ["/stylist/mypage", "/stylist/profile", "/stylist/diagnosis", "/stylist/preference", "/stylist/salons", "/stylist/scouts", "/stylist/offers", "/stylist/applications"];
-const SALON_ONLY_PREFIXES = ["/salon/mypage", "/salon/profile", "/salon/culture", "/diagnosis/salon"];
+const SALON_ONLY_PREFIXES = ["/salon/mypage", "/salon/profile", "/salon/culture", "/diagnosis/salon", "/salon/company/hiring"];
+
+/**
+ * 会社レベルの役割（company_owner / company_admin / recruiting_admin / area_manager）
+ * が必要なルート。店舗レベルの役割だけの担当者は /salon/company へ戻す。
+ * ページ側（server guard）でも同じ判定を重ねる。
+ */
+const COMPANY_LEVEL_PREFIXES = ["/salon/company/hiring"];
 
 /**
  * リクエストごとに Supabase セッションを更新し、あわせて以下のルート保護を行う。
@@ -136,6 +145,19 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
       }
     }
+  }
+
+  // 会社横断ルートは、会社レベルの役割が無い担当者（店舗レベルの役割のみ）を弾く。
+  if (
+    user &&
+    COMPANY_LEVEL_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
+    !(await hasCompanyLevelRole(supabase, user.id))
+  ) {
+    console.log("[MW] store-level user blocked from company-level path", { pathname, userId: user.id });
+    const url = request.nextUrl.clone();
+    url.pathname = "/salon/company";
+    url.search = "";
+    return NextResponse.redirect(url);
   }
 
   if (GUEST_ONLY_PATHS.includes(pathname) && user) {

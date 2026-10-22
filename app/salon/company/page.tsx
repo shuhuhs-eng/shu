@@ -2,6 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
+import { hasCompanyLevelRole } from "@/lib/hiring/permissions";
+import { NotificationBell } from "@/components/notifications/notification-bell";
+import { getNotificationsForBell } from "@/lib/notifications/get-notifications";
 
 /**
  * 会社ダッシュボード（法人・複数店舗対応 Phase 1）。
@@ -51,6 +54,13 @@ export default async function SalonCompanyPage() {
     .order("store_name", { ascending: true });
   const storeList = stores ?? [];
 
+  // 会社横断の採用ダッシュボードへの導線は、会社レベルの役割がある人にだけ出す。
+  // 通知（採用進捗の辞退など）もここから確認できるようにする。
+  const [showHiringDashboard, { notifications, unreadCount }] = await Promise.all([
+    hasCompanyLevelRole(supabase, user.id),
+    getNotificationsForBell(supabase, user.id),
+  ]);
+
   const orgIds = [...new Set(storeList.map((s) => s.organization_id))];
   const { data: orgs } = orgIds.length > 0
     ? await supabase.from("salon_organizations").select("*").in("id", orgIds)
@@ -62,6 +72,7 @@ export default async function SalonCompanyPage() {
       <div className="mb-7 flex items-center gap-2.5">
         <span className="eyebrow">Beauty Reach</span>
         <hr className="h-px flex-1 border-0 bg-line" />
+        <NotificationBell notifications={notifications} unreadCount={unreadCount} role="salon" />
       </div>
 
       <p className="eyebrow mb-2">会社・店舗管理</p>
@@ -69,6 +80,16 @@ export default async function SalonCompanyPage() {
       <p className="mt-3 text-[13px] leading-relaxed text-charcoal">
         アクセスできる店舗の一覧です。店舗を選ぶとその店舗のワークスペースへ移動します。
       </p>
+
+      {showHiringDashboard && (
+        <Link
+          href="/salon/company/hiring"
+          className="mt-6 flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span className="font-serif text-[15px] font-bold text-ink">採用ダッシュボード</span>
+          <span className="text-[12px] text-sub">会社全体の採用状況 ›</span>
+        </Link>
+      )}
 
       {storeList.length === 0 ? (
         <p className="mt-8 text-center text-[13px] text-sub">アクセスできる店舗がありません。</p>
