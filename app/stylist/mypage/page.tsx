@@ -12,6 +12,8 @@ import type { AiOutputType, Database } from "@/types/database";
 import type { TraitScores } from "@/lib/diagnosis";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { getNotificationsForBell } from "@/lib/notifications/get-notifications";
+import { getMyHiringProcesses } from "@/lib/hiring/actions";
+import { isClosedStatus } from "@/lib/hiring/format";
 
 type AiOutputRow = Database["public"]["Tables"]["diagnosis_ai_outputs"]["Row"];
 
@@ -96,6 +98,10 @@ export default async function StylistMyPage() {
     supabase.from("salary_offers").select("id", { count: "exact", head: true }).eq("stylist_user_id", user.id),
     supabase.from("salary_offers").select("id", { count: "exact", head: true }).eq("stylist_user_id", user.id).eq("status", "pending"),
   ]);
+  // 選考状況（Phase 8）。本人の進捗だけを返す get_my_hiring_processes から件数を数える。
+  const hiringProcesses = await getMyHiringProcesses();
+  const hiringTotalCount = hiringProcesses?.length ?? 0;
+  const hiringActiveCount = (hiringProcesses ?? []).filter((p) => !isClosedStatus(p.status)).length;
   const scoutTotalCount = scoutTotal.count ?? 0;
   const scoutUnreadCount = scoutUnread.count ?? 0;
   const offerTotalCount = offerTotal.count ?? 0;
@@ -267,6 +273,24 @@ export default async function StylistMyPage() {
           </span>
           {offerPendingCount > 0 && (
             <span className="rounded-full bg-[#C24545] px-2.5 py-1 text-[10px] font-bold text-white">回答待ち</span>
+          )}
+        </Link>
+        <Link
+          href="/stylist/applications"
+          className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span>
+            <span className="eyebrow block">選考状況</span>
+            <span className="mt-1 block text-[13px] text-charcoal">
+              {hiringTotalCount === 0
+                ? "進行中の選考はありません"
+                : hiringActiveCount > 0
+                  ? `進行中の選考 ${hiringActiveCount}件（全${hiringTotalCount}件）`
+                  : `全${hiringTotalCount}件`}
+            </span>
+          </span>
+          {hiringActiveCount > 0 && (
+            <span className="rounded-full bg-[#2E8B7F] px-2.5 py-1 text-[10px] font-bold text-white">進行中</span>
           )}
         </Link>
       </section>

@@ -82,6 +82,13 @@ export default async function StoreWorkspacePage({ params }: Props) {
           <span className="text-[12px] text-sub">確認・条件を提示 ›</span>
         </Link>
         <Link
+          href={`/salon/stores/${storeId}/candidates`}
+          className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span className="font-serif text-[15px] font-bold text-ink">採用進捗</span>
+          <span className="text-[12px] text-sub">面談・選考を管理 ›</span>
+        </Link>
+        <Link
           href={`/salon/stores/${storeId}/scouts`}
           className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
         >

@@ -8,6 +8,9 @@ import {
   formatJstDateTime,
 } from "@/lib/store-activity/format";
 import { StorePageShell } from "@/components/store-activity/store-page-shell";
+import { getStoreHiringProcesses } from "@/lib/hiring/actions";
+import { canManageStoreHiringHint } from "@/lib/hiring/permissions";
+import { AddCandidateButton } from "@/components/hiring/add-candidate-button";
 
 type Props = {
   params: Promise<{ storeId: string }>;
@@ -45,6 +48,16 @@ export default async function StoreOffersPage({ params }: Props) {
   if (storeError || !store) {
     redirect("/salon/company");
   }
+
+  // 採用進捗（Phase 8）。登録済みの美容師にはリンク、未登録で書き込み権限があれば追加ボタンを出す。
+  const [hiringProcesses, canManageHiring] = await Promise.all([
+    getStoreHiringProcesses(storeId),
+    canManageStoreHiringHint(supabase, user.id, storeId, store.organization_id),
+  ]);
+  const hiringProcessByStylist = new Map<string, string>();
+  for (const hp of hiringProcesses ?? []) hiringProcessByStylist.set(hp.stylist_user_id, hp.process_id);
+  // 一覧を取得できなかった場合は登録済みか判別できないため、追加ボタンは出さない。
+  const canShowAddHiring = canManageHiring && hiringProcesses !== null;
 
   const [offers, names] = await Promise.all([getStoreSalaryOffers(storeId), getStoreStylistNameMap(storeId)]);
 
@@ -119,6 +132,17 @@ export default async function StoreOffersPage({ params }: Props) {
                     <p className="mt-1 whitespace-pre-line leading-relaxed">{offer.response_note}</p>
                   )}
                 </div>
+              )}
+
+              {/* 条件を承諾 / 条件を相談 の回答があったオファーだけ、採用進捗に追加できる。 */}
+              {(offer.status === "accepted" || offer.status === "revision_requested" ||
+                hiringProcessByStylist.has(offer.stylist_user_id)) && (
+                <AddCandidateButton
+                  storeId={storeId}
+                  stylistUserId={offer.stylist_user_id}
+                  processId={hiringProcessByStylist.get(offer.stylist_user_id) ?? null}
+                  canManage={canShowAddHiring && (offer.status === "accepted" || offer.status === "revision_requested")}
+                />
               )}
             </article>
           ))}

@@ -450,6 +450,21 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      organization_members: {
+        // 0026で追加。SELECTは自分の行のみ（RLS: organization_members_select_own）。
+        // UIで書き込みボタンの出し分け（表示上のヒント）にだけ使う。権限の本体はDB(RPC)側。
+        Row: { organization_id: string; user_id: string; role: string; created_at: string };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      store_members: {
+        // 0026で追加。SELECTは自分の行のみ（RLS: store_members_select_own）。
+        Row: { store_id: string; user_id: string; role: string; created_at: string };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       diagnosis_results: {
         // AI生成物(ai_essence等)は持たない。diagnosis_ai_outputs を参照。
         Row: {
@@ -898,6 +913,78 @@ export type Database = {
           response_note: string | null; responded_at: string | null;
           created_at: string; updated_at: string;
         }>;
+      };
+      add_hiring_candidate: {
+        // 0037で追加。「採用進捗に追加」（書き込み権限=can_manage_store_hiring）。
+        Args: { p_store_id: string; p_stylist_user_id: string; p_internal_note?: string | null };
+        Returns: { id: string; status: string; source: string };
+      };
+      schedule_hiring_interview: {
+        // 0037で追加。面談の登録・日時変更。
+        Args: {
+          p_process_id: string; p_interview_at: string; p_interview_type: string;
+          p_location?: string | null; p_candidate_message?: string | null; p_internal_note?: string | null;
+        };
+        Returns: { id: string; status: string; interview_at: string };
+      };
+      update_hiring_status: {
+        // 0037で追加。面談予定以外のステータス変更。
+        Args: {
+          p_process_id: string; p_to_status: string; p_public_note?: string | null;
+          p_internal_note?: string | null; p_reason_code?: string | null; p_reason_note?: string | null;
+        };
+        Returns: { id: string; status: string };
+      };
+      update_hiring_internal_note: {
+        // 0037で追加。社内メモの更新（店舗側のみ）。
+        Args: { p_process_id: string; p_internal_note: string | null };
+        Returns: { id: string };
+      };
+      get_store_hiring_processes: {
+        // 0037で追加。店舗の採用進捗一覧（閲覧: is_store_accessible）。internal_note/reason_*を含む（店舗側専用）。
+        Args: { p_store_id: string };
+        Returns: Array<{
+          process_id: string; store_id: string; stylist_user_id: string;
+          public_name: string | null; prefecture: string | null;
+          current_position: string | null; experience_years: number | null;
+          match: Database["public"]["Functions"]["calculate_store_stylist_match"]["Returns"];
+          status: string; source: string;
+          interview_at: string | null; interview_type: string | null; interview_location: string | null;
+          candidate_message: string | null; internal_note: string | null;
+          declined_by: string | null; reason_code: string | null; reason_note: string | null;
+          hired_at: string | null; closed_at: string | null; created_at: string; updated_at: string;
+        }>;
+      };
+      get_hiring_process_events: {
+        // 0037で追加。履歴（店舗側。社内メモ・理由を含む）。
+        Args: { p_process_id: string };
+        Returns: Array<{
+          id: string; event_type: string; from_status: string | null; to_status: string | null;
+          actor_kind: string; is_me: boolean; interview_at: string | null;
+          public_note: string | null; internal_note: string | null; reason_code: string | null;
+          created_at: string;
+        }>;
+      };
+      get_my_hiring_processes: {
+        // 0037で追加。美容師本人の進捗。internal_note/reason_*/スタッフIDは含まれない。
+        Args: Record<string, never>;
+        Returns: Array<{
+          process_id: string; store_id: string; store_name: string;
+          prefecture: string | null; city: string | null; store_is_public: boolean;
+          status: string; interview_at: string | null; interview_type: string | null;
+          interview_location: string | null; candidate_message: string | null;
+          declined_by: string | null; hired_at: string | null; closed_at: string | null;
+          created_at: string; updated_at: string;
+          events: Array<{
+            event_type: string; to_status: string | null; actor_kind: string;
+            interview_at: string | null; public_note: string | null; created_at: string;
+          }>;
+        }>;
+      };
+      decline_hiring_process: {
+        // 0037で追加。美容師が自分の進捗を辞退する。
+        Args: { p_process_id: string; p_public_note?: string | null };
+        Returns: { id: string; status: string };
       };
       get_store_scout_quota: {
         // 0036で追加。store→organizationのScout残数（読み取り専用）。

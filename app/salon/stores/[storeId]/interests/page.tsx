@@ -5,6 +5,9 @@ import { getStoreReceivedInterests, getStoreSalaryOffers } from "@/lib/store-act
 import type { StoreSalaryOffer } from "@/lib/store-activity/types";
 import { StorePageShell } from "@/components/store-activity/store-page-shell";
 import { StoreInterestCard } from "@/components/store-activity/store-interest-card";
+import { getStoreHiringProcesses } from "@/lib/hiring/actions";
+import { canManageStoreHiringHint } from "@/lib/hiring/permissions";
+import { AddCandidateButton } from "@/components/hiring/add-candidate-button";
 
 type Props = {
   params: Promise<{ storeId: string }>;
@@ -46,6 +49,16 @@ export default async function StoreInterestsPage({ params }: Props) {
     redirect("/salon/company");
   }
 
+  // 採用進捗（Phase 8）。登録済みの美容師にはリンク、未登録で書き込み権限があれば追加ボタンを出す。
+  const [hiringProcesses, canManageHiring] = await Promise.all([
+    getStoreHiringProcesses(storeId),
+    canManageStoreHiringHint(supabase, user.id, storeId, store.organization_id),
+  ]);
+  const hiringProcessByStylist = new Map<string, string>();
+  for (const hp of hiringProcesses ?? []) hiringProcessByStylist.set(hp.stylist_user_id, hp.process_id);
+  // 一覧を取得できなかった場合は登録済みか判別できないため、追加ボタンは出さない。
+  const canShowAddHiring = canManageHiring && hiringProcesses !== null;
+
   const [interests, offers] = await Promise.all([
     getStoreReceivedInterests(storeId),
     getStoreSalaryOffers(storeId),
@@ -73,12 +86,19 @@ export default async function StoreInterestsPage({ params }: Props) {
       ) : (
         <div className="mt-8 space-y-4">
           {interests.map((interest) => (
-            <StoreInterestCard
-              key={interest.interest_id}
-              storeId={storeId}
-              interest={interest}
-              latestOffer={latestOfferByStylist.get(interest.stylist_user_id) ?? null}
-            />
+            <div key={interest.interest_id}>
+              <StoreInterestCard
+                storeId={storeId}
+                interest={interest}
+                latestOffer={latestOfferByStylist.get(interest.stylist_user_id) ?? null}
+              />
+              <AddCandidateButton
+                storeId={storeId}
+                stylistUserId={interest.stylist_user_id}
+                processId={hiringProcessByStylist.get(interest.stylist_user_id) ?? null}
+                canManage={canShowAddHiring}
+              />
+            </div>
           ))}
         </div>
       )}

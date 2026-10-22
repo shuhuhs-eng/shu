@@ -5,6 +5,9 @@ import { getStoreScouts, getStoreStylistNameMap } from "@/lib/store-activity/act
 import { SCOUT_RESPONSE_LABELS } from "@/lib/scouts/options";
 import { SCOUT_READ_LABELS, formatJstDateTime } from "@/lib/store-activity/format";
 import { StorePageShell } from "@/components/store-activity/store-page-shell";
+import { getStoreHiringProcesses } from "@/lib/hiring/actions";
+import { canManageStoreHiringHint } from "@/lib/hiring/permissions";
+import { AddCandidateButton } from "@/components/hiring/add-candidate-button";
 
 type Props = {
   params: Promise<{ storeId: string }>;
@@ -42,6 +45,16 @@ export default async function StoreScoutsPage({ params }: Props) {
   if (storeError || !store) {
     redirect("/salon/company");
   }
+
+  // 採用進捗（Phase 8）。登録済みの美容師にはリンク、未登録で書き込み権限があれば追加ボタンを出す。
+  const [hiringProcesses, canManageHiring] = await Promise.all([
+    getStoreHiringProcesses(storeId),
+    canManageStoreHiringHint(supabase, user.id, storeId, store.organization_id),
+  ]);
+  const hiringProcessByStylist = new Map<string, string>();
+  for (const hp of hiringProcesses ?? []) hiringProcessByStylist.set(hp.stylist_user_id, hp.process_id);
+  // 一覧を取得できなかった場合は登録済みか判別できないため、追加ボタンは出さない。
+  const canShowAddHiring = canManageHiring && hiringProcesses !== null;
 
   const [scouts, names] = await Promise.all([getStoreScouts(storeId), getStoreStylistNameMap(storeId)]);
 
@@ -98,6 +111,17 @@ export default async function StoreScoutsPage({ params }: Props) {
                     {scout.response_message}
                   </p>
                 </div>
+              )}
+
+              {/* 前向きな返信（興味あり/質問あり）のスカウトだけ、採用進捗に追加できる。 */}
+              {(scout.response_status === "interested" || scout.response_status === "question" ||
+                hiringProcessByStylist.has(scout.stylist_user_id)) && (
+                <AddCandidateButton
+                  storeId={storeId}
+                  stylistUserId={scout.stylist_user_id}
+                  processId={hiringProcessByStylist.get(scout.stylist_user_id) ?? null}
+                  canManage={canShowAddHiring && (scout.response_status === "interested" || scout.response_status === "question")}
+                />
               )}
             </article>
           ))}
