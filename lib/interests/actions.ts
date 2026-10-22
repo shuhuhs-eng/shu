@@ -32,3 +32,39 @@ export async function setSalonInterestAction(
   revalidatePath(`/stylist/salons/${parsedSalonUserId.data}`);
   revalidatePath("/salon/mypage");
 }
+
+const storeIdSchema = z.string().uuid();
+
+/**
+ * 店舗単位「話を聞いてみたい」の送信・取消（Phase 6）。set_store_interest()
+ * のみを呼ぶ。storeIdは呼び出し元（URLのparams.storeId）が明示的に渡す値で、
+ * salon_user_idは一切渡さない。権限検証（stylist role・PUBLIC店舗）はRPC内。
+ */
+export async function setStoreInterestAction(
+  storeId: string,
+  interested: boolean,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const parsedStoreId = storeIdSchema.safeParse(storeId);
+  if (!parsedStoreId.success) {
+    return { success: false, error: "送信できませんでした。もう一度お試しください" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_store_interest", {
+    p_store_id: parsedStoreId.data,
+    p_interested: interested,
+  });
+
+  if (error) {
+    console.error("[setStoreInterestAction] RPC failed", {
+      message: error.message,
+      code: error.code,
+      storeId: parsedStoreId.data,
+    });
+    return { success: false, error: "送信できませんでした。もう一度お試しください" };
+  }
+
+  revalidatePath(`/stylist/salons/${parsedStoreId.data}`);
+  revalidatePath(`/salon/stores/${parsedStoreId.data}/interests`);
+  return { success: true };
+}

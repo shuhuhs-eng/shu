@@ -6,6 +6,7 @@ import type {
   StylistSalonMatchResult,
   PublicSalonCultureDetailResult,
   StoreStylistMatchResult,
+  StylistStoreMatchResult,
 } from "@/lib/matching/types";
 import type { SalonPhotoCategory } from "@/types/database";
 
@@ -144,6 +145,46 @@ export async function calculateStoreStylistMatch(
       code: error?.code,
       storeId,
       stylistUserId,
+    });
+    return null;
+  }
+
+  if (data.available && data.overall_score != null && data.axis_scores != null) {
+    return {
+      available: true,
+      overall_score: data.overall_score,
+      axis_scores: data.axis_scores,
+    };
+  }
+
+  return {
+    available: false,
+    reason: data.reason ?? "unknown",
+  };
+}
+
+/**
+ * 「店舗単位」の相性を、美容師側から対象のPUBLIC店舗について計算する
+ * （法人・複数店舗対応 Phase 6）。calculateStylistSalonMatch()と同じ設計方針
+ * （RPC=calculate_stylist_store_matchが計算・権限チェックのすべてを行う薄い
+ * ラッパー、強制キャストなしの型安全な絞り込み）を踏襲する。
+ *
+ * ★storeIdは呼び出し元（URLのparams.storeId、または店舗一覧RPCの結果）が
+ * 明示的に渡す値。旧salon_user_id単位の相性は使わない。
+ */
+export async function calculateStylistStoreMatch(
+  storeId: string,
+): Promise<StylistStoreMatchResult | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("calculate_stylist_store_match", {
+    p_store_id: storeId,
+  });
+
+  if (error || !data) {
+    console.error("[calculateStylistStoreMatch] RPC failed", {
+      message: error?.message,
+      code: error?.code,
+      storeId,
     });
     return null;
   }

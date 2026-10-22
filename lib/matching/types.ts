@@ -49,6 +49,15 @@ export type StoreStylistMatchResult =
   | { available: true; overall_score: number; axis_scores: StylistSalonMatchAxisScores }
   | { available: false; reason: string };
 
+/**
+ * 美容師側から見た「店舗単位」の相性（calculate_stylist_store_match、
+ * 法人・複数店舗対応 Phase 6）。Returns shapeは他のmatch RPCと完全に
+ * 同一のため、同じ判別共用体を使う。
+ */
+export type StylistStoreMatchResult =
+  | { available: true; overall_score: number; axis_scores: StylistSalonMatchAxisScores }
+  | { available: false; reason: string };
+
 /** 8軸それぞれの表示ラベル（axis_scoresのキー→日本語ラベル）。 */
 export const MATCH_AXIS_LABELS: Record<keyof StylistSalonMatchAxisScores, string> = {
   education: "教育・フォロー",

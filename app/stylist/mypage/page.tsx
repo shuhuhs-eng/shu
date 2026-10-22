@@ -308,14 +308,7 @@ export default async function StylistMyPage() {
         href="/stylist/salons"
         className="mt-4 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-3.5 text-[14px] font-semibold text-ink"
       >
-        サロンを探す
-      </Link>
-
-      <Link
-        href="/stylist/salons?favorites=1"
-        className="mt-3 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-3.5 text-[14px] font-semibold text-ink"
-      >
-        ★ 気になるサロンを見る
+        公開中の店舗を探す
       </Link>
 
       <Link href="/stylist/profile" className="mt-4 block text-center text-[13px] text-sub underline">

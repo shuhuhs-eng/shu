@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { createSalaryOffer } from "@/lib/salary-offers/actions";
+import { createSalaryOffer, createStoreSalaryOffer } from "@/lib/salary-offers/actions";
 import type { Database } from "@/types/database";
 type Offer = Database["public"]["Tables"]["salary_offers"]["Row"];
+// フォームが参照するのは状態と回答内容のみ。旧(salary_offers Row)も店舗版(get_store_salary_offers)も渡せる。
+type ExistingOffer = Pick<Offer, "status" | "response_reason" | "response_note">;
 const RESPONSE_REASONS: Record<string,string> = { workdays:"勤務日数・休日", guarantee_period:"保証期間", role:"役割・業務範囲", performance_basis:"実績の評価方法", other:"その他" };
 // 実績加算の入力を解釈する。矢印操作前提のtype="number"だとMac/Safariで直接入力しづらいため
 // type="text"+inputMode="numeric"にし、入力文字列はそのままstateで保持する（自動整形しない）。
@@ -21,7 +23,9 @@ function parseAmountInput(raw: string): AmountParseResult {
   return { kind: "valid", value };
 }
 
-export function SalonOfferForm({ stylistUserId, existingOffer }: { stylistUserId: string; existingOffer: Offer | null }) {
+// storeIdを渡した場合は店舗単位(create_salary_offer_v2)、渡さない場合は旧(create_salary_offer)で提示する。
+// 店舗側の新UIは必ずstoreIdを渡す。
+export function SalonOfferForm({ stylistUserId, existingOffer, storeId }: { stylistUserId: string; existingOffer: ExistingOffer | null; storeId?: string }) {
   const [open, setOpen] = useState(false); const [busy, setBusy] = useState(false); const [message, setMessage] = useState<string | null>(null);
   const [guarantee, setGuarantee] = useState(250000); const [additionInput, setAdditionInput] = useState("0"); const [condition, setCondition] = useState(""); const [months, setMonths] = useState<1|3|6|12>(3); const [note, setNote] = useState("");
   const parsedAddition = parseAmountInput(additionInput);
@@ -44,7 +48,8 @@ export function SalonOfferForm({ stylistUserId, existingOffer }: { stylistUserId
     if (additionUnitInvalid) { setMessage("実績加算は1,000円単位で入力してください。"); return; }
     if (conditionMissing) { setMessage("実績加算を設定する場合は、支給条件を入力してください。"); return; }
     setBusy(true); setMessage(null);
-    const result = await createSalaryOffer({ stylistUserId, monthlyGuarantee: guarantee, performanceAddition: addition, performanceCondition: condition.trim() || null, guaranteeMonths: months, message: note || null });
+    const offerInput = { stylistUserId, monthlyGuarantee: guarantee, performanceAddition: addition, performanceCondition: condition.trim() || null, guaranteeMonths: months, message: note || null };
+    const result = storeId ? await createStoreSalaryOffer({ storeId, ...offerInput }) : await createSalaryOffer(offerInput);
     setBusy(false); setMessage(result.success ? "条件を提示しました。" : result.error);
   }
   return <div className="mt-3 rounded-xl border border-line bg-surface p-4">

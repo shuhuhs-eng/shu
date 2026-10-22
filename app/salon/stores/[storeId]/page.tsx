@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getStoreScoutQuota } from "@/lib/store-activity/actions";
+import { ScoutQuotaCard } from "@/components/store-activity/scout-quota-card";
 
 type Props = {
   params: Promise<{ storeId: string }>;
@@ -19,12 +21,10 @@ type Props = {
  * ★Phase 3Bで店舗プロフィール・店舗カルチャーへの導線2つを追加した。
  * Phase 5で「美容師を探す」（/salon/stores/[storeId]/stylists、
  * send_scout_v2・calculate_store_stylist_match使用）への導線を追加した。
- * salary offer・interests・notifications・quotaの店舗単位表示は、
- * 美容師向けstore公開読み取り経路（PUBLIC RLS）が未整備のため、
- * 依然このページへ移植していない（既存の/salon/mypage・/salon/stylists
- * は無変更のまま、auth.uid()ベースで引き続き動作する。ただし/salon/stylists
- * 自体は本番導線としては店舗選択へリダイレクトする。lib/scouts/
- * actions.tsのsendStoreScout/sendScoutのコメント参照）。
+ * Phase 6で「話を聞きたい美容師」(interests)・「スカウト履歴」(scouts)・
+ * 「オファー履歴」(offers)への導線と、今月のスカウト残数
+ * (get_store_scout_quota)を追加した。いずれもURLのparams.storeIdを正とし、
+ * 0036の店舗単位RPCで取得する。
  */
 export default async function StoreWorkspacePage({ params }: Props) {
   const { storeId } = await params;
@@ -47,6 +47,8 @@ export default async function StoreWorkspacePage({ params }: Props) {
     redirect("/salon/company");
   }
 
+  const quota = await getStoreScoutQuota(storeId);
+
   return (
     <main className="mx-auto max-w-[560px] px-5 py-12">
       <div className="mb-7 flex items-center gap-2.5">
@@ -60,6 +62,10 @@ export default async function StoreWorkspacePage({ params }: Props) {
         {store.usage_status === "active" ? "Beauty Reach利用中" : "未利用"}
       </p>
 
+      <div className="mt-6">
+        <ScoutQuotaCard quota={quota} />
+      </div>
+
       <div className="mt-6 space-y-3">
         <Link
           href={`/salon/stores/${storeId}/stylists`}
@@ -67,6 +73,27 @@ export default async function StoreWorkspacePage({ params }: Props) {
         >
           <span className="font-serif text-[15px] font-bold text-ink">美容師を探す</span>
           <span className="text-[12px] text-sub">スカウトを送る ›</span>
+        </Link>
+        <Link
+          href={`/salon/stores/${storeId}/interests`}
+          className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span className="font-serif text-[15px] font-bold text-ink">話を聞きたい美容師</span>
+          <span className="text-[12px] text-sub">確認・条件を提示 ›</span>
+        </Link>
+        <Link
+          href={`/salon/stores/${storeId}/scouts`}
+          className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span className="font-serif text-[15px] font-bold text-ink">スカウト履歴</span>
+          <span className="text-[12px] text-sub">見る ›</span>
+        </Link>
+        <Link
+          href={`/salon/stores/${storeId}/offers`}
+          className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span className="font-serif text-[15px] font-bold text-ink">オファー履歴</span>
+          <span className="text-[12px] text-sub">見る ›</span>
         </Link>
         <Link
           href={`/salon/stores/${storeId}/profile`}
@@ -79,15 +106,9 @@ export default async function StoreWorkspacePage({ params }: Props) {
           href={`/salon/stores/${storeId}/culture`}
           className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
         >
-          <span className="font-serif text-[15px] font-bold text-ink">店舗カルチャー</span>
+          <span className="font-serif text-[15px] font-bold text-ink">サロンらしさ診断</span>
           <span className="text-[12px] text-sub">編集する ›</span>
         </Link>
-      </div>
-
-      <div className="mt-6 rounded-2xl border border-dashed border-line bg-surface2 p-5">
-        <p className="text-[13px] leading-relaxed text-charcoal">
-          給与オファーの提示・採用進捗の確認は現在準備中です。それまでの間、これらの機能は引き続き既存のマイページからご利用いただけます。
-        </p>
       </div>
 
       <Link

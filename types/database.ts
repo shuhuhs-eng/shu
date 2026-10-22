@@ -309,7 +309,12 @@ export type Database = {
       };
       stylist_salon_interests: {
         // 0018で追加。美容師本人は送信状態のみSELECT可。書き込みは専用RPC。
-        Row: { stylist_user_id: string; salon_user_id: string; created_at: string };
+        // 0032でstore_id、0035でid(surrogate PK)を追加し、salon_user_idをnullable化。
+        // store単位Interest(set_store_interest)ではsalon_user_idはNULLのまま保存される。
+        Row: {
+          id: string; stylist_user_id: string; salon_user_id: string | null;
+          store_id: string | null; created_at: string;
+        };
         Insert: Record<string, never>;
         Update: Record<string, never>;
         Relationships: [];
@@ -794,6 +799,111 @@ export type Database = {
           p_guarantee_months: number; p_performance_condition: string | null; p_salon_message: string | null;
         };
         Returns: Database["public"]["Tables"]["salary_offers"]["Row"];
+      };
+      create_salary_offer_v2: {
+        // 0035で追加。store単位給与オファー作成。アクセス権はis_store_accessible(p_store_id)、
+        // Interest確認はstore_id単位。evidence/verification条件は旧create_salary_offerと同一。
+        Args: {
+          p_store_id: string; p_stylist_user_id: string; p_monthly_guarantee: number;
+          p_performance_addition: number; p_guarantee_months: number;
+          p_performance_condition: string | null; p_salon_message: string | null;
+        };
+        Returns: Database["public"]["Tables"]["salary_offers"]["Row"];
+      };
+      set_store_interest: {
+        // 0035で追加。store単位「話を聞いてみたい」の送信・取消。salon_user_idは渡さない。
+        Args: { p_store_id: string; p_interested: boolean };
+        Returns: boolean;
+      };
+      calculate_stylist_store_match: {
+        // 0031で追加。美容師→店舗のmatching。Returns shapeは
+        // calculate_stylist_salon_matchと完全に同一。
+        Args: { p_store_id: string };
+        Returns: Database["public"]["Functions"]["calculate_store_stylist_match"]["Returns"];
+      };
+      get_public_salon_stores: {
+        // 0036で追加。美容師向けPUBLIC店舗一覧（visibility=PUBLICのみ）。
+        Args: Record<string, never>;
+        Returns: Array<{
+          store_id: string; organization_id: string; store_name: string;
+          prefecture: string | null; city: string | null;
+          employee_size_code: string | null; target_specialties: string[];
+          bio: string | null;
+        }>;
+      };
+      get_public_salon_store_detail: {
+        // 0036で追加。美容師向けPUBLIC店舗詳細。PUBLICでない場合はRPCが例外を返す。
+        // cultureはstatus=completedの場合のみ非null。
+        Args: { p_store_id: string };
+        Returns: {
+          available: boolean; store_id: string; organization_id: string; store_name: string;
+          prefecture: string | null; city: string | null; street_address: string | null;
+          culture_description: string | null; employee_size_code: string | null;
+          target_specialties: string[]; bio: string | null; hotpepper_url: string | null;
+          culture: {
+            culture_profile_id: string;
+            culture_axes: SalonCultureAxes | null;
+            value_priorities: string[] | null;
+            comment: string | null;
+            ai_summary: string | null;
+          } | null;
+        };
+      };
+      get_store_received_interests: {
+        // 0036で追加。store単位Interest受信一覧。match は calculate_match_axes_by_store の結果
+        // （calculate_store_stylist_matchと同一shape）。
+        Args: { p_store_id: string };
+        Returns: Array<{
+          interest_id: string; stylist_user_id: string; store_id: string; created_at: string;
+          public_name: string | null; prefecture: string | null;
+          desired_work_location: string | null; experience_years: number | null;
+          current_position: string | null; specialties: string[];
+          job_change_intent: JobChangeIntent; bio: string | null;
+          match: Database["public"]["Functions"]["calculate_store_stylist_match"]["Returns"];
+          match_profile: {
+            primary_goal: string; secondary_goals: string[]; career_stage: string;
+            wants_performance_offer: boolean;
+            evidence_period_months: number | null; avg_monthly_technical_sales: number | null;
+            avg_monthly_retail_sales: number | null; avg_monthly_clients: number | null;
+            avg_monthly_named_clients: number | null; average_ticket: number | null;
+            repeat_rate: number | null; monthly_working_days: number | null;
+            average_daily_hours: number | null; self_acquired_clients: number | null;
+            expected_transfer_clients: number | null; assistant_usage: string | null;
+            verification_status: string; consistency_issues: string[];
+            evidence_document_count: number;
+          } | null;
+        }>;
+      };
+      get_store_scouts: {
+        // 0036で追加。store単位Scout履歴（同一storeにアクセスできる全staff分）。
+        Args: { p_store_id: string };
+        Returns: Array<{
+          id: string; store_id: string | null; created_by_user_id: string | null;
+          stylist_user_id: string; message: string; template_type: string | null;
+          matching_score: number | null; read_status: string; response_status: string;
+          response_message: string | null; sent_at: string; read_at: string | null;
+          responded_at: string | null; created_at: string;
+        }>;
+      };
+      get_store_salary_offers: {
+        // 0036で追加。store単位Salary Offer履歴（同一storeにアクセスできる全staff分）。
+        Args: { p_store_id: string };
+        Returns: Array<{
+          id: string; store_id: string | null; created_by_user_id: string | null;
+          stylist_user_id: string; monthly_guarantee: number; performance_addition: number;
+          guarantee_months: number; performance_condition: string | null;
+          salon_message: string | null; status: string; response_reason: string | null;
+          response_note: string | null; responded_at: string | null;
+          created_at: string; updated_at: string;
+        }>;
+      };
+      get_store_scout_quota: {
+        // 0036で追加。store→organizationのScout残数（読み取り専用）。
+        Args: { p_store_id: string };
+        Returns: {
+          monthly_free_limit: number; additional_credits: number;
+          used_this_month: number; remaining: number;
+        };
       };
       respond_salary_offer: {
         Args: { p_offer_id: string; p_response: string; p_reason: string | null; p_note: string | null };

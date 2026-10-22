@@ -7,9 +7,10 @@ import { JOB_CHANGE_INTENT_LABELS } from "@/lib/validation/profile-options";
 import { MATCH_AXIS_LABELS } from "@/lib/matching/types";
 import type { StoreStylistMatchResult } from "@/lib/matching/types";
 import type { PublicStylistForScout } from "@/lib/scouts/types";
-import type { Database } from "@/types/database";
+import type { StoreScout } from "@/lib/store-activity/types";
 
-type LatestScout = Database["public"]["Tables"]["scouts"]["Row"];
+// 直近の回答状況の表示に使う項目のみ（scoutsテーブルのRow・get_store_scoutsの行のどちらも渡せる）。
+type LatestScout = Pick<StoreScout, "response_status" | "responded_at" | "response_message">;
 
 type Props = {
   storeId: string;
@@ -30,9 +31,9 @@ type Props = {
  *     salon_user_id基準の相性）は一切使わない。
  *   - 送信はsendStoreScout（send_scout_v2）のみ。storeIdは親から渡された
  *     値をそのまま使う（推測しない）。
- *   - quota残数の事前表示は行わない（今回は未接続。送信自体は
- *     send_scout_v2内部のorganization quotaで保護される）。枠超過時は
- *     RPCからのエラーメッセージをそのまま表示する。
+ *   - 残数は親ページ（ScoutQuotaCard、get_store_scout_quota）が表示する。
+ *     送信自体はsend_scout_v2内部のquotaで保護され、枠超過時は専用の
+ *     メッセージを表示する。
  */
 export function StoreStylistCard({ storeId, stylist, match, latestScout }: Props) {
   const [message, setMessage] = useState("");
