@@ -17,6 +17,8 @@ const AUTH_REQUIRED_PREFIXES = [
   "/stylist/profile",
   "/stylist/preference",
   "/stylist/salons",
+  "/stylist/scouts",
+  "/stylist/offers",
   "/salon/mypage",
   "/salon/profile",
   "/salon/culture",
@@ -46,7 +48,7 @@ const GUEST_ONLY_PATHS = [
  * 既にログインへリダイレクトされているため、ここに到達する時点で
  * 必ずログイン済みである。
  */
-const STYLIST_ONLY_PREFIXES = ["/stylist/mypage", "/stylist/profile", "/stylist/diagnosis", "/stylist/preference", "/stylist/salons"];
+const STYLIST_ONLY_PREFIXES = ["/stylist/mypage", "/stylist/profile", "/stylist/diagnosis", "/stylist/preference", "/stylist/salons", "/stylist/scouts", "/stylist/offers"];
 const SALON_ONLY_PREFIXES = ["/salon/mypage", "/salon/profile", "/salon/culture", "/diagnosis/salon"];
 
 /**

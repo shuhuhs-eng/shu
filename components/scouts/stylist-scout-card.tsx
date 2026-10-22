@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { markScoutRead, respondScout } from "@/lib/scouts/actions";
 import { SCOUT_RESPONSE_LABELS } from "@/lib/scouts/options";
 import type { Database } from "@/types/database";
 
 type Scout = Database["public"]["Tables"]["scouts"]["Row"];
 
-type Props = { scout: Scout; salonName: string; history: Scout[] };
+// storeIdは「公開中の店舗に紐づくスカウト」のときだけ渡される（店舗詳細へのリンク用）。
+// 旧形式(店舗に紐づかない)スカウトや非公開の店舗ではnull。
+type Props = { scout: Scout; salonName: string; history: Scout[]; storeId?: string | null; area?: string | null };
 
 /**
  * 美容師側「届いたスカウト」カード（1サロン1カード方針）。
@@ -24,7 +27,7 @@ type Props = { scout: Scout; salonName: string; history: Scout[] };
  * メッセージ本文・回答UIを表示する（開封=既読の唯一のトリガー）。
  * 既読済みのスカウトは最初から内容を開いた状態で表示する。
  */
-export function StylistScoutCard({ scout, salonName, history }: Props) {
+export function StylistScoutCard({ scout, salonName, history, storeId = null, area = null }: Props) {
   const [current, setCurrent] = useState(scout);
   const [expanded, setExpanded] = useState(scout.read_status === "read");
   const [opening, setOpening] = useState(false);
@@ -67,14 +70,20 @@ export function StylistScoutCard({ scout, salonName, history }: Props) {
         <div>
           <p className="eyebrow mb-1">スカウト</p>
           <h3 className="font-serif text-lg font-bold text-ink">{salonName}</h3>
+          {area && <p className="mt-0.5 text-[11.5px] text-sub">{area}</p>}
         </div>
         {current.read_status === "unread" && <span className="rounded-full bg-[#C24545] px-2.5 py-1 text-[10px] font-bold text-white">未読</span>}
       </div>
-      <p className="mt-1 text-[11px] text-sub">{new Date(current.sent_at).toLocaleString("ja-JP")} 受信</p>
+      <p className="mt-1 text-[11px] text-sub">{new Date(current.sent_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })} 受信</p>
+      {storeId && (
+        <Link href={`/stylist/salons/${storeId}`} className="mt-1 inline-block text-[11.5px] font-semibold text-ink underline">
+          店舗を見る
+        </Link>
+      )}
       {current.matching_score != null && <p className="mt-1 text-[11.5px] text-sub">相性 {current.matching_score}%</p>}
       {history.length > 0 && (
         <p className="mt-2 rounded-lg bg-surface2 px-3 py-2 text-[11.5px] text-charcoal">
-          以前このサロンからスカウトを受けています（{history.length}回）。
+          以前このサロン・店舗からスカウトを受けています（{history.length}回）。
         </p>
       )}
 

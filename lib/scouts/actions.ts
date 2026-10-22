@@ -82,6 +82,7 @@ export async function markScoutRead(
   const { error } = await supabase.rpc("mark_scout_read", { p_scout_id: parsed.data.scoutId });
   if (error) return { success: false, error: "既読にできませんでした。" };
   revalidatePath("/stylist/mypage");
+  revalidatePath("/stylist/scouts");
   return { success: true };
 }
 
@@ -108,6 +109,7 @@ export async function respondScout(
   });
   if (error) return { success: false, error: "回答を保存できませんでした。" };
   revalidatePath("/stylist/mypage");
+  revalidatePath("/stylist/scouts");
   revalidatePath("/salon/stylists");
   return { success: true };
 }

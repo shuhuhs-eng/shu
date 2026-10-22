@@ -388,6 +388,8 @@ export type Database = {
           salon_message: string | null; status: string; response_reason: string | null;
           response_note: string | null; responded_at: string | null;
           created_at: string; updated_at: string;
+          // 0032で追加。旧create_salary_offer経由の行ではstore_idがnullのことがある。
+          store_id: string | null; created_by_user_id: string | null;
         };
         Insert: Record<string, never>;
         Update: Record<string, never>;

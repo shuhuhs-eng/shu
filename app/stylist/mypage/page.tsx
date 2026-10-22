@@ -10,10 +10,8 @@ import { AiNarrativeBlocks } from "@/components/mypage/ai-narrative-blocks";
 import { TraitScoreBars } from "@/components/diagnosis/trait-score-bars";
 import type { AiOutputType, Database } from "@/types/database";
 import type { TraitScores } from "@/lib/diagnosis";
-import { StylistOfferCard } from "@/components/salary-offers/stylist-offer-card";
-import { StylistScoutCard } from "@/components/scouts/stylist-scout-card";
 import { NotificationBell } from "@/components/notifications/notification-bell";
-import { getNotificationsForBell, getUnreadNotificationRefs } from "@/lib/notifications/get-notifications";
+import { getNotificationsForBell } from "@/lib/notifications/get-notifications";
 
 type AiOutputRow = Database["public"]["Tables"]["diagnosis_ai_outputs"]["Row"];
 
@@ -89,80 +87,21 @@ export default async function StylistMyPage() {
     .maybeSingle();
   const hasMatchProfile = matchProfile?.status === "completed";
 
-  const { data: salaryOffers } = await supabase.from("salary_offers").select("*").eq("stylist_user_id", user.id).order("created_at", { ascending: false });
-  const salonIds = [...new Set((salaryOffers ?? []).map((offer) => offer.salon_user_id))];
-  const { data: offerSalons } = salonIds.length > 0
-    ? await supabase.from("salon_profiles").select("user_id,salon_name").in("user_id", salonIds)
-    : { data: [] };
-  const salonNameById = new Map((offerSalons ?? []).map((salon) => [salon.user_id, salon.salon_name]));
-
-  // ★1サロンにつき1カード方針: DBのsalary_offersは1社から複数行あってよいが、
-  // UI側ではsalon_user_idごとにグルーピングし、最新の1件だけを回答対象として
-  // 表示する。salaryOffersは既にcreated_at降順のため、各salonで最初に現れる行が
-  // 必ず最新offerになる。DBスキーマ・RPCは一切変更していない。
-  type SalaryOfferRow = NonNullable<typeof salaryOffers>[number];
-  const offersBySalon = new Map<string, SalaryOfferRow[]>();
-  for (const offer of salaryOffers ?? []) {
-    const list = offersBySalon.get(offer.salon_user_id) ?? [];
-    list.push(offer);
-    offersBySalon.set(offer.salon_user_id, list);
-  }
-  // ★スカウト機能Ver.1。salaryOffersと完全に同じ「1サロン1カード」方針で
-  // salon_user_idごとにグルーピングする。DBのscoutsは1社から複数行あって
-  // よいが、UI側では最新の1件だけを回答対象として表示し、過去分は
-  // StylistScoutCard側の折りたたみ履歴に渡す。notifications（scout_received/
-  // scout_responded）との連携は今回のスコープ外（次フェーズ）。
-  // ★最新判定の決定性: sent_atだけでは同時刻insertが理論上タイになり得るため、
-  // sent_at desc → created_at desc → id desc の順で並べ、最新1件が常に
-  // 一意に決まるようにする(id descは同時刻・同created_atが重なった場合の
-  // 最終的なタイブレーカー)。
-  const { data: scouts } = await supabase
-    .from("scouts")
-    .select("*")
-    .eq("stylist_user_id", user.id)
-    .order("sent_at", { ascending: false })
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false });
-  const scoutSalonIds = [...new Set((scouts ?? []).map((s) => s.salon_user_id))];
-  const { data: scoutSalons } = scoutSalonIds.length > 0
-    ? await supabase.from("salon_profiles").select("user_id,salon_name").in("user_id", scoutSalonIds)
-    : { data: [] };
-  const scoutSalonNameById = new Map((scoutSalons ?? []).map((salon) => [salon.user_id, salon.salon_name]));
-  type ScoutRow = NonNullable<typeof scouts>[number];
-  const scoutsBySalon = new Map<string, ScoutRow[]>();
-  for (const scout of scouts ?? []) {
-    const list = scoutsBySalon.get(scout.salon_user_id) ?? [];
-    list.push(scout);
-    scoutsBySalon.set(scout.salon_user_id, list);
-  }
-  const groupedScouts = [...scoutsBySalon.entries()].map(([salonUserId, list]) => ({
-    salonUserId,
-    salonName: scoutSalonNameById.get(salonUserId) ?? "サロン",
-    latest: list[0],
-    history: list.slice(1),
-  }));
+  // ★届いたスカウト／オファーは専用画面（/stylist/scouts・/stylist/offers）へ
+  // 移した（店舗単位で表示）。ここでは件数だけを本人宛(stylist_user_id=自分)の
+  // 既存テーブルから数える（新しいRPCは使わない）。
+  const [scoutTotal, scoutUnread, offerTotal, offerPending] = await Promise.all([
+    supabase.from("scouts").select("id", { count: "exact", head: true }).eq("stylist_user_id", user.id),
+    supabase.from("scouts").select("id", { count: "exact", head: true }).eq("stylist_user_id", user.id).eq("read_status", "unread"),
+    supabase.from("salary_offers").select("id", { count: "exact", head: true }).eq("stylist_user_id", user.id),
+    supabase.from("salary_offers").select("id", { count: "exact", head: true }).eq("stylist_user_id", user.id).eq("status", "pending"),
+  ]);
+  const scoutTotalCount = scoutTotal.count ?? 0;
+  const scoutUnreadCount = scoutUnread.count ?? 0;
+  const offerTotalCount = offerTotal.count ?? 0;
+  const offerPendingCount = offerPending.count ?? 0;
 
   const { notifications, unreadCount } = await getNotificationsForBell(supabase, user.id);
-  const unreadRefs = await getUnreadNotificationRefs(supabase, user.id);
-
-  // ★カード単位バッジ: related_entity_type='salary_offer'の未読を、その
-  // サロンのoffer id群(最新+履歴)と突き合わせるだけでDBスキーマ変更なしに
-  // 集計できる（related_entity_idはsalary_offers.idそのもののため）。
-  const groupedSalaryOffers = [...offersBySalon.entries()].map(([salonUserId, offers]) => {
-    const offerIds = new Set(offers.map((o) => o.id));
-    const notificationEntities = [...offerIds].map((id) => ({ type: "salary_offer", id }));
-    const unreadForSalon = unreadRefs.filter(
-      (r) => r.related_entity_type === "salary_offer" && r.related_entity_id && offerIds.has(r.related_entity_id),
-    ).length;
-    return {
-      salonUserId,
-      salonName: salonNameById.get(salonUserId) ?? "サロン",
-      latest: offers[0],
-      history: offers.slice(1),
-      unreadCount: unreadForSalon,
-      notificationEntities,
-    };
-  });
 
   const showNewStylistDesign = !!coreTypeCode && !!latest;
 
@@ -292,15 +231,45 @@ export default async function StylistMyPage() {
         </Link>
       </section>
 
-      {groupedScouts.length > 0 && <section id="scouts" className="mt-4">
-        <p className="eyebrow mb-2">届いたスカウト</p>
-        <div className="space-y-3">{groupedScouts.map((g) => <StylistScoutCard key={g.salonUserId} scout={g.latest} salonName={g.salonName} history={g.history} />)}</div>
-      </section>}
-
-      {groupedSalaryOffers.length > 0 && <section id="salary-offers" className="mt-4">
-        <p className="eyebrow mb-2">届いた給与条件</p>
-        <div className="space-y-3">{groupedSalaryOffers.map((g) => <StylistOfferCard key={g.salonUserId} offer={g.latest} salonName={g.salonName} history={g.history} unreadCount={g.unreadCount} notificationEntities={g.notificationEntities} />)}</div>
-      </section>}
+      {/* ★届いたスカウト／オファー。店舗単位の専用画面への導線と件数。 */}
+      <section className="mt-4 space-y-3">
+        <Link
+          href="/stylist/scouts"
+          className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span>
+            <span className="eyebrow block">届いたスカウト</span>
+            <span className="mt-1 block text-[13px] text-charcoal">
+              {scoutTotalCount === 0
+                ? "まだ届いていません"
+                : scoutUnreadCount > 0
+                  ? `新着スカウト ${scoutUnreadCount}件（全${scoutTotalCount}件）`
+                  : `全${scoutTotalCount}件`}
+            </span>
+          </span>
+          {scoutUnreadCount > 0 && (
+            <span className="rounded-full bg-[#C24545] px-2.5 py-1 text-[10px] font-bold text-white">新着</span>
+          )}
+        </Link>
+        <Link
+          href="/stylist/offers"
+          className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span>
+            <span className="eyebrow block">届いたオファー</span>
+            <span className="mt-1 block text-[13px] text-charcoal">
+              {offerTotalCount === 0
+                ? "まだ届いていません"
+                : offerPendingCount > 0
+                  ? `回答待ちのオファー ${offerPendingCount}件（全${offerTotalCount}件）`
+                  : `全${offerTotalCount}件`}
+            </span>
+          </span>
+          {offerPendingCount > 0 && (
+            <span className="rounded-full bg-[#C24545] px-2.5 py-1 text-[10px] font-bold text-white">回答待ち</span>
+          )}
+        </Link>
+      </section>
 
       {/* ★「あなたらしさ×サロンらしさ」MVP。既存の30問診断・8タイプ・
           市場価値・Preference・AI表示ブロックとは独立した導線として追加。 */}

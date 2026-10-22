@@ -110,7 +110,7 @@ export async function respondSalaryOffer(input: z.infer<typeof responseSchema>):
     p_reason: parsed.data.reason, p_note: parsed.data.note,
   });
   if (error) return { success: false, error: "回答を保存できませんでした。" };
-  revalidatePath("/stylist/mypage"); revalidatePath("/salon/mypage");
+  revalidatePath("/stylist/mypage"); revalidatePath("/stylist/offers"); revalidatePath("/salon/mypage");
   return { success: true };
 }
 

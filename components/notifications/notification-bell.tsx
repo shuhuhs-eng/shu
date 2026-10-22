@@ -23,14 +23,14 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 // 通知typeごとの遷移先。既存ページのセクションに#idを追加しているだけで、
-// 新しい画面は作っていない（stylist側の届いた給与条件＝#salary-offers、
+// 新しい画面は作っていない（stylist側の届いた給与条件＝/stylist/offers、届いたスカウト＝/stylist/scouts、
 // salon側の興味表明/給与オファーはどちらも同じ「興味を送ってくれた美容師」
 // セクション内に表示されるため両方とも#interestsへ遷移する）。
 function targetHref(notification: NotificationRow, role: "stylist" | "salon"): string {
   switch (notification.type) {
     case "salary_offer_received":
     case "salary_offer_revised":
-      return "/stylist/mypage#salary-offers";
+      return "/stylist/offers";
     case "salary_offer_accepted":
     case "salary_offer_revision_requested":
     case "salary_offer_declined":
@@ -40,6 +40,7 @@ function targetHref(notification: NotificationRow, role: "stylist" | "salon"): s
     case "evidence_rejected":
       return "/stylist/match-profile#evidence";
     case "scout_received":
+      return role === "stylist" ? "/stylist/scouts" : "/salon/mypage";
     case "scout_responded":
     case "interview_action_required":
     default:
