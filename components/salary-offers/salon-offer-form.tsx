@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createSalaryOffer, createStoreSalaryOffer } from "@/lib/salary-offers/actions";
+import { RECRUITING_PAUSED_MESSAGE } from "@/lib/contracts/recruiting-access";
 import type { Database } from "@/types/database";
 type Offer = Database["public"]["Tables"]["salary_offers"]["Row"];
 // フォームが参照するのは状態と回答内容のみ。旧(salary_offers Row)も店舗版(get_store_salary_offers)も渡せる。
@@ -25,7 +26,7 @@ function parseAmountInput(raw: string): AmountParseResult {
 
 // storeIdを渡した場合は店舗単位(create_salary_offer_v2)、渡さない場合は旧(create_salary_offer)で提示する。
 // 店舗側の新UIは必ずstoreIdを渡す。
-export function SalonOfferForm({ stylistUserId, existingOffer, storeId }: { stylistUserId: string; existingOffer: ExistingOffer | null; storeId?: string }) {
+export function SalonOfferForm({ stylistUserId, existingOffer, storeId, recruitingPaused = false }: { stylistUserId: string; existingOffer: ExistingOffer | null; storeId?: string; recruitingPaused?: boolean }) {
   const [open, setOpen] = useState(false); const [busy, setBusy] = useState(false); const [message, setMessage] = useState<string | null>(null);
   const [guarantee, setGuarantee] = useState(250000); const [additionInput, setAdditionInput] = useState("0"); const [condition, setCondition] = useState(""); const [months, setMonths] = useState<1|3|6|12>(3); const [note, setNote] = useState("");
   const parsedAddition = parseAmountInput(additionInput);
@@ -33,6 +34,8 @@ export function SalonOfferForm({ stylistUserId, existingOffer, storeId }: { styl
   const addition = additionValid ? parsedAddition.value : 0;
   if (existingOffer?.status === "pending") return <p className="mt-3 rounded-lg bg-surface px-3 py-2 text-[11px] font-semibold text-sub">給与条件を提示済み・回答待ちです</p>;
   if (existingOffer?.status === "accepted") return <p className="mt-3 rounded-lg bg-[#37755B]/10 px-3 py-2 text-[11px] font-semibold text-[#285B45]">提示条件が承諾されました。次は面談で正式条件を確認してください。</p>;
+  // 新しい採用活動を受け付けていない店舗では、新規・再提示とも作成できない（既存の提示の確認・回答は止めない）。
+  if (recruitingPaused && !open) return <p className="mt-3 rounded-lg bg-surface px-3 py-2 text-[11px] text-sub">{RECRUITING_PAUSED_MESSAGE}。新しい給与条件は提示できません。</p>;
   if (!open && existingOffer?.status === "revision_requested") return <div className="mt-3 rounded-lg bg-surface px-3 py-3 text-[11px] text-charcoal"><p className="font-bold">条件相談が届いています：{RESPONSE_REASONS[existingOffer.response_reason ?? ""] ?? "その他"}</p>{existingOffer.response_note && <p className="mt-1 text-sub">{existingOffer.response_note}</p>}<button type="button" onClick={()=>setOpen(true)} className="mt-2 underline">条件を再提示する</button></div>;
   if (!open && existingOffer?.status === "declined") return <div className="mt-3 rounded-lg bg-surface px-3 py-3 text-[11px] text-sub">前回の提示は辞退されました。<button type="button" onClick={()=>setOpen(true)} className="ml-1 underline">条件を見直して再提示</button></div>;
   if (!open) return <button type="button" onClick={() => setOpen(true)} className="mt-3 w-full rounded-full bg-ink px-4 py-3 text-[12px] font-bold text-surface">確認済み実績をもとに条件を提示</button>;
@@ -59,7 +62,7 @@ export function SalonOfferForm({ stylistUserId, existingOffer, storeId }: { styl
     {conditionRequired && <label className="mt-3 block text-[11px] text-charcoal">支給条件（実績加算を支給する条件） *<textarea value={condition} onChange={(e)=>setCondition(e.target.value)} maxLength={500} placeholder="例：指名客数が月間◯名を超えた場合に加算分を支給" className="mt-1 min-h-16 w-full rounded-lg border border-line px-3 py-2 text-[11px]" />{conditionMissing && <span className="mt-1 block text-[10.5px] text-[#8A2E2E]">実績加算を設定する場合は、支給条件の入力が必須です。</span>}</label>}
     <label className="mt-3 block text-[11px] text-charcoal">保証期間<select value={months} onChange={(e)=>setMonths(Number(e.target.value) as 1|3|6|12)} className="mt-1 w-full rounded-lg border border-line px-3 py-2"><option value={1}>1か月</option><option value={3}>3か月</option><option value={6}>6か月</option><option value={12}>12か月</option></select></label>
     <textarea value={note} onChange={(e)=>setNote(e.target.value)} maxLength={500} placeholder="補足メッセージ（任意）" className="mt-3 min-h-16 w-full rounded-lg border border-line px-3 py-2 text-[11px]" />
-    <div className="mt-3 flex gap-2"><button type="button" onClick={()=>setOpen(false)} className="flex-1 rounded-full border border-line py-2 text-[11px]">閉じる</button><button type="button" disabled={busy || conditionMissing || additionBlocking} onClick={submit} className="flex-1 rounded-full bg-ink py-2 text-[11px] font-bold text-surface disabled:opacity-50">{busy?"送信中...":"提示する"}</button></div>
+    <div className="mt-3 flex gap-2"><button type="button" onClick={()=>setOpen(false)} className="flex-1 rounded-full border border-line py-2 text-[11px]">閉じる</button><button type="button" disabled={busy || conditionMissing || additionBlocking || recruitingPaused} onClick={submit} className="flex-1 rounded-full bg-ink py-2 text-[11px] font-bold text-surface disabled:opacity-50">{busy?"送信中...":"提示する"}</button></div>
     {message && <p className="mt-2 text-[11px] text-charcoal">{message}</p>}
   </div>;
 }

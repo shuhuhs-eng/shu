@@ -20,6 +20,7 @@ import { formatJstDateTime } from "@/lib/store-activity/format";
 import { StorePageShell } from "@/components/store-activity/store-page-shell";
 import { HiringStatusBadge } from "@/components/hiring/status-badge";
 import { InterviewForm } from "@/components/hiring/interview-form";
+import { getStoreRecruitingAccess } from "@/lib/contracts/recruiting-access-actions";
 import { StatusPanel } from "@/components/hiring/status-panel";
 import { InternalNoteForm } from "@/components/hiring/internal-note-form";
 
@@ -64,11 +65,13 @@ export default async function CandidateDetailPage({ params }: Props) {
     redirect("/salon/company");
   }
 
-  const [processes, canManage, showBillingLink] = await Promise.all([
+  const [processes, canManage, showBillingLink, recruitingAccess] = await Promise.all([
     getStoreHiringProcesses(storeId),
     canManageStoreHiringHint(supabase, user.id, storeId, store.organization_id),
     canViewCompanyBilling(supabase, user.id),
+    getStoreRecruitingAccess(storeId),
   ]);
+  const recruitingPaused = recruitingAccess.paused;
 
   const p = processes?.find((row) => row.process_id === processId) ?? null;
   if (!p) notFound();
@@ -201,7 +204,7 @@ export default async function CandidateDetailPage({ params }: Props) {
 
       {canManage ? (
         <div className="mt-4">
-          <StatusPanel storeId={storeId} processId={processId} currentStatus={p.status} />
+          <StatusPanel storeId={storeId} processId={processId} currentStatus={p.status} recruitingPaused={recruitingPaused} />
         </div>
       ) : (
         <p className="mt-4 rounded-lg bg-surface2 px-3 py-2 text-[11px] leading-relaxed text-sub">

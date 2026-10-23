@@ -9,6 +9,8 @@ type Props = {
   interest: StoreReceivedInterest;
   /** この美容師へ、この店舗から出した最新の給与オファー（無ければnull）。 */
   latestOffer: StoreSalaryOffer | null;
+  /** 新しい採用活動を受け付けていない店舗か（給与オファーの新規作成を止める）。 */
+  recruitingPaused?: boolean;
 };
 
 const VERIFICATION_LABELS: Record<string, string> = {
@@ -26,7 +28,7 @@ const VERIFICATION_LABELS: Record<string, string> = {
  * 給与オファーのフォームは、DB側(create_salary_offer_v2)の条件と同じ
  * 「実績に基づくオファーを希望」かつ「提出資料の確認済み」の美容師にだけ表示する。
  */
-export function StoreInterestCard({ storeId, interest, latestOffer }: Props) {
+export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPaused = false }: Props) {
   const mp = interest.match_profile;
   const match = interest.match;
   const canOffer = !!mp && mp.wants_performance_offer && mp.verification_status === "verified";
@@ -154,7 +156,7 @@ export function StoreInterestCard({ storeId, interest, latestOffer }: Props) {
       {interest.bio && <p className="mt-3 text-[12.5px] leading-relaxed text-charcoal">{interest.bio}</p>}
 
       {canOffer ? (
-        <SalonOfferForm stylistUserId={interest.stylist_user_id} existingOffer={latestOffer} storeId={storeId} />
+        <SalonOfferForm stylistUserId={interest.stylist_user_id} existingOffer={latestOffer} storeId={storeId} recruitingPaused={recruitingPaused} />
       ) : (
         <p className="mt-3 rounded-lg bg-surface2 px-3 py-2 text-[10.5px] leading-relaxed text-sub">
           給与条件の提示は、実績に基づくオファーを希望し、提出資料の確認が完了した美容師に行えます。

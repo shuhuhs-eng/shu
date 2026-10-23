@@ -10,12 +10,15 @@ import {
   isHiringReasonCode,
   statusActionLabel,
 } from "@/lib/hiring/format";
+import { RECRUITING_PAUSED_MESSAGE } from "@/lib/contracts/recruiting-access";
 import type { HiringReasonCode, HiringStatus } from "@/lib/hiring/types";
 
 type Props = {
   storeId: string;
   processId: string;
   currentStatus: string;
+  /** 新しい採用活動を受け付けていない店舗か（辞退・不採用からの選考再開だけを止める）。 */
+  recruitingPaused?: boolean;
 };
 
 type TargetStatus = Exclude<HiringStatus, "interview_scheduled">;
@@ -25,10 +28,13 @@ type TargetStatus = Exclude<HiringStatus, "interview_scheduled">;
  * （面談予定への変更は日時が要るため、面談フォーム側で行う）。
  * 採用確定(hired)後は候補が空になり、何も表示しない。
  */
-export function StatusPanel({ storeId, processId, currentStatus }: Props) {
+export function StatusPanel({ storeId, processId, currentStatus, recruitingPaused = false }: Props) {
   const router = useRouter();
+  // 辞退・不採用から連絡調整中へ戻す再開は「新しい採用活動の再開」なので、停止中の店舗では出さない
+  // （DBのguardと同じ。面談・選考・内定・採用・辞退・不採用などの既存の進行は止めない）。
+  const isReopenBlocked = recruitingPaused && (currentStatus === "declined" || currentStatus === "rejected");
   const targets = allowedNextStatuses(currentStatus).filter(
-    (s): s is TargetStatus => s !== "interview_scheduled",
+    (s): s is TargetStatus => s !== "interview_scheduled" && !(isReopenBlocked && s === "contacting"),
   );
   const [selected, setSelected] = useState<TargetStatus | null>(null);
   const [publicNote, setPublicNote] = useState("");
@@ -39,7 +45,13 @@ export function StatusPanel({ storeId, processId, currentStatus }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (targets.length === 0) return null;
+  if (targets.length === 0) {
+    return isReopenBlocked ? (
+      <p className="rounded-lg bg-surface2 px-3 py-2 text-[11px] leading-relaxed text-sub">
+        {RECRUITING_PAUSED_MESSAGE}。選考を再開することはできません。
+      </p>
+    ) : null;
+  }
 
   const needsReason = selected === "declined" || selected === "rejected";
 

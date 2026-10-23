@@ -1136,6 +1136,11 @@ export type Database = {
           contract_status: string | null; success_fee_amount: number | null; monthly_fee: number | null;
         };
       };
+      get_store_recruiting_access: {
+        // 0044で追加。店舗スタッフのみ。契約status・金額は返さない。
+        Args: { p_store_id: string };
+        Returns: { new_recruiting_allowed: boolean; reason_code: "recruiting_paused" | null };
+      };
       get_company_contract_settings: {
         // 0043で追加。自社のcompany_owner/company_adminのみ。内部メモ・履歴・操作者idは返らない。
         Args: { p_organization_id?: string | null };

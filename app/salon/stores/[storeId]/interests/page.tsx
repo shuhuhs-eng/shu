@@ -7,6 +7,7 @@ import { StorePageShell } from "@/components/store-activity/store-page-shell";
 import { StoreInterestCard } from "@/components/store-activity/store-interest-card";
 import { getStoreHiringProcesses } from "@/lib/hiring/actions";
 import { canManageStoreHiringHint } from "@/lib/hiring/permissions";
+import { getStoreRecruitingAccess } from "@/lib/contracts/recruiting-access-actions";
 import { AddCandidateButton } from "@/components/hiring/add-candidate-button";
 
 type Props = {
@@ -57,6 +58,7 @@ export default async function StoreInterestsPage({ params }: Props) {
   const hiringProcessByStylist = new Map<string, string>();
   for (const hp of hiringProcesses ?? []) hiringProcessByStylist.set(hp.stylist_user_id, hp.process_id);
   // 一覧を取得できなかった場合は登録済みか判別できないため、追加ボタンは出さない。
+  const { paused: recruitingPaused } = await getStoreRecruitingAccess(storeId);
   const canShowAddHiring = canManageHiring && hiringProcesses !== null;
 
   const [interests, offers] = await Promise.all([
@@ -89,11 +91,13 @@ export default async function StoreInterestsPage({ params }: Props) {
             <div key={interest.interest_id}>
               <StoreInterestCard
                 storeId={storeId}
+                recruitingPaused={recruitingPaused}
                 interest={interest}
                 latestOffer={latestOfferByStylist.get(interest.stylist_user_id) ?? null}
               />
               <AddCandidateButton
                 storeId={storeId}
+                recruitingPaused={recruitingPaused}
                 stylistUserId={interest.stylist_user_id}
                 processId={hiringProcessByStylist.get(interest.stylist_user_id) ?? null}
                 canManage={canShowAddHiring}

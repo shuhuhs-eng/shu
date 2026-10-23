@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { RECRUITING_PAUSED_MESSAGE, isRecruitingPausedError } from "@/lib/contracts/recruiting-access";
 
 const offerFields = {
   stylistUserId: z.string().uuid(),
@@ -44,6 +45,7 @@ export async function createSalaryOffer(input: z.infer<typeof offerSchema>): Pro
   });
   if (error) {
     console.error("[createSalaryOffer] RPC failed", { message: error.message, code: error.code });
+    if (isRecruitingPausedError(error.message)) return { success: false, error: RECRUITING_PAUSED_MESSAGE };
     return { success: false, error: "条件を提示できませんでした。既に回答待ちの提示がないか確認してください。" };
   }
   revalidatePath("/salon/mypage");
@@ -81,6 +83,7 @@ export async function createStoreSalaryOffer(input: z.infer<typeof storeOfferSch
   });
   if (error) {
     console.error("[createStoreSalaryOffer] RPC failed", { message: error.message, code: error.code });
+    if (isRecruitingPausedError(error.message)) return { success: false, error: RECRUITING_PAUSED_MESSAGE };
     if (error.message.includes("interest required")) {
       return { success: false, error: "この美容師から「話を聞いてみたい」が届いていないため、条件を提示できません。" };
     }

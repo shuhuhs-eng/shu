@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { calculateStoreStylistMatch } from "@/lib/matching/actions";
 import { getStoreScouts, getStoreScoutQuota } from "@/lib/store-activity/actions";
+import { getStoreRecruitingAccess } from "@/lib/contracts/recruiting-access-actions";
+import { RECRUITING_PAUSED_MESSAGE } from "@/lib/contracts/recruiting-access";
 import { ScoutQuotaCard } from "@/components/store-activity/scout-quota-card";
 import { StoreStylistCard } from "@/components/scouts/store-stylist-card";
 import type { PublicStylistForScout } from "@/lib/scouts/types";
@@ -80,6 +82,9 @@ export default async function StoreStylistsPage({ params }: Props) {
   // 今月のスカウト残数（get_store_scout_quota、読み取り専用）。
   const quota = await getStoreScoutQuota(storeId);
 
+  // 新しい採用活動を受け付けていない店舗では、新規Scoutの送信を事前に止める（最終防衛はDB）。
+  const { paused: recruitingPaused } = await getStoreRecruitingAccess(storeId);
+
   const rankedStylists = stylists
     .map((stylist, index) => ({ stylist, match: matches[index], originalIndex: index }))
     .sort((a, b) => {
@@ -105,6 +110,12 @@ export default async function StoreStylistsPage({ params }: Props) {
         公開している美容師の中から、この店舗との相性を確認してスカウトを送れます。
       </p>
 
+      {recruitingPaused && (
+        <p role="status" className="mt-6 rounded-lg bg-surface2 px-4 py-3 text-[12.5px] leading-relaxed text-charcoal">
+          {RECRUITING_PAUSED_MESSAGE}。スカウトの送信はできません。
+        </p>
+      )}
+
       <div className="mt-6">
         <ScoutQuotaCard quota={quota} />
       </div>
@@ -117,6 +128,7 @@ export default async function StoreStylistsPage({ params }: Props) {
             <StoreStylistCard
               key={stylist.stylist_user_id}
               storeId={storeId}
+              recruitingPaused={recruitingPaused}
               stylist={stylist}
               match={match}
               latestScout={latestScoutByStylist.get(stylist.stylist_user_id) ?? null}

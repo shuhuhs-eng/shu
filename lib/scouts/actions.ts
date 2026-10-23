@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { RECRUITING_PAUSED_MESSAGE, isRecruitingPausedError } from "@/lib/contracts/recruiting-access";
 
 const sendScoutSchema = z.object({
   stylistUserId: z.string().uuid(),
@@ -23,6 +24,9 @@ export async function sendScout(
   });
   if (error) {
     console.error("[sendScout] RPC failed", { message: error.message, code: error.code });
+    if (isRecruitingPausedError(error.message)) {
+      return { success: false, error: RECRUITING_PAUSED_MESSAGE };
+    }
     if (error.message.includes("monthly scout limit reached")) {
       return { success: false, error: "今月のスカウト枠を使い切りました。追加スカウト購入機能は準備中です。" };
     }
@@ -61,6 +65,9 @@ export async function sendStoreScout(
   });
   if (error) {
     console.error("[sendStoreScout] RPC failed", { message: error.message, code: error.code });
+    if (isRecruitingPausedError(error.message)) {
+      return { success: false, error: RECRUITING_PAUSED_MESSAGE };
+    }
     if (error.message.includes("monthly scout limit reached")) {
       return { success: false, error: "今月のスカウト枠を使い切りました。追加スカウト購入機能は準備中です。" };
     }

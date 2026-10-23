@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { sendStoreScout } from "@/lib/scouts/actions";
+import { RECRUITING_PAUSED_MESSAGE } from "@/lib/contracts/recruiting-access";
 import { SCOUT_TEMPLATES, SCOUT_RESPONSE_LABELS, type ScoutTemplateType } from "@/lib/scouts/options";
 import { JOB_CHANGE_INTENT_LABELS } from "@/lib/validation/profile-options";
 import { MATCH_AXIS_LABELS } from "@/lib/matching/types";
@@ -17,6 +18,8 @@ type Props = {
   stylist: PublicStylistForScout;
   match: StoreStylistMatchResult | null;
   latestScout: LatestScout | null;
+  /** 新しい採用活動を受け付けていない店舗か（trueなら新規Scoutの送信を止める。最終防衛はDB）。 */
+  recruitingPaused?: boolean;
 };
 
 /**
@@ -35,7 +38,7 @@ type Props = {
  *     送信自体はsend_scout_v2内部のquotaで保護され、枠超過時は専用の
  *     メッセージを表示する。
  */
-export function StoreStylistCard({ storeId, stylist, match, latestScout }: Props) {
+export function StoreStylistCard({ storeId, stylist, match, latestScout, recruitingPaused = false }: Props) {
   const [message, setMessage] = useState("");
   const [templateType, setTemplateType] = useState<ScoutTemplateType | null>(null);
   const [step, setStep] = useState<"compose" | "confirm-resend">("compose");
@@ -43,7 +46,7 @@ export function StoreStylistCard({ storeId, stylist, match, latestScout }: Props
   const [result, setResult] = useState<string | null>(null);
 
   const hasPreviousScout = stylist.previous_scout_count > 0;
-  const canSend = message.trim().length > 0 && !busy;
+  const canSend = message.trim().length > 0 && !busy && !recruitingPaused;
 
   function pickTemplate(type: ScoutTemplateType) {
     setTemplateType(type);
@@ -61,6 +64,7 @@ export function StoreStylistCard({ storeId, stylist, match, latestScout }: Props
   }
 
   function handleSendClick() {
+    if (recruitingPaused) return;
     if (hasPreviousScout) setStep("confirm-resend");
     else void doSend();
   }
@@ -139,6 +143,10 @@ export function StoreStylistCard({ storeId, stylist, match, latestScout }: Props
 
       <div className="mt-4 border-t border-line pt-4">
         <p className="eyebrow mb-2">スカウトを送る</p>
+
+        {recruitingPaused && (
+          <p className="mb-2 text-[11.5px] leading-relaxed text-sub">{RECRUITING_PAUSED_MESSAGE}</p>
+        )}
 
         {step === "compose" && (
           <>

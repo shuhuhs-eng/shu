@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { RECRUITING_PAUSED_MESSAGE, isRecruitingPausedError } from "@/lib/contracts/recruiting-access";
 
 const salonUserIdSchema = z.string().uuid();
 
@@ -61,6 +62,10 @@ export async function setStoreInterestAction(
       code: error.code,
       storeId: parsedStoreId.data,
     });
+    // 新規の「話を聞いてみたい」は停止中の店舗には送れない（既に送信済みの再送・取り消しは影響なし）。
+    if (isRecruitingPausedError(error.message)) {
+      return { success: false, error: RECRUITING_PAUSED_MESSAGE };
+    }
     return { success: false, error: "送信できませんでした。もう一度お試しください" };
   }
 

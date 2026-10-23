@@ -10,6 +10,7 @@ import {
 import { StorePageShell } from "@/components/store-activity/store-page-shell";
 import { getStoreHiringProcesses } from "@/lib/hiring/actions";
 import { canManageStoreHiringHint } from "@/lib/hiring/permissions";
+import { getStoreRecruitingAccess } from "@/lib/contracts/recruiting-access-actions";
 import { AddCandidateButton } from "@/components/hiring/add-candidate-button";
 
 type Props = {
@@ -57,6 +58,7 @@ export default async function StoreOffersPage({ params }: Props) {
   const hiringProcessByStylist = new Map<string, string>();
   for (const hp of hiringProcesses ?? []) hiringProcessByStylist.set(hp.stylist_user_id, hp.process_id);
   // 一覧を取得できなかった場合は登録済みか判別できないため、追加ボタンは出さない。
+  const { paused: recruitingPaused } = await getStoreRecruitingAccess(storeId);
   const canShowAddHiring = canManageHiring && hiringProcesses !== null;
 
   const [offers, names] = await Promise.all([getStoreSalaryOffers(storeId), getStoreStylistNameMap(storeId)]);
@@ -139,6 +141,7 @@ export default async function StoreOffersPage({ params }: Props) {
                 hiringProcessByStylist.has(offer.stylist_user_id)) && (
                 <AddCandidateButton
                   storeId={storeId}
+                  recruitingPaused={recruitingPaused}
                   stylistUserId={offer.stylist_user_id}
                   processId={hiringProcessByStylist.get(offer.stylist_user_id) ?? null}
                   canManage={canShowAddHiring && (offer.status === "accepted" || offer.status === "revision_requested")}

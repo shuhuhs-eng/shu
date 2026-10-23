@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { RECRUITING_PAUSED_MESSAGE, isRecruitingPausedError } from "@/lib/contracts/recruiting-access";
 import { isInterviewType, jstPartsToIso } from "@/lib/hiring/format";
 import type {
   ActionResult,
@@ -24,6 +25,7 @@ const GENERIC_ERROR = "保存できませんでした。時間をおいて再度
 
 function friendlyError(message: string | undefined): string {
   const m = message ?? "";
+  if (isRecruitingPausedError(m)) return RECRUITING_PAUSED_MESSAGE;
   if (m.includes("candidate already exists")) return "すでに採用進捗に追加されています";
   if (m.includes("no engagement")) return "この美容師とはまだ接点がないため、採用進捗に追加できません";
   if (m.includes("not found or not accessible") || m.includes("caller is not")) {

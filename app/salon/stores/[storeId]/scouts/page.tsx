@@ -7,6 +7,7 @@ import { SCOUT_READ_LABELS, formatJstDateTime } from "@/lib/store-activity/forma
 import { StorePageShell } from "@/components/store-activity/store-page-shell";
 import { getStoreHiringProcesses } from "@/lib/hiring/actions";
 import { canManageStoreHiringHint } from "@/lib/hiring/permissions";
+import { getStoreRecruitingAccess } from "@/lib/contracts/recruiting-access-actions";
 import { AddCandidateButton } from "@/components/hiring/add-candidate-button";
 
 type Props = {
@@ -54,6 +55,7 @@ export default async function StoreScoutsPage({ params }: Props) {
   const hiringProcessByStylist = new Map<string, string>();
   for (const hp of hiringProcesses ?? []) hiringProcessByStylist.set(hp.stylist_user_id, hp.process_id);
   // 一覧を取得できなかった場合は登録済みか判別できないため、追加ボタンは出さない。
+  const { paused: recruitingPaused } = await getStoreRecruitingAccess(storeId);
   const canShowAddHiring = canManageHiring && hiringProcesses !== null;
 
   const [scouts, names] = await Promise.all([getStoreScouts(storeId), getStoreStylistNameMap(storeId)]);
@@ -118,6 +120,7 @@ export default async function StoreScoutsPage({ params }: Props) {
                 hiringProcessByStylist.has(scout.stylist_user_id)) && (
                 <AddCandidateButton
                   storeId={storeId}
+                  recruitingPaused={recruitingPaused}
                   stylistUserId={scout.stylist_user_id}
                   processId={hiringProcessByStylist.get(scout.stylist_user_id) ?? null}
                   canManage={canShowAddHiring && (scout.response_status === "interested" || scout.response_status === "question")}

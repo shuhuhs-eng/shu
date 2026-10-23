@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { addHiringCandidateAction } from "@/lib/hiring/actions";
+import { RECRUITING_PAUSED_MESSAGE } from "@/lib/contracts/recruiting-access";
 
 type Props = {
   storeId: string;
@@ -12,6 +13,8 @@ type Props = {
   processId: string | null;
   /** 書き込み権限の表示ヒント（権限の本体はDB）。falseならボタンは出さない。 */
   canManage: boolean;
+  /** 新しい採用活動を受け付けていない店舗か（新規の候補者追加を止める。既存の採用進捗リンクは出す）。 */
+  recruitingPaused?: boolean;
 };
 
 /**
@@ -19,7 +22,7 @@ type Props = {
  * 登録済みなら詳細リンク、未登録かつ書き込み権限があればボタンを表示する。
  * 追加できる条件（接点の有無・起点の決定）はDB側(add_hiring_candidate)で検証される。
  */
-export function AddCandidateButton({ storeId, stylistUserId, processId, canManage }: Props) {
+export function AddCandidateButton({ storeId, stylistUserId, processId, canManage, recruitingPaused = false }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -35,6 +38,9 @@ export function AddCandidateButton({ storeId, stylistUserId, processId, canManag
     );
   }
   if (!canManage) return null;
+  if (recruitingPaused) {
+    return <p className="mt-3 text-[11px] leading-relaxed text-sub">{RECRUITING_PAUSED_MESSAGE}。新しく採用進捗に追加することはできません。</p>;
+  }
 
   async function add() {
     setBusy(true);
