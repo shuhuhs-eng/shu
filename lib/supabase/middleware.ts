@@ -27,6 +27,7 @@ const AUTH_REQUIRED_PREFIXES = [
   "/salon/culture",
   "/salon/company/hiring",
   "/salon/company/billing",
+  "/salon/company/analytics",
 ];
 
 /** 未ログインのときだけ表示するルート。ログイン済みならトップへ戻す。 */
@@ -54,14 +55,14 @@ const GUEST_ONLY_PATHS = [
  * 必ずログイン済みである。
  */
 const STYLIST_ONLY_PREFIXES = ["/stylist/mypage", "/stylist/profile", "/stylist/diagnosis", "/stylist/preference", "/stylist/salons", "/stylist/scouts", "/stylist/offers", "/stylist/applications"];
-const SALON_ONLY_PREFIXES = ["/salon/mypage", "/salon/profile", "/salon/culture", "/diagnosis/salon", "/salon/company/hiring", "/salon/company/billing"];
+const SALON_ONLY_PREFIXES = ["/salon/mypage", "/salon/profile", "/salon/culture", "/diagnosis/salon", "/salon/company/hiring", "/salon/company/billing", "/salon/company/analytics"];
 
 /**
  * 会社レベルの役割（company_owner / company_admin / recruiting_admin / area_manager）
  * が必要なルート。店舗レベルの役割だけの担当者は /salon/company へ戻す。
  * ページ側（server guard）でも同じ判定を重ねる。
  */
-const COMPANY_LEVEL_PREFIXES = ["/salon/company/hiring"];
+const COMPANY_LEVEL_PREFIXES = ["/salon/company/hiring", "/salon/company/analytics"];
 
 /**
  * 成功報酬・請求情報のルート。company_owner / company_admin だけが入れる

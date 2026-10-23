@@ -129,6 +129,16 @@ export default async function SalonCompanyPage() {
         </Link>
       )}
 
+      {showHiringDashboard && (
+        <Link
+          href="/salon/company/analytics"
+          className="mt-3 flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span className="font-serif text-[15px] font-bold text-ink">採用分析</span>
+          <span className="text-[12px] text-sub">入口別・店舗別の進み具合 ›</span>
+        </Link>
+      )}
+
       {hiringKpis && (
         <section className="mt-4">
           <p className="mb-2 text-[11px] font-semibold text-sub">採用</p>
