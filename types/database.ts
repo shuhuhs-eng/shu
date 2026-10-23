@@ -942,6 +942,45 @@ export type Database = {
         Args: { p_process_id: string; p_internal_note: string | null };
         Returns: { id: string };
       };
+      get_admin_success_fees: {
+        // 0039で追加。運営者(platform admin)のみ。成功報酬の一覧（運営者メモを含む）。
+        Args: { p_status?: string | null };
+        Returns: Array<{
+          fee_id: string; hiring_process_id: string;
+          organization_id: string; organization_name: string | null;
+          store_id: string; store_name: string;
+          stylist_user_id: string; stylist_name: string | null;
+          hired_at: string; fee_status: string; currency: string;
+          fee_amount: number | null; tax_amount: number | null; total_amount: number | null;
+          confirmed_at: string | null; invoiced_at: string | null; paid_at: string | null;
+          waived_at: string | null; cancelled_at: string | null;
+          note: string | null; created_at: string; updated_at: string;
+        }>;
+      };
+      admin_update_success_fee: {
+        // 0039で追加。運営者のみ。p_action: confirm / invoice / paid / waive / cancel。
+        Args: {
+          p_fee_id: string; p_action: string;
+          p_fee_amount?: number | null; p_tax_amount?: number | null; p_note?: string | null;
+        };
+        Returns: {
+          fee_id: string; fee_status: string;
+          fee_amount: number | null; tax_amount: number | null; total_amount: number | null;
+        };
+      };
+      get_company_success_fees: {
+        // 0039で追加。自社のcompany_owner/company_adminのみ。運営者メモ・user idは返らない。
+        Args: { p_organization_id?: string | null };
+        Returns: Array<{
+          fee_id: string; hiring_process_id: string; organization_id: string;
+          store_id: string; store_name: string; stylist_name: string | null;
+          hired_at: string; fee_status: string; currency: string;
+          fee_amount: number | null; tax_amount: number | null; total_amount: number | null;
+          confirmed_at: string | null; invoiced_at: string | null; paid_at: string | null;
+          waived_at: string | null; cancelled_at: string | null;
+          created_at: string; updated_at: string;
+        }>;
+      };
       get_store_hiring_processes: {
         // 0037で追加。店舗の採用進捗一覧（閲覧: is_store_accessible）。internal_note/reason_*を含む（店舗側専用）。
         Args: { p_store_id: string };

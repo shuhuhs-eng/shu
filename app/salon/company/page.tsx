@@ -5,6 +5,10 @@ import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { hasCompanyLevelRole } from "@/lib/hiring/permissions";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { getNotificationsForBell } from "@/lib/notifications/get-notifications";
+import { activeCount, countByStatus, getCompanyHiringScope, loadCompanyHiring } from "@/lib/hiring/company";
+import { canViewCompanyBilling } from "@/lib/billing/permissions";
+import { getCompanySuccessFees } from "@/lib/billing/actions";
+import { summarizeFees } from "@/lib/billing/summary";
 
 /**
  * 会社ダッシュボード（法人・複数店舗対応 Phase 1）。
@@ -61,6 +65,40 @@ export default async function SalonCompanyPage() {
     getNotificationsForBell(supabase, user.id),
   ]);
 
+  // 採用KPI（会社レベルの役割のみ）と請求KPI（company_owner / company_admin のみ）。
+  // 取得できなかった場合は数字を出さず、リンクだけ残す（0件と誤表示しない）。
+  const showBilling = showHiringDashboard ? await canViewCompanyBilling(supabase, user.id) : false;
+  const [hiringKpis, billingKpis] = await Promise.all([
+    showHiringDashboard
+      ? (async () => {
+          const scope = await getCompanyHiringScope(supabase, user.id);
+          if (!scope || scope.length === 0) return null;
+          const { rows, failedStores } = await loadCompanyHiring(scope);
+          if (failedStores.length > 0) return null;
+          const counts = countByStatus(rows);
+          return [
+            { label: "選考中", value: activeCount(counts) },
+            { label: "面談予定", value: counts.interview_scheduled ?? 0 },
+            { label: "内定", value: counts.offered ?? 0 },
+            { label: "採用", value: counts.hired ?? 0 },
+          ];
+        })()
+      : Promise.resolve(null),
+    showBilling
+      ? (async () => {
+          const fees = await getCompanySuccessFees();
+          if (!fees) return null;
+          const summary = summarizeFees(fees);
+          return [
+            { label: "請求確認中", value: summary.counts.pending_confirmation },
+            { label: "請求額確定", value: summary.counts.confirmed },
+            { label: "請求済み", value: summary.counts.invoiced },
+            { label: "入金済み", value: summary.counts.paid },
+          ];
+        })()
+      : Promise.resolve(null),
+  ]);
+
   const orgIds = [...new Set(storeList.map((s) => s.organization_id))];
   const { data: orgs } = orgIds.length > 0
     ? await supabase.from("salon_organizations").select("*").in("id", orgIds)
@@ -89,6 +127,45 @@ export default async function SalonCompanyPage() {
           <span className="font-serif text-[15px] font-bold text-ink">採用ダッシュボード</span>
           <span className="text-[12px] text-sub">会社全体の採用状況 ›</span>
         </Link>
+      )}
+
+      {hiringKpis && (
+        <section className="mt-4">
+          <p className="mb-2 text-[11px] font-semibold text-sub">採用</p>
+          <div className="grid grid-cols-4 gap-2">
+            {hiringKpis.map((k) => (
+              <div key={k.label} className="rounded-xl border border-line bg-surface p-3 text-center">
+                <p className="text-[10.5px] text-sub">{k.label}</p>
+                <p className="mt-0.5 font-serif text-[20px] font-bold text-ink">{k.value}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {showBilling && (
+        <>
+          <Link
+            href="/salon/company/billing"
+            className="mt-4 flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+          >
+            <span className="font-serif text-[15px] font-bold text-ink">請求・成功報酬</span>
+            <span className="text-[12px] text-sub">採用に伴う請求の状況 ›</span>
+          </Link>
+          {billingKpis && (
+            <section className="mt-3">
+              <p className="mb-2 text-[11px] font-semibold text-sub">請求</p>
+              <div className="grid grid-cols-4 gap-2">
+                {billingKpis.map((k) => (
+                  <div key={k.label} className="rounded-xl border border-line bg-surface p-3 text-center">
+                    <p className="text-[10.5px] text-sub">{k.label}</p>
+                    <p className="mt-0.5 font-serif text-[20px] font-bold text-ink">{k.value}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
       {storeList.length === 0 ? (

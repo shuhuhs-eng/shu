@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { hasCompanyLevelRole } from "@/lib/hiring/permissions";
+import { canViewCompanyBilling } from "@/lib/billing/permissions";
 
 /** ログイン必須のルート（本人のみ表示すべきページ）。前方一致で判定する。 */
 const AUTH_REQUIRED_PREFIXES = [
@@ -25,6 +26,7 @@ const AUTH_REQUIRED_PREFIXES = [
   "/salon/profile",
   "/salon/culture",
   "/salon/company/hiring",
+  "/salon/company/billing",
 ];
 
 /** 未ログインのときだけ表示するルート。ログイン済みならトップへ戻す。 */
@@ -52,7 +54,7 @@ const GUEST_ONLY_PATHS = [
  * 必ずログイン済みである。
  */
 const STYLIST_ONLY_PREFIXES = ["/stylist/mypage", "/stylist/profile", "/stylist/diagnosis", "/stylist/preference", "/stylist/salons", "/stylist/scouts", "/stylist/offers", "/stylist/applications"];
-const SALON_ONLY_PREFIXES = ["/salon/mypage", "/salon/profile", "/salon/culture", "/diagnosis/salon", "/salon/company/hiring"];
+const SALON_ONLY_PREFIXES = ["/salon/mypage", "/salon/profile", "/salon/culture", "/diagnosis/salon", "/salon/company/hiring", "/salon/company/billing"];
 
 /**
  * 会社レベルの役割（company_owner / company_admin / recruiting_admin / area_manager）
@@ -60,6 +62,13 @@ const SALON_ONLY_PREFIXES = ["/salon/mypage", "/salon/profile", "/salon/culture"
  * ページ側（server guard）でも同じ判定を重ねる。
  */
 const COMPANY_LEVEL_PREFIXES = ["/salon/company/hiring"];
+
+/**
+ * 成功報酬・請求情報のルート。company_owner / company_admin だけが入れる
+ * （recruiting_admin / area_manager / store_manager / recruiter / viewer は入れない）。
+ * ページ側（server guard）とDB（get_company_success_fees）でも同じ制限を重ねる。
+ */
+const COMPANY_BILLING_PREFIXES = ["/salon/company/billing"];
 
 /**
  * リクエストごとに Supabase セッションを更新し、あわせて以下のルート保護を行う。
@@ -154,6 +163,18 @@ export async function updateSession(request: NextRequest) {
     !(await hasCompanyLevelRole(supabase, user.id))
   ) {
     console.log("[MW] store-level user blocked from company-level path", { pathname, userId: user.id });
+    const url = request.nextUrl.clone();
+    url.pathname = "/salon/company";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  if (
+    user &&
+    COMPANY_BILLING_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
+    !(await canViewCompanyBilling(supabase, user.id))
+  ) {
+    console.log("[MW] non-owner/admin blocked from billing path", { pathname, userId: user.id });
     const url = request.nextUrl.clone();
     url.pathname = "/salon/company";
     url.search = "";

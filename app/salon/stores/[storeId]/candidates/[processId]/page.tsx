@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -14,6 +15,7 @@ import {
   formatJstDateTimeWithWeekday,
 } from "@/lib/hiring/format";
 import { canManageStoreHiringHint } from "@/lib/hiring/permissions";
+import { canViewCompanyBilling } from "@/lib/billing/permissions";
 import { formatJstDateTime } from "@/lib/store-activity/format";
 import { StorePageShell } from "@/components/store-activity/store-page-shell";
 import { HiringStatusBadge } from "@/components/hiring/status-badge";
@@ -62,9 +64,10 @@ export default async function CandidateDetailPage({ params }: Props) {
     redirect("/salon/company");
   }
 
-  const [processes, canManage] = await Promise.all([
+  const [processes, canManage, showBillingLink] = await Promise.all([
     getStoreHiringProcesses(storeId),
     canManageStoreHiringHint(supabase, user.id, storeId, store.organization_id),
+    canViewCompanyBilling(supabase, user.id),
   ]);
 
   const p = processes?.find((row) => row.process_id === processId) ?? null;
@@ -111,6 +114,12 @@ export default async function CandidateDetailPage({ params }: Props) {
             <div className="flex gap-2">
               <dt className="w-20 shrink-0 text-sub">採用確定</dt>
               <dd className="font-semibold">{formatJstDateTime(p.hired_at)}</dd>
+            </div>
+          )}
+          {p.status === "hired" && showBillingLink && (
+            <div className="flex gap-2">
+              <dt className="w-20 shrink-0 text-sub">請求</dt>
+              <dd><Link href="/salon/company/billing" className="font-semibold underline">請求状況を見る</Link></dd>
             </div>
           )}
           {p.status === "declined" && (
