@@ -70,25 +70,31 @@ const schema = z.object({
   feeId: z.string().uuid(),
   action: z.enum(["confirm", "invoice", "paid", "waive", "cancel"]),
   feeAmount: z.number().int().min(0).max(999_999_999).nullable(),
-  taxAmount: z.number().int().min(0).max(999_999_999).nullable(),
   note: z.string().trim().max(1000).nullable(),
+  /** invoice のときだけ。省略（null）なら請求日の翌月末（標準）。YYYY-MM-DD。 */
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 });
 
 function friendlyError(message: string): string {
   if (message.includes("invalid success fee status transition")) return "この状態からはその操作はできません。画面を更新してください。";
   if (message.includes("reason note is required")) return "理由を入力してください。";
-  if (message.includes("fee_amount and tax_amount are required")) return "成功報酬額と税額を入力してください。";
+  if (message.includes("fee_amount is required")) return "成功報酬額を入力してください。";
+  if (message.includes("invalid due date")) return "支払期限は請求日以降の日付を指定してください。";
   if (message.includes("admin access required")) return "この操作は運営者のみ行えます。";
   return "保存できませんでした。時間をおいて再度お試しください。";
 }
 
-/** 運営者による成功報酬の更新。金額・税額は整数円で明示的に送る（税率はアプリにもDBにも持たない）。 */
+/**
+ * 運営者による成功報酬の更新。成功報酬額は整数円で送る。
+ * 税額・税率・請求書番号・標準の支払期限はすべてDBが決める（税額の手入力はしない）。
+ * 通常の請求は due date を送らず標準期限（請求日の翌月末）にする。
+ */
 export async function adminUpdateSuccessFeeAction(input: z.input<typeof schema>): Promise<BillingActionResult> {
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { success: false, error: "入力内容を確認してください。" };
-  const { feeId, action, feeAmount, taxAmount, note } = parsed.data;
-  if (action === "confirm" && (feeAmount === null || taxAmount === null)) {
-    return { success: false, error: "成功報酬額と税額を入力してください。" };
+  const { feeId, action, feeAmount, note, dueDate } = parsed.data;
+  if (action === "confirm" && feeAmount === null) {
+    return { success: false, error: "成功報酬額を入力してください。" };
   }
   if ((action === "waive" || action === "cancel") && !note) {
     return { success: false, error: "理由を入力してください。" };
@@ -99,8 +105,8 @@ export async function adminUpdateSuccessFeeAction(input: z.input<typeof schema>)
     p_fee_id: feeId,
     p_action: action,
     p_fee_amount: action === "confirm" ? feeAmount : null,
-    p_tax_amount: action === "confirm" ? taxAmount : null,
     p_note: note,
+    p_due_date: action === "invoice" ? (dueDate ?? null) : null,
   });
   if (error) {
     console.error("[adminUpdateSuccessFee] RPC failed", { message: error.message, code: error.code });

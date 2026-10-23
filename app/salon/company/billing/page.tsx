@@ -7,6 +7,7 @@ import { getCompanySuccessFees } from "@/lib/billing/actions";
 import { feeStatusLabel, formatYen } from "@/lib/billing/format";
 import { summarizeFees } from "@/lib/billing/summary";
 import { BaselineSummary } from "@/components/contracts/baseline-summary";
+import { InvoiceSummary } from "@/components/billing/invoice-summary";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -80,6 +81,16 @@ export default async function CompanyBillingPage() {
                 <BaselineSummary
                   baseline={f.contract_success_fee_amount}
                   statusSnapshot={f.contract_status_snapshot}
+                  feeAmount={f.fee_amount}
+                  taxAmount={f.tax_amount}
+                  totalAmount={f.total_amount}
+                />
+                <InvoiceSummary
+                  feeStatus={f.fee_status}
+                  invoiceNumber={f.invoice_number}
+                  invoicedAt={f.invoiced_at}
+                  dueDate={f.due_date}
+                  taxRate={f.tax_rate}
                   feeAmount={f.fee_amount}
                   taxAmount={f.tax_amount}
                   totalAmount={f.total_amount}

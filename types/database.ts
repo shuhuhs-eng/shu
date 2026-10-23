@@ -1064,17 +1064,23 @@ export type Database = {
           contract_success_fee_amount: number | null; contract_success_fee_mode: string | null;
           contract_status_snapshot: string | null; contract_snapshot_at: string | null;
           contract_snapshot_event_id: string | null;
+          // 0045で追加。請求確定時の請求書番号・支払期限・税率(%)。0045より前の請求済み/入金済みはnull（旧請求データ）。
+          invoice_number: string | null; due_date: string | null; tax_rate: number | null;
         }>;
       };
       admin_update_success_fee: {
-        // 0039で追加。運営者のみ。p_action: confirm / invoice / paid / waive / cancel。
+        // 0039で追加、0045で引数追加。運営者のみ。p_action: confirm / invoice / paid / waive / cancel。
+        // p_tax_amount は後方互換のためだけに残る（0045以降は無視され、税額はDBが計算する。UIは渡さない）。
+        // p_due_date / p_tax_rate は invoice のときだけ指定可（省略=請求日の翌月末 / 標準税率）。
         Args: {
           p_fee_id: string; p_action: string;
           p_fee_amount?: number | null; p_tax_amount?: number | null; p_note?: string | null;
+          p_due_date?: string | null; p_tax_rate?: number | null;
         };
         Returns: {
           fee_id: string; fee_status: string;
           fee_amount: number | null; tax_amount: number | null; total_amount: number | null;
+          invoice_number: string | null; due_date: string | null; tax_rate: number | null;
         };
       };
       get_company_success_fees: {
@@ -1091,6 +1097,7 @@ export type Database = {
           // 0043で追加。契約snapshot（event idは会社側には返らない）。
           contract_success_fee_amount: number | null; contract_success_fee_mode: string | null;
           contract_status_snapshot: string | null; contract_snapshot_at: string | null;
+          invoice_number: string | null; due_date: string | null; tax_rate: number | null;
         }>;
       };
       get_admin_organization_contracts: {

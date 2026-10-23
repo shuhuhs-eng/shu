@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { adminUpdateSuccessFeeAction } from "@/lib/billing/actions";
-import { availableFeeActions, feeStatusLabel, formatYen, parseYenInput } from "@/lib/billing/format";
+import { availableFeeActions, feeStatusLabel, formatDueDate, jstToday, parseYenInput, standardDueDate } from "@/lib/billing/format";
 import type { AdminSuccessFee, SuccessFeeAction } from "@/lib/billing/types";
 import { BaselineSummary } from "@/components/contracts/baseline-summary";
+import { InvoiceSummary } from "@/components/billing/invoice-summary";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -13,7 +14,7 @@ function fmtDate(iso: string | null): string {
 
 export function SuccessFeeCard({ fee }: { fee: AdminSuccessFee }) {
   const [feeInput, setFeeInput] = useState(fee.fee_amount === null ? "" : String(fee.fee_amount));
-  const [taxInput, setTaxInput] = useState(fee.tax_amount === null ? "" : String(fee.tax_amount));
+  const [customDue, setCustomDue] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -25,28 +26,33 @@ export function SuccessFeeCard({ fee }: { fee: AdminSuccessFee }) {
   async function run(action: SuccessFeeAction) {
     setMessage(null);
     let feeAmount: number | null = null;
-    let taxAmount: number | null = null;
     if (action === "confirm") {
       feeAmount = parseYenInput(feeInput);
-      taxAmount = parseYenInput(taxInput);
-      if (feeAmount === null || taxAmount === null) {
-        setMessage("成功報酬額と税額は、0以上の整数（円）で入力してください。");
+      if (feeAmount === null) {
+        setMessage("成功報酬額は、0以上の整数（円）で入力してください。");
         return;
       }
+    }
+    // 特別な支払期限は詳細操作のときだけ。空なら標準期限（請求日の翌月末）。
+    const dueDate = action === "invoice" && customDue ? customDue : null;
+    if (dueDate && dueDate < jstToday()) {
+      setMessage("支払期限は今日以降の日付を指定してください。");
+      return;
     }
     if (needsReason(action) && !note.trim()) {
       setMessage("理由を入力してください。");
       return;
     }
     const label = { confirm: "金額を確定", invoice: "請求済みに変更", paid: "入金済みに変更", waive: "免除", cancel: "取消" }[action];
-    if (!window.confirm(`${label}します。よろしいですか？`)) return;
+    const dueText = action === "invoice" ? `\n支払期限：${formatDueDate(dueDate ?? standardDueDate(jstToday()))}` : "";
+    if (!window.confirm(`${label}します。よろしいですか？${dueText}`)) return;
     setBusy(true);
     const result = await adminUpdateSuccessFeeAction({
       feeId: fee.fee_id,
       action,
       feeAmount,
-      taxAmount,
       note: note.trim() ? note.trim() : null,
+      dueDate,
     });
     setBusy(false);
     setMessage(result.success ? "保存しました。" : result.error);
@@ -78,6 +84,16 @@ export function SuccessFeeCard({ fee }: { fee: AdminSuccessFee }) {
         taxAmount={fee.tax_amount}
         totalAmount={fee.total_amount}
       />
+      <InvoiceSummary
+        feeStatus={fee.fee_status}
+        invoiceNumber={fee.invoice_number}
+        invoicedAt={fee.invoiced_at}
+        dueDate={fee.due_date}
+        taxRate={fee.tax_rate}
+        feeAmount={fee.fee_amount}
+        taxAmount={fee.tax_amount}
+        totalAmount={fee.total_amount}
+      />
       <dl className="mt-3 grid grid-cols-5 gap-2 text-[10.5px] text-sub">
         <div><dt>確定日</dt><dd className="text-charcoal">{fmtDate(fee.confirmed_at)}</dd></div>
         <div><dt>請求日</dt><dd className="text-charcoal">{fmtDate(fee.invoiced_at)}</dd></div>
@@ -94,15 +110,25 @@ export function SuccessFeeCard({ fee }: { fee: AdminSuccessFee }) {
       {actions.length > 0 ? (
         <div className="mt-4 space-y-3 border-t border-line pt-4">
           {canEditAmount && (
-            <div className="grid grid-cols-2 gap-2">
-              <label className="text-[11px] text-sub">成功報酬額（円・整数）
+            <div>
+              <label className="block text-[11px] text-sub">成功報酬額（税抜・円・整数）
                 <input inputMode="numeric" value={feeInput} onChange={(e) => setFeeInput(e.target.value)} disabled={busy}
                   className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-[13px] text-ink" />
               </label>
-              <label className="text-[11px] text-sub">税額（円・整数）
-                <input inputMode="numeric" value={taxInput} onChange={(e) => setTaxInput(e.target.value)} disabled={busy}
-                  className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-[13px] text-ink" />
-              </label>
+              <p className="mt-1 text-[10.5px] leading-relaxed text-sub">消費税は請求済みにするときにシステムが計算して確定します（標準税率）。</p>
+            </div>
+          )}
+          {actions.includes("invoice") && (
+            <div className="rounded-xl bg-surface2 px-3 py-2 text-[11.5px] leading-relaxed text-charcoal">
+              <p>支払期限（標準）：{formatDueDate(standardDueDate(jstToday()))}（請求日の翌月末）</p>
+              <details className="mt-1">
+                <summary className="cursor-pointer text-[11px] text-sub underline">支払期限を指定する（特別な場合のみ）</summary>
+                <label className="mt-2 block text-[11px] text-sub">支払期限
+                  <input type="date" value={customDue} min={jstToday()} onChange={(e) => setCustomDue(e.target.value)} disabled={busy}
+                    className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-[13px] text-ink" />
+                </label>
+                <p className="mt-1 text-[10.5px] text-sub">空のままにすると標準の期限になります。請求後は変更できません。</p>
+              </details>
             </div>
           )}
           <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} disabled={busy}

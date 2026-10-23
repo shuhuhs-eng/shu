@@ -9,6 +9,7 @@ import { ExportCsvButton } from "@/components/analytics/export-csv-button";
 import { getAdminOrganizationContract } from "@/lib/contracts/actions";
 import { contractStatusLabel, describeEventChanges, eventTypeLabel, formatContractDate, formatDateTime, monthLabel, successFeeModeLabel, yenOrUnset } from "@/lib/contracts/format";
 import { BaselineSummary } from "@/components/contracts/baseline-summary";
+import { InvoiceSummary } from "@/components/billing/invoice-summary";
 
 type Props = { params: Promise<{ organizationId: string }> };
 
@@ -169,8 +170,8 @@ export default async function AdminCompanyDetailPage({ params }: Props) {
             <ExportCsvButton
               filename="success-fees.csv"
               label="成功報酬をCSVで保存（個人名なし）"
-              header={["店舗", "採用成立日", "状態", "成功報酬", "税", "合計"]}
-              rows={fees.map((f) => [f.store_name, fmtDate(f.hired_at), feeStatusLabel(f.fee_status), f.fee_amount, f.tax_amount, f.total_amount])}
+              header={["店舗", "採用成立日", "状態", "成功報酬", "税", "合計", "請求書番号", "支払期限", "適用税率"]}
+              rows={fees.map((f) => [f.store_name, fmtDate(f.hired_at), feeStatusLabel(f.fee_status), f.fee_amount, f.tax_amount, f.total_amount, f.invoice_number ?? "", f.due_date ?? "", f.tax_rate === null ? "" : `${f.tax_rate}%`])}
             />
             {fees.map((f) => (
               <div key={f.fee_id} className="rounded-2xl border border-line bg-surface p-4 text-[12px]">
@@ -184,6 +185,16 @@ export default async function AdminCompanyDetailPage({ params }: Props) {
                 <BaselineSummary
                   baseline={f.contract_success_fee_amount}
                   statusSnapshot={f.contract_status_snapshot}
+                  feeAmount={f.fee_amount}
+                  taxAmount={f.tax_amount}
+                  totalAmount={f.total_amount}
+                />
+                <InvoiceSummary
+                  feeStatus={f.fee_status}
+                  invoiceNumber={f.invoice_number}
+                  invoicedAt={f.invoiced_at}
+                  dueDate={f.due_date}
+                  taxRate={f.tax_rate}
                   feeAmount={f.fee_amount}
                   taxAmount={f.tax_amount}
                   totalAmount={f.total_amount}
