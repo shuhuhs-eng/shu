@@ -942,6 +942,16 @@ export type Database = {
         Args: { p_process_id: string; p_internal_note: string | null };
         Returns: { id: string };
       };
+      get_admin_billing_integrity_issues: {
+        // 0040で追加。運営者のみ・読み取り専用。採用成立と成功報酬の不整合を返す（空配列=問題なし）。
+        Args: Record<string, never>;
+        Returns: Array<{
+          issue_type: string; severity: string;
+          hiring_process_id: string; success_fee_id: string | null;
+          organization_id: string; store_id: string; store_name: string | null;
+          stylist_name: string | null; hired_at: string | null; message: string;
+        }>;
+      };
       get_admin_success_fees: {
         // 0039で追加。運営者(platform admin)のみ。成功報酬の一覧（運営者メモを含む）。
         Args: { p_status?: string | null };

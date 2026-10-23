@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getAdminSuccessFees } from "@/lib/billing/actions";
+import { getAdminSuccessFees, getBillingIntegrityIssues } from "@/lib/billing/actions";
 import { formatYen } from "@/lib/billing/format";
+import { countSeverities } from "@/lib/billing/integrity";
 import { summarizeFees } from "@/lib/billing/summary";
 
 /**
@@ -17,7 +18,8 @@ export default async function AdminDashboardPage() {
   const { data: isAdmin } = await supabase.rpc("is_platform_admin");
   if (!isAdmin) redirect("/mypage");
 
-  const fees = await getAdminSuccessFees();
+  const [fees, issues] = await Promise.all([getAdminSuccessFees(), getBillingIntegrityIssues()]);
+  const integrity = issues ? countSeverities(issues) : null;
   const summary = fees ? summarizeFees(fees) : null;
 
   const countCards: Array<{ label: string; value: number }> = summary
@@ -69,7 +71,23 @@ export default async function AdminDashboardPage() {
         </>
       )}
 
-      <div className="mt-8 space-y-3">
+      <Link href="/admin/integrity" className="mt-8 block rounded-2xl border border-line bg-surface p-5">
+        <div className="flex items-center justify-between">
+          <span className="font-serif text-[15px] font-bold text-ink">整合性チェック</span>
+          <span className="text-[12px] text-sub">採用と成功報酬の突き合わせ ›</span>
+        </div>
+        {integrity === null ? (
+          <p className="mt-2 text-[12px] text-[#8A2E2E]">チェック結果を取得できませんでした。</p>
+        ) : integrity.total === 0 ? (
+          <p className="mt-2 text-[12px] text-charcoal">問題は検出されていません</p>
+        ) : (
+          <p className="mt-2 text-[12px] text-charcoal">
+            要対応 <strong className="text-[#8A2E2E]">{integrity.critical}</strong>件 ／ 要確認 <strong>{integrity.warning}</strong>件
+          </p>
+        )}
+      </Link>
+
+      <div className="mt-3 space-y-3">
         <Link href="/admin/success-fees" className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5">
           <span className="font-serif text-[15px] font-bold text-ink">成功報酬の管理</span><span className="text-[12px] text-sub">金額確定・請求・入金 ›</span>
         </Link>
