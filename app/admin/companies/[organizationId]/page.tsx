@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getAdminOrganizationOverview, getAdminSuccessFees, getBillingIntegrityIssues } from "@/lib/billing/actions";
+import { getAdminOrganizationOverview, getAdminOrganizationStores, getAdminSuccessFees, getBillingIntegrityIssues } from "@/lib/billing/actions";
 import { feeStatusLabel, formatYen } from "@/lib/billing/format";
 import { issueTypeLabel, severityLabel } from "@/lib/billing/integrity";
+import { ExportCsvButton } from "@/components/analytics/export-csv-button";
 
 type Props = { params: Promise<{ organizationId: string }> };
 
@@ -28,8 +29,9 @@ export default async function AdminCompanyDetailPage({ params }: Props) {
   const { data: isAdmin } = await supabase.rpc("is_platform_admin");
   if (!isAdmin) redirect("/mypage");
 
-  const [orgs, allFees, allIssues] = await Promise.all([
+  const [orgs, stores, allFees, allIssues] = await Promise.all([
     getAdminOrganizationOverview(),
+    getAdminOrganizationStores(organizationId),
     getAdminSuccessFees(),
     getBillingIntegrityIssues(),
   ]);
@@ -56,7 +58,49 @@ export default async function AdminCompanyDetailPage({ params }: Props) {
           </div>
         ))}
       </section>
-      <p className="mt-3 text-[11.5px] text-sub">直近採用日 {fmtDate(org.latest_hired_at)} ／ 直近活動日 {fmtDate(org.latest_activity_at)}</p>
+      <p className="mt-3 text-[11.5px] text-sub">整合性の異常：{issues === null ? "取得できませんでした" : `${issues.length}件`} ／ 直近採用日 {fmtDate(org.latest_hired_at)} ／ 直近活動日 {fmtDate(org.latest_activity_at)}</p>
+
+      <section className="mt-8">
+        <p className="eyebrow mb-3">店舗一覧</p>
+        {stores === null ? (
+          <p className="rounded-lg bg-[#C24545]/10 px-3 py-2 text-[12px] text-[#8A2E2E]">店舗の情報を取得できませんでした。</p>
+        ) : stores.length === 0 ? (
+          <p className="rounded-2xl border border-line bg-surface p-6 text-center text-[13px] text-sub">店舗はまだ登録されていません。</p>
+        ) : (
+          <>
+            <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+              <table className="w-full min-w-[640px] text-[12px]">
+                <thead><tr className="border-b border-line text-left text-sub">
+                  <th className="px-3 py-2.5 font-semibold">店舗</th><th className="px-2 py-2.5 text-center font-semibold">利用状況</th>
+                  <th className="px-2 py-2.5 text-center font-semibold">登録日</th><th className="px-2 py-2.5 text-center font-semibold">候補者</th>
+                  <th className="px-2 py-2.5 text-center font-semibold">進行中</th><th className="px-2 py-2.5 text-center font-semibold">採用</th>
+                  <th className="px-2 py-2.5 text-center font-semibold">直近活動日</th>
+                </tr></thead>
+                <tbody>
+                  {stores.map((s) => (
+                    <tr key={s.store_id} className="border-b border-line last:border-0">
+                      <td className="px-3 py-2.5 font-semibold text-ink">{s.store_name}</td>
+                      <td className="px-2 py-2.5 text-center">{s.usage_status === "active" ? "利用中" : "未利用"}</td>
+                      <td className="px-2 py-2.5 text-center">{fmtDate(s.created_at)}</td>
+                      <td className="px-2 py-2.5 text-center">{s.candidate_count}</td>
+                      <td className="px-2 py-2.5 text-center">{s.active_candidate_count}</td>
+                      <td className="px-2 py-2.5 text-center">{s.hired_count}</td>
+                      <td className="px-2 py-2.5 text-center">{fmtDate(s.latest_activity_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-3">
+              <ExportCsvButton
+                filename="stores.csv"
+                header={["店舗", "利用状況", "登録日", "候補者", "進行中", "採用", "直近活動日"]}
+                rows={stores.map((s) => [s.store_name, s.usage_status === "active" ? "利用中" : "未利用", fmtDate(s.created_at), s.candidate_count, s.active_candidate_count, s.hired_count, fmtDate(s.latest_activity_at)])}
+              />
+            </div>
+          </>
+        )}
+      </section>
 
       <section className="mt-8">
         <p className="eyebrow mb-3">請求の状況</p>
@@ -83,6 +127,12 @@ export default async function AdminCompanyDetailPage({ params }: Props) {
           <p className="rounded-2xl border border-line bg-surface p-6 text-center text-[13px] text-sub">成功報酬の記録はまだありません。</p>
         ) : (
           <div className="space-y-2">
+            <ExportCsvButton
+              filename="success-fees.csv"
+              label="成功報酬をCSVで保存（個人名なし）"
+              header={["店舗", "採用成立日", "状態", "成功報酬", "税", "合計"]}
+              rows={fees.map((f) => [f.store_name, fmtDate(f.hired_at), feeStatusLabel(f.fee_status), f.fee_amount, f.tax_amount, f.total_amount])}
+            />
             {fees.map((f) => (
               <div key={f.fee_id} className="rounded-2xl border border-line bg-surface p-4 text-[12px]">
                 <div className="flex items-start justify-between gap-3">

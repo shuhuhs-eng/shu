@@ -62,3 +62,45 @@ export function findAttentionItems(rows: AttentionRow[], now: Date = new Date())
   }
   return items.sort((a, b) => a.row.updated_at.localeCompare(b.row.updated_at));
 }
+
+// ---- 期間別（0042） ----
+type PeriodFns = Database["public"]["Functions"];
+export type ActivityResult = PeriodFns["get_company_hiring_period_analytics"]["Returns"];
+export type CohortResult = PeriodFns["get_company_hiring_cohort_analytics"]["Returns"];
+export type CohortTotal = CohortResult["cohort"];
+export type CohortSourceRow = CohortResult["by_source"][number];
+export type CohortStoreRow = CohortResult["by_store"][number];
+
+/** 差分の表示（+3 / -1 / ±0）。 */
+export function diffLabel(current: number, previous: number): string {
+  const d = current - previous;
+  if (d === 0) return "±0";
+  return d > 0 ? `+${d}` : `${d}`;
+}
+
+/** 割合の差(ポイント)の表示。どちらかが「—」なら「—」。 */
+export function ratePointDiff(curNum: number, curDen: number, prevNum: number, prevDen: number): string {
+  if (curDen <= 0 || prevDen <= 0) return "—";
+  const d = Math.round(((curNum / curDen) - (prevNum / prevDen)) * 1000) / 10;
+  if (d === 0) return "±0pt";
+  return d > 0 ? `+${d}pt` : `${d}pt`;
+}
+
+// ---- CSV（集計値と店舗名・入口名だけ。個人名・社内メモ・IDは含めない） ----
+export const COHORT_CSV_HEADER = ["区分", "名称", "候補者", "面談化", "面談実施", "選考", "内定", "採用", "辞退", "不採用", "採用率(%)"];
+const CSV_SOURCE_LABELS: Record<string, string> = { interest: "興味あり", scout: "スカウト", salary_offer: "給与オファー" };
+
+function rateNumber(n: number, d: number): string {
+  return d <= 0 ? "" : String(Math.round((n / d) * 1000) / 10);
+}
+
+export function cohortCsvRows(cohort: CohortResult): Array<Array<string | number>> {
+  const rows: Array<Array<string | number>> = [];
+  for (const s of cohort.by_source) {
+    rows.push(["入口別", CSV_SOURCE_LABELS[s.source] ?? s.source, s.candidate_count, s.interview_reached_count, s.interview_completed_count, "", s.offered_count, s.hired_count, "", "", rateNumber(s.hired_count, s.candidate_count)]);
+  }
+  for (const st of cohort.by_store) {
+    rows.push(["店舗別", st.store_name, st.candidate_count, st.interview_reached_count, st.interview_completed_count, st.selection_count, st.offered_count, st.hired_count, st.declined_count, st.rejected_count, rateNumber(st.hired_count, st.candidate_count)]);
+  }
+  return rows;
+}

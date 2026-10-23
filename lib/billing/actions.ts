@@ -31,6 +31,19 @@ export async function getAdminOrganizationOverview(): Promise<OrganizationOvervi
   return data ?? [];
 }
 
+export type AdminOrganizationStore = Database["public"]["Functions"]["get_admin_organization_stores"]["Returns"][number];
+
+/** 運営者向けの会社の店舗一覧（0042。基本情報と件数だけ）。失敗時は null。 */
+export async function getAdminOrganizationStores(organizationId: string): Promise<AdminOrganizationStore[] | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_admin_organization_stores", { p_organization_id: organizationId });
+  if (error) {
+    console.error("[getAdminOrganizationStores] RPC failed", { message: error.message, code: error.code });
+    return null;
+  }
+  return data ?? [];
+}
+
 /** 運営者向けの整合性チェック（読み取り専用）。失敗時は null（0件と誤表示しない）。 */
 export async function getBillingIntegrityIssues(): Promise<BillingIntegrityIssue[] | null> {
   const supabase = await createClient();

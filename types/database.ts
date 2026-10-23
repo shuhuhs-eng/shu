@@ -942,6 +942,61 @@ export type Database = {
         Args: { p_process_id: string; p_internal_note: string | null };
         Returns: { id: string };
       };
+      get_company_hiring_period_analytics: {
+        // 0042で追加。活動ベース：期間内に初めて各段階へ到達した人数。p_from <= created_at < p_to。
+        Args: { p_from: string; p_to: string; p_organization_id?: string | null };
+        Returns: {
+          period_from: string; period_to: string;
+          activity: {
+            added_count: number; interview_reached_count: number; interview_completed_count: number;
+            selection_count: number; offered_count: number; hired_count: number;
+            declined_count: number; rejected_count: number;
+          };
+          by_source: Array<{
+            source: string; added_count: number; interview_reached_count: number;
+            interview_completed_count: number; offered_count: number; hired_count: number;
+          }>;
+          by_store: Array<{
+            store_id: string; store_name: string; organization_id: string; organization_name: string;
+            added_count: number; interview_reached_count: number; interview_completed_count: number;
+            selection_count: number; offered_count: number; hired_count: number;
+            declined_count: number; rejected_count: number;
+          }>;
+          unknown_dates: { no_candidate_added_count: number; no_events_count: number };
+        };
+      };
+      get_company_hiring_cohort_analytics: {
+        // 0042で追加。候補者獲得コホート：期間内に候補追加された人の、現在までの到達結果。
+        Args: { p_from: string; p_to: string; p_organization_id?: string | null };
+        Returns: {
+          period_from: string; period_to: string;
+          cohort: {
+            candidate_count: number; interview_reached_count: number; interview_completed_count: number;
+            selection_count: number; offered_count: number; hired_count: number;
+            declined_count: number; rejected_count: number;
+          };
+          by_source: Array<{
+            source: string; candidate_count: number; interview_reached_count: number;
+            interview_completed_count: number; offered_count: number; hired_count: number;
+          }>;
+          by_store: Array<{
+            store_id: string; store_name: string; organization_id: string; organization_name: string;
+            candidate_count: number; interview_reached_count: number; interview_completed_count: number;
+            selection_count: number; offered_count: number; hired_count: number;
+            declined_count: number; rejected_count: number;
+          }>;
+          unknown_dates: { cohort_date_unknown_count: number };
+        };
+      };
+      get_admin_organization_stores: {
+        // 0042で追加。運営者のみ。店舗の基本情報と採用の件数だけ（内部メモ等は返らない）。
+        Args: { p_organization_id: string };
+        Returns: Array<{
+          store_id: string; store_name: string; usage_status: string; created_at: string;
+          candidate_count: number; active_candidate_count: number; hired_count: number;
+          latest_activity_at: string | null;
+        }>;
+      };
       get_admin_organization_overview: {
         // 0041で追加。運営者のみ・読み取り専用。全社サマリー（採用は現在の所属会社、請求は成立時に固定した会社で集計）。
         Args: Record<string, never>;

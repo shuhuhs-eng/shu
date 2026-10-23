@@ -1,13 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getAdminOrganizationOverview } from "@/lib/billing/actions";
-import { formatYen } from "@/lib/billing/format";
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "numeric", day: "numeric" });
-}
+import { getAdminOrganizationOverview, getBillingIntegrityIssues } from "@/lib/billing/actions";
+import { CompanyList } from "@/components/admin/company-list";
 
 /**
  * 運営者向けの会社一覧（/admin/companies、Phase 20）。読み取り専用。
@@ -22,7 +17,13 @@ export default async function AdminCompaniesPage() {
   const { data: isAdmin } = await supabase.rpc("is_platform_admin");
   if (!isAdmin) redirect("/mypage");
 
-  const orgs = await getAdminOrganizationOverview();
+  const [orgs, issues] = await Promise.all([getAdminOrganizationOverview(), getBillingIntegrityIssues()]);
+  // 整合性の異常を会社ごとに数える。取得に失敗した場合は null のまま（0件とは扱わない）。
+  let issueCounts: Map<string, number> | null = null;
+  if (issues !== null) {
+    issueCounts = new Map();
+    for (const i of issues) if (i.organization_id) issueCounts.set(i.organization_id, (issueCounts.get(i.organization_id) ?? 0) + 1);
+  }
 
   return (
     <main className="mx-auto max-w-[900px] px-5 py-12">
@@ -38,38 +39,7 @@ export default async function AdminCompaniesPage() {
       ) : orgs.length === 0 ? (
         <p className="mt-8 rounded-2xl border border-line bg-surface p-8 text-center text-[13px] text-sub">登録されている会社はありません。</p>
       ) : (
-        <div className="mt-6 space-y-4">
-          {orgs.map((o) => (
-            <article key={o.organization_id} className="rounded-2xl border border-line bg-surface p-5">
-              <div className="flex items-start justify-between gap-3">
-                <h2 className="font-serif text-lg font-bold text-ink">{o.organization_name}</h2>
-                <Link href={`/admin/companies/${o.organization_id}`} className="shrink-0 text-[12px] font-semibold underline">詳細 ›</Link>
-              </div>
-              <dl className="mt-3 grid grid-cols-3 gap-2 text-[11px] sm:grid-cols-6">
-                {[
-                  ["店舗数", o.store_count], ["利用中店舗", o.active_store_count], ["候補者", o.candidate_count],
-                  ["面談到達", o.interview_count], ["内定", o.offered_count], ["採用", o.hired_count],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-lg bg-surface2 p-2"><dt className="text-sub">{label}</dt><dd className="mt-0.5 text-[15px] font-bold text-ink">{value}</dd></div>
-                ))}
-              </dl>
-              <dl className="mt-2 grid grid-cols-3 gap-2 text-[11px] sm:grid-cols-7">
-                {[
-                  ["成功報酬", o.success_fee_count], ["請求確認中", o.pending_confirmation_count], ["請求額確定", o.confirmed_count],
-                  ["請求済み", o.invoiced_count], ["入金済み", o.paid_count], ["免除", o.waived_count], ["取消", o.cancelled_count],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-lg bg-surface2 p-2"><dt className="text-sub">{label}</dt><dd className="mt-0.5 text-[15px] font-bold text-ink">{value}</dd></div>
-                ))}
-              </dl>
-              <dl className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
-                <div className="rounded-lg bg-surface2 p-2"><dt className="text-sub">成功報酬総額</dt><dd className="mt-0.5 text-[13px] font-bold">{formatYen(o.confirmed_total_amount)}</dd></div>
-                <div className="rounded-lg bg-surface2 p-2"><dt className="text-sub">請求済み総額</dt><dd className="mt-0.5 text-[13px] font-bold">{formatYen(o.invoiced_total_amount)}</dd></div>
-                <div className="rounded-lg bg-surface2 p-2"><dt className="text-sub">入金済み総額</dt><dd className="mt-0.5 text-[13px] font-bold">{formatYen(o.paid_total_amount)}</dd></div>
-              </dl>
-              <p className="mt-3 text-[11px] text-sub">直近採用日 {fmtDate(o.latest_hired_at)} ／ 直近活動日 {fmtDate(o.latest_activity_at)}</p>
-            </article>
-          ))}
-        </div>
+        <CompanyList companies={orgs.map((o) => ({ ...o, issue_count: issueCounts === null ? null : (issueCounts.get(o.organization_id) ?? 0) }))} />
       )}
     </main>
   );
