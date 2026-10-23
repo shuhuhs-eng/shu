@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { hasCompanyLevelRole } from "@/lib/hiring/permissions";
-import { getCompanyHiringAnalytics, getHiringActivity, getHiringCohort } from "@/lib/hiring/analytics-actions";
+import { getCompanyHiringAnalytics, getFiscalYearStart, getHiringActivity, getHiringCohort } from "@/lib/hiring/analytics-actions";
 import { HIRING_SOURCE_LABELS, HIRING_STATUS_LABELS } from "@/lib/hiring/format";
 import {
   ATTENTION_THRESHOLD_DAYS, SOURCES, barWidth, diffLabel, findAttentionItems, percent, ratePointDiff,
@@ -40,13 +40,24 @@ export default async function CompanyAnalyticsPage({ searchParams }: Props) {
   if (!(await hasCompanyLevelRole(supabase, user.id))) redirect("/salon/company");
 
   const now = new Date();
-  const period = resolvePeriod(periodKey, now);
+
+  // 年度は会社の設定（年度開始月）を使う。取得成功→会社設定／取得エラー→エラー表示（4月で代用しない）。
+  let fiscalMonth: number | undefined;
+  let periodError: string | null = null;
+  if (periodKey === "fiscal_year") {
+    const fiscal = await getFiscalYearStart();
+    if (fiscal.status === "ok") fiscalMonth = fiscal.month;
+    else if (fiscal.status === "mixed") periodError = "所属する会社ごとに年度の開始月が異なるため、年度での集計は表示できません。今月・直近3ヶ月などをお選びください。";
+    else periodError = "年度の開始月を取得できませんでした。時間をおいて再度お試しください。";
+  }
+
+  const period = resolvePeriod(periodKey, now, 0, fiscalMonth);
   if (!period) redirect("/salon/company/analytics");
-  const prevPeriod = compareRequested ? resolvePeriod(periodKey, now, 1) : null;
+  const prevPeriod = compareRequested && !periodError ? resolvePeriod(periodKey, now, 1, fiscalMonth) : null;
 
   const [activity, cohort, current, prevActivity, prevCohort] = await Promise.all([
-    getHiringActivity(period.from, period.to),
-    getHiringCohort(period.from, period.to),
+    periodError ? Promise.resolve(null) : getHiringActivity(period.from, period.to),
+    periodError ? Promise.resolve(null) : getHiringCohort(period.from, period.to),
     getCompanyHiringAnalytics(),
     prevPeriod ? getHiringActivity(prevPeriod.from, prevPeriod.to) : Promise.resolve(null),
     prevPeriod ? getHiringCohort(prevPeriod.from, prevPeriod.to) : Promise.resolve(null),
@@ -77,8 +88,12 @@ export default async function CompanyAnalyticsPage({ searchParams }: Props) {
           </Link>
         ))}
       </nav>
-      <p className="mt-2 text-[12px] text-sub">対象期間：{period.rangeLabel}</p>
+      {!periodError && <p className="mt-2 text-[12px] text-sub">対象期間：{period.rangeLabel}</p>}
 
+      {periodError ? (
+        <p className={`mt-8 ${ERROR_BOX}`}>{periodError}</p>
+      ) : (
+        <>
       {/* ===== A. 活動ベース ===== */}
       <section className="mt-8 rounded-2xl border border-line bg-surface p-5">
         <p className="eyebrow mb-1">A. 活動</p>
@@ -125,6 +140,9 @@ export default async function CompanyAnalyticsPage({ searchParams }: Props) {
             </div>
           )}
         </section>
+      )}
+
+        </>
       )}
 
       {/* ===== 現在の状況（期間に関係なく） ===== */}

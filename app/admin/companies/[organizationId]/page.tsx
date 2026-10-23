@@ -6,6 +6,9 @@ import { getAdminOrganizationOverview, getAdminOrganizationStores, getAdminSucce
 import { feeStatusLabel, formatYen } from "@/lib/billing/format";
 import { issueTypeLabel, severityLabel } from "@/lib/billing/integrity";
 import { ExportCsvButton } from "@/components/analytics/export-csv-button";
+import { getAdminOrganizationContract } from "@/lib/contracts/actions";
+import { contractStatusLabel, describeEventChanges, eventTypeLabel, formatContractDate, formatDateTime, monthLabel, successFeeModeLabel, yenOrUnset } from "@/lib/contracts/format";
+import { BaselineSummary } from "@/components/contracts/baseline-summary";
 
 type Props = { params: Promise<{ organizationId: string }> };
 
@@ -29,7 +32,8 @@ export default async function AdminCompanyDetailPage({ params }: Props) {
   const { data: isAdmin } = await supabase.rpc("is_platform_admin");
   if (!isAdmin) redirect("/mypage");
 
-  const [orgs, stores, allFees, allIssues] = await Promise.all([
+  const [contractDetail, orgs, stores, allFees, allIssues] = await Promise.all([
+    getAdminOrganizationContract(organizationId),
     getAdminOrganizationOverview(),
     getAdminOrganizationStores(organizationId),
     getAdminSuccessFees(),
@@ -59,6 +63,41 @@ export default async function AdminCompanyDetailPage({ params }: Props) {
         ))}
       </section>
       <p className="mt-3 text-[11.5px] text-sub">整合性の異常：{issues === null ? "取得できませんでした" : `${issues.length}件`} ／ 直近採用日 {fmtDate(org.latest_hired_at)} ／ 直近活動日 {fmtDate(org.latest_activity_at)}</p>
+
+      <section className="mt-8">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="eyebrow">契約条件</p>
+          <Link href={`/admin/companies/${organizationId}/contract`} className="text-[12px] font-semibold underline">契約の編集・履歴 ›</Link>
+        </div>
+        {contractDetail === null ? (
+          <p className="rounded-lg bg-[#C24545]/10 px-3 py-2 text-[12px] text-[#8A2E2E]">契約情報を取得できませんでした。</p>
+        ) : contractDetail.contract === null ? (
+          <p className="rounded-2xl border border-line bg-surface p-5 text-[13px] text-charcoal">契約条件未設定 ／ 年度開始月 {monthLabel(contractDetail.fiscal_year_start_month)}</p>
+        ) : (
+          <>
+            <dl className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+              <div className="rounded-lg bg-surface2 p-2"><dt className="text-sub">契約状態</dt><dd className="mt-0.5 font-bold">{contractStatusLabel(contractDetail.contract.contract_status)}</dd></div>
+              <div className="rounded-lg bg-surface2 p-2"><dt className="text-sub">成功報酬方式</dt><dd className="mt-0.5 font-bold">{successFeeModeLabel(contractDetail.contract.success_fee_mode)}</dd></div>
+              <div className="rounded-lg bg-surface2 p-2"><dt className="text-sub">契約成功報酬額</dt><dd className="mt-0.5 font-bold">{yenOrUnset(contractDetail.contract.success_fee_amount)}</dd></div>
+              <div className="rounded-lg bg-surface2 p-2"><dt className="text-sub">月額</dt><dd className="mt-0.5 font-bold">{yenOrUnset(contractDetail.contract.monthly_fee)}</dd></div>
+              <div className="rounded-lg bg-surface2 p-2"><dt className="text-sub">契約開始日</dt><dd className="mt-0.5 font-bold">{formatContractDate(contractDetail.contract.contract_started_at)}</dd></div>
+              <div className="rounded-lg bg-surface2 p-2"><dt className="text-sub">契約終了日</dt><dd className="mt-0.5 font-bold">{formatContractDate(contractDetail.contract.contract_ended_at)}</dd></div>
+              <div className="rounded-lg bg-surface2 p-2"><dt className="text-sub">年度開始月</dt><dd className="mt-0.5 font-bold">{monthLabel(contractDetail.fiscal_year_start_month)}</dd></div>
+            </dl>
+          </>
+        )}
+        {contractDetail && contractDetail.events.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            <p className="text-[11px] font-semibold text-sub">最近の契約変更</p>
+            {contractDetail.events.slice(0, 3).map((e, idx) => (
+              <p key={`${e.created_at}-${idx}`} className="rounded-lg bg-surface2 px-3 py-2 text-[11.5px] text-charcoal">
+                {formatDateTime(e.created_at)} ／ {eventTypeLabel(e.event_type)}
+                {describeEventChanges(e).length > 0 && <span className="text-sub">（{describeEventChanges(e).join("、")}）</span>}
+              </p>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="mt-8">
         <p className="eyebrow mb-3">店舗一覧</p>
@@ -139,7 +178,16 @@ export default async function AdminCompanyDetailPage({ params }: Props) {
                   <div><p className="text-[11px] text-sub">{f.store_name} ／ 採用成立日 {fmtDate(f.hired_at)}</p><p className="mt-0.5 font-serif text-[15px] font-bold text-ink">{f.stylist_name ?? "美容師"}</p></div>
                   <span className="shrink-0 rounded-full bg-surface2 px-3 py-1 text-[11px] font-semibold text-sub">{feeStatusLabel(f.fee_status)}</span>
                 </div>
-                <p className="mt-2 text-charcoal">成功報酬 {formatYen(f.fee_amount)} ／ 税 {formatYen(f.tax_amount)} ／ 合計 {formatYen(f.total_amount)}</p>
+                <p className="mt-2 text-[11px] text-sub">
+                  契約条件{f.contract_snapshot_at ? `（${formatDateTime(f.contract_snapshot_at)}に記録）` : ""} ／ 採用成立 {fmtDate(f.hired_at)} ／ 請求確定 {fmtDate(f.confirmed_at)}
+                </p>
+                <BaselineSummary
+                  baseline={f.contract_success_fee_amount}
+                  statusSnapshot={f.contract_status_snapshot}
+                  feeAmount={f.fee_amount}
+                  taxAmount={f.tax_amount}
+                  totalAmount={f.total_amount}
+                />
               </div>
             ))}
           </div>

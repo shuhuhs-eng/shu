@@ -431,6 +431,8 @@ export type Database = {
         Row: {
           id: string; name: string; status: string;
           legacy_salon_user_id: string | null;
+          // 0043で追加。年度の開始月(1〜12、既定4)。会社のメンバーなら読める。変更は運営者のみ。
+          fiscal_year_start_month: number;
           created_at: string; updated_at: string;
         };
         Insert: Record<string, never>;
@@ -1058,6 +1060,10 @@ export type Database = {
           confirmed_at: string | null; invoiced_at: string | null; paid_at: string | null;
           waived_at: string | null; cancelled_at: string | null;
           note: string | null; created_at: string; updated_at: string;
+          // 0043で追加。採用成立時点の契約snapshot。0043より前のレコードはすべてnull（未記録）。
+          contract_success_fee_amount: number | null; contract_success_fee_mode: string | null;
+          contract_status_snapshot: string | null; contract_snapshot_at: string | null;
+          contract_snapshot_event_id: string | null;
         }>;
       };
       admin_update_success_fee: {
@@ -1082,6 +1088,62 @@ export type Database = {
           confirmed_at: string | null; invoiced_at: string | null; paid_at: string | null;
           waived_at: string | null; cancelled_at: string | null;
           created_at: string; updated_at: string;
+          // 0043で追加。契約snapshot（event idは会社側には返らない）。
+          contract_success_fee_amount: number | null; contract_success_fee_mode: string | null;
+          contract_status_snapshot: string | null; contract_snapshot_at: string | null;
+        }>;
+      };
+      get_admin_organization_contracts: {
+        // 0043で追加。運営者のみ。全社の契約条件（内部メモ・操作者idは返らない）。契約未設定の会社は contract が null。
+        Args: Record<string, never>;
+        Returns: Array<{
+          organization_id: string; organization_name: string; fiscal_year_start_month: number;
+          contract: {
+            contract_status: string; success_fee_mode: string; success_fee_amount: number | null;
+            currency: string; monthly_fee: number | null;
+            contract_started_at: string | null; contract_ended_at: string | null; updated_at: string;
+          } | null;
+        }>;
+      };
+      get_admin_organization_contract: {
+        // 0043で追加。運営者のみ。1社の契約条件（内部メモ含む）と変更履歴（最大100件、新しい順）。
+        Args: { p_organization_id: string };
+        Returns: {
+          organization_id: string; organization_name: string; fiscal_year_start_month: number;
+          contract: {
+            contract_status: string; success_fee_mode: string; success_fee_amount: number | null;
+            currency: string; monthly_fee: number | null;
+            contract_started_at: string | null; contract_ended_at: string | null;
+            note: string | null; created_at: string; updated_at: string;
+          } | null;
+          events: Array<{
+            event_type: string;
+            before_values: Record<string, string | number | boolean | null>;
+            after_values: Record<string, string | number | boolean | null>;
+            actor_user_id: string | null; note: string | null; created_at: string;
+          }>;
+        };
+      };
+      admin_update_organization_contract: {
+        // 0043で追加。運営者のみ。p_changes は変更する項目だけ（キーがある項目だけ変更、nullは空にする）。
+        Args: {
+          p_organization_id: string;
+          p_changes: Record<string, string | number | null>;
+          p_reason?: string | null;
+        };
+        Returns: {
+          changed: boolean; organization_id: string; fiscal_year_start_month: number;
+          contract_status: string | null; success_fee_amount: number | null; monthly_fee: number | null;
+        };
+      };
+      get_company_contract_settings: {
+        // 0043で追加。自社のcompany_owner/company_adminのみ。内部メモ・履歴・操作者idは返らない。
+        Args: { p_organization_id?: string | null };
+        Returns: Array<{
+          organization_id: string; organization_name: string; fiscal_year_start_month: number;
+          has_contract: boolean; contract_status: string | null; success_fee_mode: string | null;
+          success_fee_amount: number | null; currency: string | null; monthly_fee: number | null;
+          contract_started_at: string | null; contract_ended_at: string | null; updated_at: string | null;
         }>;
       };
       get_store_hiring_processes: {

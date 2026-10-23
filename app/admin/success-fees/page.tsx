@@ -8,7 +8,10 @@ import { SuccessFeeCard } from "@/components/admin/success-fee-card";
  * 運営者向けの成功報酬管理（/admin/success-fees）。
  * ★運営者(is_platform_admin)以外は入れない。RPCも運営者以外を拒否する。
  */
-export default async function AdminSuccessFeesPage() {
+type Props = { searchParams: Promise<{ view?: string }> };
+
+export default async function AdminSuccessFeesPage({ searchParams }: Props) {
+  const { view } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/admin/success-fees");
@@ -18,8 +21,15 @@ export default async function AdminSuccessFeesPage() {
   const fees = await getAdminSuccessFees();
   if (fees === null) throw new Error("成功報酬の一覧を取得できませんでした。");
 
-  const open = fees.filter((f) => ["pending_confirmation", "confirmed", "invoiced"].includes(f.fee_status));
-  const closed = fees.filter((f) => !open.includes(f));
+  // 要確認の絞り込み：基準額と請求額が異なる／基準額が未記録（異常と断定するものではない）。
+  const scoped =
+    view === "diff"
+      ? fees.filter((f) => f.contract_success_fee_amount !== null && f.fee_amount !== null && f.fee_amount !== f.contract_success_fee_amount)
+      : view === "unrecorded"
+        ? fees.filter((f) => f.contract_success_fee_amount === null)
+        : fees;
+  const open = scoped.filter((f) => ["pending_confirmation", "confirmed", "invoiced"].includes(f.fee_status));
+  const closed = scoped.filter((f) => !open.includes(f));
 
   return (
     <main className="mx-auto max-w-[760px] px-5 py-12">
@@ -29,6 +39,19 @@ export default async function AdminSuccessFeesPage() {
       <p className="mt-2 text-[12.5px] leading-relaxed text-sub">
         採用が成立すると自動で「請求確認中」の記録ができます。金額・税額は契約内容に従って入力してください（整数円）。免除・取消には理由が必要です。ここでは請求書の発行や決済は行いません。
       </p>
+
+      <nav className="mt-4 flex flex-wrap gap-2" aria-label="絞り込み">
+        {[
+          { key: "all", label: "すべて", href: "/admin/success-fees" },
+          { key: "diff", label: "基準額と請求額が異なる", href: "/admin/success-fees?view=diff" },
+          { key: "unrecorded", label: "契約基準額が未記録", href: "/admin/success-fees?view=unrecorded" },
+        ].map((f) => (
+          <Link key={f.key} href={f.href}
+            className={`rounded-full border px-3.5 py-1.5 text-[12px] font-semibold ${(view ?? "all") === f.key ? "border-ink bg-ink text-white" : "border-line bg-surface text-charcoal"}`}>
+            {f.label}
+          </Link>
+        ))}
+      </nav>
 
       <h2 className="mt-8 font-serif text-base font-bold text-ink">対応が必要・進行中（{open.length}件）</h2>
       <div className="mt-3 space-y-5">

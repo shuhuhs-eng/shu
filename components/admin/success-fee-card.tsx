@@ -4,6 +4,7 @@ import { useState } from "react";
 import { adminUpdateSuccessFeeAction } from "@/lib/billing/actions";
 import { availableFeeActions, feeStatusLabel, formatYen, parseYenInput } from "@/lib/billing/format";
 import type { AdminSuccessFee, SuccessFeeAction } from "@/lib/billing/types";
+import { BaselineSummary } from "@/components/contracts/baseline-summary";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -70,11 +71,13 @@ export function SuccessFeeCard({ fee }: { fee: AdminSuccessFee }) {
         <span className="shrink-0 rounded-full bg-surface2 px-3 py-1 text-[11px] font-semibold text-sub">{feeStatusLabel(fee.fee_status)}</span>
       </div>
 
-      <dl className="mt-4 grid grid-cols-3 gap-2 text-[11px]">
-        <div className="rounded-lg bg-surface2 p-2"><dt>成功報酬額</dt><dd className="mt-0.5 text-[13px] font-bold">{formatYen(fee.fee_amount)}</dd></div>
-        <div className="rounded-lg bg-surface2 p-2"><dt>税額</dt><dd className="mt-0.5 text-[13px] font-bold">{formatYen(fee.tax_amount)}</dd></div>
-        <div className="rounded-lg bg-surface2 p-2"><dt>合計</dt><dd className="mt-0.5 text-[13px] font-bold">{formatYen(fee.total_amount)}</dd></div>
-      </dl>
+      <BaselineSummary
+        baseline={fee.contract_success_fee_amount}
+        statusSnapshot={fee.contract_status_snapshot}
+        feeAmount={fee.fee_amount}
+        taxAmount={fee.tax_amount}
+        totalAmount={fee.total_amount}
+      />
       <dl className="mt-3 grid grid-cols-5 gap-2 text-[10.5px] text-sub">
         <div><dt>確定日</dt><dd className="text-charcoal">{fmtDate(fee.confirmed_at)}</dd></div>
         <div><dt>請求日</dt><dd className="text-charcoal">{fmtDate(fee.invoiced_at)}</dd></div>

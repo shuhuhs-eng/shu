@@ -6,7 +6,11 @@
  * RPC の期間は p_from <= created_at < p_to（終了は含まない）。
  */
 
-/** 年度の開始月（1〜12）。UI側の定数。会社ごとの年度設定は後続Phase。 */
+/**
+ * 年度の開始月（1〜12）の既定値。会社の設定(salon_organizations.fiscal_year_start_month、0043)が
+ * 取得できたらそちらを使う。ここは「会社に設定が無い場合」の既定であり、
+ * 取得エラーのときの代用にはしない（呼び出し側でエラーとして扱う）。
+ */
 export const FISCAL_YEAR_START_MONTH = 4;
 
 export const PERIOD_KEYS = ["this_month", "last_month", "last_3_months", "fiscal_year", "all"] as const;
@@ -61,13 +65,18 @@ function span(key: PeriodKey, fromY: number, fromM: number, toY: number, toM: nu
 }
 
 /** 年度の開始年（その時点が属する年度の4月1日の年）。 */
-function fiscalYearStartYear(now: Date): number {
+function fiscalYearStartYear(now: Date, startMonth: number): number {
   const { year, month } = jstYearMonth(now);
-  return month + 1 >= FISCAL_YEAR_START_MONTH ? year : year - 1;
+  return month + 1 >= startMonth ? year : year - 1;
 }
 
 /** 指定した期間（`offset` 期間ぶん前を 1, 2, … と指定。0 が今の期間）。全期間は比較対象なし(null)。 */
-export function resolvePeriod(key: PeriodKey, now: Date = new Date(), offset = 0): Period | null {
+export function resolvePeriod(
+  key: PeriodKey,
+  now: Date = new Date(),
+  offset = 0,
+  fiscalStartMonth: number = FISCAL_YEAR_START_MONTH,
+): Period | null {
   const { year, month } = jstYearMonth(now);
   switch (key) {
     case "this_month":
@@ -85,16 +94,13 @@ export function resolvePeriod(key: PeriodKey, now: Date = new Date(), offset = 0
       return span(key, year, startM, year, endExclusive, `${startLabel}〜${endDate.getUTCMonth() + 1}月`);
     }
     case "fiscal_year": {
-      const startYear = fiscalYearStartYear(now) - offset;
-      const startMonth = FISCAL_YEAR_START_MONTH - 1;
-      return span(
-        key,
-        startYear,
-        startMonth,
-        startYear + 1,
-        startMonth,
-        `${startYear}年度（${FISCAL_YEAR_START_MONTH}月〜翌${((FISCAL_YEAR_START_MONTH + 10) % 12) + 1}月）`,
-      );
+      const startYear = fiscalYearStartYear(now, fiscalStartMonth) - offset;
+      const startMonth = fiscalStartMonth - 1;
+      // 1月始まりは同じ年の12月まで。それ以外は翌年の（開始月の前月）まで。
+      const endMonthNumber = ((fiscalStartMonth + 10) % 12) + 1;
+      const rangeText =
+        fiscalStartMonth === 1 ? "1月〜12月" : `${fiscalStartMonth}月〜翌${endMonthNumber}月`;
+      return span(key, startYear, startMonth, startYear + 1, startMonth, `${startYear}年度（${rangeText}）`);
     }
     case "all": {
       if (offset > 0) return null;

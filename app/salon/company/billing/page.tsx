@@ -6,6 +6,7 @@ import { canViewCompanyBilling } from "@/lib/billing/permissions";
 import { getCompanySuccessFees } from "@/lib/billing/actions";
 import { feeStatusLabel, formatYen } from "@/lib/billing/format";
 import { summarizeFees } from "@/lib/billing/summary";
+import { BaselineSummary } from "@/components/contracts/baseline-summary";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -61,6 +62,9 @@ export default async function CompanyBillingPage() {
           </section>
 
           <div className="mt-8 space-y-3">
+            <p className="text-[11.5px] leading-relaxed text-sub">
+              「契約基準額」は採用が成立した時点の契約上の金額で、「実際の請求額」とは別に表示しています。契約基準額が「未記録」の件は、記録を始める前に成立した採用です。
+            </p>
             {fees.map((f) => (
               <article key={f.fee_id} className="rounded-2xl border border-line bg-surface p-5">
                 <div className="flex items-start justify-between gap-3">
@@ -73,11 +77,13 @@ export default async function CompanyBillingPage() {
                 {f.fee_status === "pending_confirmation" && (
                   <p className="mt-3 text-[12px] text-charcoal">請求内容を確認中です。</p>
                 )}
-                <dl className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
-                  <div className="rounded-lg bg-surface2 p-2"><dt>成功報酬額</dt><dd className="mt-0.5 text-[13px] font-bold">{formatYen(f.fee_amount)}</dd></div>
-                  <div className="rounded-lg bg-surface2 p-2"><dt>税額</dt><dd className="mt-0.5 text-[13px] font-bold">{formatYen(f.tax_amount)}</dd></div>
-                  <div className="rounded-lg bg-surface2 p-2"><dt>合計</dt><dd className="mt-0.5 text-[13px] font-bold">{formatYen(f.total_amount)}</dd></div>
-                </dl>
+                <BaselineSummary
+                  baseline={f.contract_success_fee_amount}
+                  statusSnapshot={f.contract_status_snapshot}
+                  feeAmount={f.fee_amount}
+                  taxAmount={f.tax_amount}
+                  totalAmount={f.total_amount}
+                />
                 <dl className="mt-3 grid grid-cols-3 gap-2 text-[10.5px] text-sub">
                   <div><dt>請求確定日</dt><dd className="text-charcoal">{fmtDate(f.confirmed_at)}</dd></div>
                   <div><dt>請求日</dt><dd className="text-charcoal">{fmtDate(f.invoiced_at)}</dd></div>

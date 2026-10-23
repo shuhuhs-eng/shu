@@ -162,6 +162,13 @@ export default async function SalonCompanyPage() {
             <span className="font-serif text-[15px] font-bold text-ink">請求・成功報酬</span>
             <span className="text-[12px] text-sub">採用に伴う請求の状況 ›</span>
           </Link>
+          <Link
+            href="/salon/company/contract"
+            className="mt-3 flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+          >
+            <span className="font-serif text-[15px] font-bold text-ink">契約内容</span>
+            <span className="text-[12px] text-sub">契約状態・成功報酬の基準額 ›</span>
+          </Link>
           {billingKpis && (
             <section className="mt-3">
               <p className="mb-2 text-[11px] font-semibold text-sub">請求</p>

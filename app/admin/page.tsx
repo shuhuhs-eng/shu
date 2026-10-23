@@ -5,6 +5,7 @@ import { getAdminOrganizationOverview, getAdminSuccessFees, getBillingIntegrityI
 import { formatYen } from "@/lib/billing/format";
 import { countSeverities } from "@/lib/billing/integrity";
 import { summarizeFees } from "@/lib/billing/summary";
+import { getAdminOrganizationContracts } from "@/lib/contracts/actions";
 
 /**
  * 運営ダッシュボード（/admin）。採用成立と成功報酬の状況を集計する。
@@ -18,7 +19,29 @@ export default async function AdminDashboardPage() {
   const { data: isAdmin } = await supabase.rpc("is_platform_admin");
   if (!isAdmin) redirect("/mypage");
 
-  const [fees, issues, orgs] = await Promise.all([getAdminSuccessFees(), getBillingIntegrityIssues(), getAdminOrganizationOverview()]);
+  const [fees, issues, orgs, contracts] = await Promise.all([
+    getAdminSuccessFees(),
+    getBillingIntegrityIssues(),
+    getAdminOrganizationOverview(),
+    getAdminOrganizationContracts(),
+  ]);
+  // 契約まわりの「要確認」の件数（異常と断定するものではなく、確認の目安）。
+  const contractChecks = contracts
+    ? [
+        { label: "契約条件が未設定の会社", value: contracts.filter((o) => o.contract === null).length, href: "/admin/contracts?filter=unset" },
+        { label: "試用中の会社", value: contracts.filter((o) => o.contract?.contract_status === "trial").length, href: "/admin/contracts?filter=trial" },
+        { label: "一時停止の会社", value: contracts.filter((o) => o.contract?.contract_status === "suspended").length, href: "/admin/contracts?filter=suspended" },
+        { label: "解約の会社", value: contracts.filter((o) => o.contract?.contract_status === "cancelled").length, href: "/admin/contracts?filter=cancelled" },
+        { label: "成功報酬額が未設定の契約", value: contracts.filter((o) => o.contract !== null && o.contract.success_fee_amount === null).length, href: "/admin/contracts?filter=no_amount" },
+        ...(fees
+          ? [{
+              label: "基準額と請求額が異なる成功報酬",
+              value: fees.filter((f) => f.contract_success_fee_amount !== null && f.fee_amount !== null && f.fee_amount !== f.contract_success_fee_amount).length,
+              href: "/admin/success-fees?view=diff",
+            }]
+          : []),
+      ]
+    : null;
   const orgTotals = orgs
     ? {
         companies: orgs.length,
@@ -90,6 +113,26 @@ export default async function AdminDashboardPage() {
               { label: "請求済み・未入金", value: `${summary.counts.invoiced}件`, href: "/admin/success-fees" },
               { label: "整合性の異常", value: `${integrity.total}件`, href: "/admin/integrity" },
             ].map((m) => (
+              <Link key={m.label} href={m.href} className="rounded-2xl border border-line bg-surface p-4">
+                <p className="text-[11px] text-sub">{m.label}</p>
+                <p className="mt-1 font-serif text-[22px] font-bold text-ink">{m.value}</p>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mt-8">
+        <div className="mb-1 flex items-center justify-between">
+          <p className="eyebrow">契約の確認</p>
+          <Link href="/admin/contracts" className="text-[12px] font-semibold underline">契約一覧 ›</Link>
+        </div>
+        <p className="mb-3 text-[11.5px] leading-relaxed text-sub">異常ではなく、確認の目安となる件数です。</p>
+        {contractChecks === null ? (
+          <p className="rounded-lg bg-[#C24545]/10 px-3 py-2 text-[12px] text-[#8A2E2E]">契約の情報を取得できませんでした。</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {contractChecks.map((m) => (
               <Link key={m.label} href={m.href} className="rounded-2xl border border-line bg-surface p-4">
                 <p className="text-[11px] text-sub">{m.label}</p>
                 <p className="mt-1 font-serif text-[22px] font-bold text-ink">{m.value}</p>

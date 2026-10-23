@@ -27,6 +27,7 @@ const AUTH_REQUIRED_PREFIXES = [
   "/salon/culture",
   "/salon/company/hiring",
   "/salon/company/billing",
+  "/salon/company/contract",
   "/salon/company/analytics",
 ];
 
@@ -55,7 +56,7 @@ const GUEST_ONLY_PATHS = [
  * 必ずログイン済みである。
  */
 const STYLIST_ONLY_PREFIXES = ["/stylist/mypage", "/stylist/profile", "/stylist/diagnosis", "/stylist/preference", "/stylist/salons", "/stylist/scouts", "/stylist/offers", "/stylist/applications"];
-const SALON_ONLY_PREFIXES = ["/salon/mypage", "/salon/profile", "/salon/culture", "/diagnosis/salon", "/salon/company/hiring", "/salon/company/billing", "/salon/company/analytics"];
+const SALON_ONLY_PREFIXES = ["/salon/mypage", "/salon/profile", "/salon/culture", "/diagnosis/salon", "/salon/company/hiring", "/salon/company/billing", "/salon/company/contract", "/salon/company/analytics"];
 
 /**
  * 会社レベルの役割（company_owner / company_admin / recruiting_admin / area_manager）
@@ -69,7 +70,7 @@ const COMPANY_LEVEL_PREFIXES = ["/salon/company/hiring", "/salon/company/analyti
  * （recruiting_admin / area_manager / store_manager / recruiter / viewer は入れない）。
  * ページ側（server guard）とDB（get_company_success_fees）でも同じ制限を重ねる。
  */
-const COMPANY_BILLING_PREFIXES = ["/salon/company/billing"];
+const COMPANY_BILLING_PREFIXES = ["/salon/company/billing", "/salon/company/contract"];
 
 /**
  * リクエストごとに Supabase セッションを更新し、あわせて以下のルート保護を行う。
