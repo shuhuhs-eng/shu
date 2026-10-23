@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import type { BillingIntegrityIssue } from "./integrity";
+import type { Database } from "@/types/database";
 import type { AdminSuccessFee, BillingActionResult, CompanySuccessFee } from "./types";
 
 /** 運営者向け一覧。権限が無い／失敗した場合は null（RPCが運営者以外を拒否する）。 */
@@ -12,6 +13,19 @@ export async function getAdminSuccessFees(): Promise<AdminSuccessFee[] | null> {
   const { data, error } = await supabase.rpc("get_admin_success_fees", { p_status: null });
   if (error) {
     console.error("[getAdminSuccessFees] RPC failed", { message: error.message, code: error.code });
+    return null;
+  }
+  return data ?? [];
+}
+
+export type OrganizationOverview = Database["public"]["Functions"]["get_admin_organization_overview"]["Returns"][number];
+
+/** 運営者向けの全社サマリー（0041）。失敗時は null（0件と誤表示しない）。 */
+export async function getAdminOrganizationOverview(): Promise<OrganizationOverview[] | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_admin_organization_overview");
+  if (error) {
+    console.error("[getAdminOrganizationOverview] RPC failed", { message: error.message, code: error.code });
     return null;
   }
   return data ?? [];

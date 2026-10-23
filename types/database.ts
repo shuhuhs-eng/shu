@@ -942,6 +942,44 @@ export type Database = {
         Args: { p_process_id: string; p_internal_note: string | null };
         Returns: { id: string };
       };
+      get_admin_organization_overview: {
+        // 0041で追加。運営者のみ・読み取り専用。全社サマリー（採用は現在の所属会社、請求は成立時に固定した会社で集計）。
+        Args: Record<string, never>;
+        Returns: Array<{
+          organization_id: string; organization_name: string;
+          store_count: number; active_store_count: number;
+          candidate_count: number; interview_count: number; offered_count: number; hired_count: number;
+          latest_hired_at: string | null; latest_activity_at: string | null;
+          success_fee_count: number; pending_confirmation_count: number; confirmed_count: number;
+          invoiced_count: number; paid_count: number; waived_count: number; cancelled_count: number;
+          confirmed_total_amount: number; invoiced_total_amount: number; paid_total_amount: number;
+        }>;
+      };
+      get_company_hiring_analytics: {
+        // 0041で追加。会社の履歴ベース採用分析（到達ステージ）。company_owner/admin/recruiting_adminは全店舗、area_managerは担当店舗。
+        Args: { p_organization_id?: string | null };
+        Returns: {
+          total: {
+            candidate_count: number; interview_reached_count: number; interview_completed_count: number;
+            selection_count: number; offered_count: number; hired_count: number;
+            declined_count: number; rejected_count: number;
+          };
+          by_source: Array<{
+            source: string; candidate_count: number; interview_reached_count: number;
+            interview_completed_count: number; offered_count: number; hired_count: number;
+          }>;
+          by_store: Array<{
+            store_id: string; store_name: string; organization_id: string; organization_name: string;
+            candidate_count: number; interview_reached_count: number; interview_completed_count: number;
+            selection_count: number; offered_count: number; hired_count: number;
+            declined_count: number; rejected_count: number;
+          }>;
+          attention: Array<{
+            process_id: string; store_id: string; store_name: string; stylist_name: string | null;
+            status: string; updated_at: string; interview_at: string | null;
+          }>;
+        };
+      };
       get_admin_billing_integrity_issues: {
         // 0040で追加。運営者のみ・読み取り専用。採用成立と成功報酬の不整合を返す（空配列=問題なし）。
         Args: Record<string, never>;

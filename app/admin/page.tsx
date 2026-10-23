@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getAdminSuccessFees, getBillingIntegrityIssues } from "@/lib/billing/actions";
+import { getAdminOrganizationOverview, getAdminSuccessFees, getBillingIntegrityIssues } from "@/lib/billing/actions";
 import { formatYen } from "@/lib/billing/format";
 import { countSeverities } from "@/lib/billing/integrity";
 import { summarizeFees } from "@/lib/billing/summary";
@@ -18,7 +18,14 @@ export default async function AdminDashboardPage() {
   const { data: isAdmin } = await supabase.rpc("is_platform_admin");
   if (!isAdmin) redirect("/mypage");
 
-  const [fees, issues] = await Promise.all([getAdminSuccessFees(), getBillingIntegrityIssues()]);
+  const [fees, issues, orgs] = await Promise.all([getAdminSuccessFees(), getBillingIntegrityIssues(), getAdminOrganizationOverview()]);
+  const orgTotals = orgs
+    ? {
+        companies: orgs.length,
+        stores: orgs.reduce((n, o) => n + o.store_count, 0),
+        hired: orgs.reduce((n, o) => n + o.hired_count, 0),
+      }
+    : null;
   const integrity = issues ? countSeverities(issues) : null;
   const summary = fees ? summarizeFees(fees) : null;
 
@@ -71,7 +78,40 @@ export default async function AdminDashboardPage() {
         </>
       )}
 
-      <Link href="/admin/integrity" className="mt-8 block rounded-2xl border border-line bg-surface p-5">
+      <section className="mt-8">
+        <p className="eyebrow mb-3">運営の監視</p>
+        {summary === null || integrity === null ? (
+          <p className="rounded-lg bg-[#C24545]/10 px-3 py-2 text-[12px] text-[#8A2E2E]">監視に必要な情報を取得できませんでした。</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { label: "採用成立", value: `${summary.hiredCount}件`, href: "/admin/success-fees" },
+              { label: "成功報酬が未確定", value: `${summary.counts.pending_confirmation}件`, href: "/admin/success-fees" },
+              { label: "請求済み・未入金", value: `${summary.counts.invoiced}件`, href: "/admin/success-fees" },
+              { label: "整合性の異常", value: `${integrity.total}件`, href: "/admin/integrity" },
+            ].map((m) => (
+              <Link key={m.label} href={m.href} className="rounded-2xl border border-line bg-surface p-4">
+                <p className="text-[11px] text-sub">{m.label}</p>
+                <p className="mt-1 font-serif text-[22px] font-bold text-ink">{m.value}</p>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <Link href="/admin/companies" className="mt-8 block rounded-2xl border border-line bg-surface p-5">
+        <div className="flex items-center justify-between">
+          <span className="font-serif text-[15px] font-bold text-ink">会社一覧</span>
+          <span className="text-[12px] text-sub">会社ごとの採用と請求 ›</span>
+        </div>
+        {orgTotals === null ? (
+          <p className="mt-2 text-[12px] text-[#8A2E2E]">会社の情報を取得できませんでした。</p>
+        ) : (
+          <p className="mt-2 text-[12px] text-charcoal">会社 {orgTotals.companies}社 ／ 店舗 {orgTotals.stores}店 ／ 採用 {orgTotals.hired}名</p>
+        )}
+      </Link>
+
+      <Link href="/admin/integrity" className="mt-3 block rounded-2xl border border-line bg-surface p-5">
         <div className="flex items-center justify-between">
           <span className="font-serif text-[15px] font-bold text-ink">整合性チェック</span>
           <span className="text-[12px] text-sub">採用と成功報酬の突き合わせ ›</span>
