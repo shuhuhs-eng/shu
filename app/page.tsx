@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/auth/user-roles";
 import { signOutAction } from "@/lib/auth/actions";
 import { SubmitButton } from "@/components/auth/submit-button";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { HeroCharacter } from "@/components/home/hero-character";
 
 /**
@@ -340,6 +341,7 @@ export default async function Home() {
           </div>
         </div>
       </div>
+      <LegalLinks className="mt-10" />
     </main>
   );
 }
