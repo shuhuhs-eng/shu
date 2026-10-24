@@ -1,4 +1,5 @@
 import type { SalonCultureAxes } from "@/types/database";
+import { logError } from "@/lib/security/log";
 
 const MODEL = "claude-sonnet-4-6";
 /**
@@ -127,7 +128,7 @@ export async function generateSalonCultureNarrative(
 
     return { narrative, model: MODEL, promptVersion: PROMPT_VERSION };
   } catch (err) {
-    console.error("generateSalonCultureNarrative: request failed", err);
+    logError("generateSalonCultureNarrative", err);
     return null;
   }
 }

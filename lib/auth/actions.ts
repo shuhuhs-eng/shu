@@ -136,7 +136,6 @@ export async function signInAction(
   // 保護ルートから弾かれてログインに来た場合は、元のURLへ戻す（安全なパスのみ）。
   const next = safeInternalPath(formData.get("next"));
   if (next) {
-    console.log("[signInAction] redirecting to next param", { next });
     redirect(next);
   }
 
@@ -153,16 +152,13 @@ export async function signInAction(
     const entryMode = formData.get("entryMode");
     if (entryMode === "stylist" || entryMode === "salon") {
       const dest = await determineRoleEntryPath(supabase, user.id, entryMode);
-      console.log("[signInAction] redirecting via determineRoleEntryPath", { userId: user.id, entryMode, dest });
       redirect(dest);
     }
 
     const dest = await determinePostAuthPath(supabase, user.id);
-    console.log("[signInAction] redirecting via determinePostAuthPath", { userId: user.id, dest });
     redirect(dest);
   }
 
-  console.log("[signInAction] no user after getUser(), redirecting to /");
   redirect("/");
 }
 

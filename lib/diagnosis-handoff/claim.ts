@@ -5,6 +5,7 @@ import { createTokenClient } from "@/lib/supabase/token-client";
 import { computeDiagnosis, isValidAnswers, type ComputedDiagnosis } from "@/lib/diagnosis";
 import { generateDiagnosisNarrative } from "@/lib/ai/generate-diagnosis-narrative";
 import { CLAIM_TOKEN_COOKIE } from "@/lib/diagnosis-handoff/constants";
+import { logError } from "@/lib/security/log";
 
 export type ClaimResult = { claimed: boolean; diagnosisResultId: string | null };
 
@@ -116,10 +117,7 @@ export async function claimPendingDiagnosisIfPresent(): Promise<ClaimResult> {
       .maybeSingle();
 
     if (!existing) {
-      console.error(
-        "claimPendingDiagnosisIfPresent: failed to insert diagnosis_results",
-        insertResult.error,
-      );
+      logError("claimDiagnosis.insert", insertResult.error);
       // claim_statusはPROCESSINGのまま残す。Cookieも保持し、次回の呼び出しで
       // start_pending_diagnosis_claim()の冪等フォールバックにより再開できるようにする。
       return { claimed: false, diagnosisResultId: null };
@@ -141,7 +139,7 @@ export async function claimPendingDiagnosisIfPresent(): Promise<ClaimResult> {
       p_diagnosis_result_id: diagnosisResultId,
     });
     if (coreTypeError) {
-      console.error("claimPendingDiagnosisIfPresent: save_core_type_result failed", coreTypeError);
+      logError("claimDiagnosis.coreType", coreTypeError);
     }
   }
 
@@ -150,7 +148,7 @@ export async function claimPendingDiagnosisIfPresent(): Promise<ClaimResult> {
     p_pending_id: pending.id,
   });
   if (completeError) {
-    console.error("claimPendingDiagnosisIfPresent: failed to complete claim", completeError);
+    logError("claimDiagnosis.complete", completeError);
     // diagnosis_results自体は保存済みなので診断結果としては利用可能。
     // claim_statusはPROCESSINGのまま、Cookieも保持し、次回の呼び出しで
     // complete_pending_diagnosis_claim()を再試行できるようにする
@@ -173,9 +171,7 @@ export async function claimPendingDiagnosisIfPresent(): Promise<ClaimResult> {
   const accessToken = session?.access_token ?? null;
 
   if (accessToken) {
-    console.log("[AI-JOB] scheduling via after()", { diagnosisResultId });
     after(() => {
-      console.log("[AI-JOB] after callback fired", { diagnosisResultId });
       return runAiGenerationJob(diagnosisResultId!, computed, accessToken);
     });
   } else {
@@ -204,7 +200,7 @@ export async function claimPendingDiagnosisIfPresent(): Promise<ClaimResult> {
  * 関数の中身・ロジック・RPC呼び出し順序は一切変更していない。
  *
  * ★診断用ログ: 実行経路が実際にどこまで到達しているかを追跡するため、
- * 各チェックポイントに console.log/console.error を仕込んでいる
+ * 失敗は logError で安全に記録する
  * （原因特定後は削除してよい一時的な計測ログ）。
  */
 export async function runAiGenerationJob(
@@ -212,36 +208,30 @@ export async function runAiGenerationJob(
   computed: ComputedDiagnosis,
   accessToken: string,
 ): Promise<void> {
-  console.log("[AI-JOB] runAiGenerationJob started", { diagnosisResultId });
 
   const supabase = createTokenClient(accessToken);
-  console.log("[AI-JOB] createTokenClient done");
 
   const statusResult = await supabase.rpc("set_diagnosis_ai_status", {
     p_diagnosis_result_id: diagnosisResultId,
     p_status: "GENERATING",
   });
   if (statusResult.error) {
-    console.error("[AI-JOB] set_diagnosis_ai_status(GENERATING) failed", statusResult.error);
+    logError("aiJob.status", statusResult.error);
   } else {
-    console.log("[AI-JOB] set_diagnosis_ai_status(GENERATING) ok");
   }
 
-  console.log("[AI-JOB] calling generateDiagnosisNarrative...");
   const result = await generateDiagnosisNarrative({
     typeName: computed.typeName,
     scores: computed.scores,
     marketValueScore: computed.marketValueScore,
     salaryBand: computed.salaryBand,
   });
-  console.log("[AI-JOB] generateDiagnosisNarrative returned", { success: result !== null });
 
   if (!result) {
     await supabase.rpc("set_diagnosis_ai_status", {
       p_diagnosis_result_id: diagnosisResultId,
       p_status: "FAILED",
     });
-    console.log("[AI-JOB] marked FAILED (narrative generation returned null)");
     return;
   }
 
@@ -258,7 +248,6 @@ export async function runAiGenerationJob(
 
   let allOk = true;
   for (const entry of entries) {
-    console.log("[AI-JOB] calling create_ai_output", { type: entry.type });
     const { data: created, error: createError } = await supabase.rpc("create_ai_output", {
       p_diagnosis_result_id: diagnosisResultId,
       p_output_type: entry.type,
@@ -269,20 +258,18 @@ export async function runAiGenerationJob(
     });
 
     if (createError || !created) {
-      console.error("[AI-JOB] create_ai_output failed", entry.type, createError);
+      logError(`aiJob.create.${entry.type}`, createError);
       allOk = false;
       continue;
     }
-    console.log("[AI-JOB] create_ai_output ok", { type: entry.type, id: created.id });
 
     const { error: activateError } = await supabase.rpc("activate_ai_output", {
       p_ai_output_id: created.id,
     });
     if (activateError) {
-      console.error("[AI-JOB] activate_ai_output failed", entry.type, activateError);
+      logError(`aiJob.activate.${entry.type}`, activateError);
       allOk = false;
     } else {
-      console.log("[AI-JOB] activate_ai_output ok", { type: entry.type });
     }
   }
 
@@ -290,5 +277,4 @@ export async function runAiGenerationJob(
     p_diagnosis_result_id: diagnosisResultId,
     p_status: allOk ? "READY" : "FAILED",
   });
-  console.log("[AI-JOB] finished", { finalStatus: allOk ? "READY" : "FAILED" });
 }

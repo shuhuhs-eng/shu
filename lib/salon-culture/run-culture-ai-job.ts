@@ -2,6 +2,7 @@ import { createTokenClient } from "@/lib/supabase/token-client";
 import { generateSalonCultureNarrative } from "@/lib/ai/generate-salon-culture-narrative";
 import { deriveSalonTypes, SALON_TYPE_CONTENT } from "@/lib/salon-culture/salon-culture-types";
 import type { Database, SalonCultureAxes } from "@/types/database";
+import { logError } from "@/lib/security/log";
 
 type SalonCultureProfileRow = Database["public"]["Tables"]["salon_culture_profiles"]["Row"];
 
@@ -36,9 +37,6 @@ export async function runSalonCultureAiGenerationJob(
   cultureProfile: SalonCultureProfileRow,
   accessToken: string,
 ): Promise<void> {
-  console.log("[SALON-AI-JOB] runSalonCultureAiGenerationJob started", {
-    salonCultureProfileId: cultureProfile.id,
-  });
 
   const supabase = createTokenClient(accessToken);
 
@@ -52,10 +50,8 @@ export async function runSalonCultureAiGenerationJob(
     mainTypeName: classification ? SALON_TYPE_CONTENT[classification.mainType].name : null,
     subTypeName: classification ? SALON_TYPE_CONTENT[classification.subType].name : null,
   });
-  console.log("[SALON-AI-JOB] generateSalonCultureNarrative returned", { success: result !== null });
 
   if (!result) {
-    console.log("[SALON-AI-JOB] narrative generation returned null, skipping save");
     return;
   }
 
@@ -81,7 +77,7 @@ export async function runSalonCultureAiGenerationJob(
     });
 
     if (createError || !created) {
-      console.error("[SALON-AI-JOB] create_salon_culture_ai_output failed", entry.type, createError);
+      logError(`salonAiJob.create.${entry.type}`, createError);
       continue;
     }
 
@@ -89,9 +85,8 @@ export async function runSalonCultureAiGenerationJob(
       p_ai_output_id: created.id,
     });
     if (activateError) {
-      console.error("[SALON-AI-JOB] activate_salon_culture_ai_output failed", entry.type, activateError);
+      logError(`salonAiJob.activate.${entry.type}`, activateError);
     }
   }
 
-  console.log("[SALON-AI-JOB] done", { salonCultureProfileId: cultureProfile.id });
 }

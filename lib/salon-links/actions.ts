@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { addSalonLinkSchema } from "@/lib/validation/salon-links";
 import type { Database, SalonLinkType } from "@/types/database";
+import { logError } from "@/lib/security/log";
 
 export type SalonLinkRow = Database["public"]["Tables"]["salon_links"]["Row"];
 
@@ -24,7 +25,7 @@ export async function getSalonLinks(): Promise<SalonLinkRow[]> {
     .order("sort_order", { ascending: true });
 
   if (error) {
-    console.error("[getSalonLinks] fetch failed", error);
+    logError("getSalonLinks", error);
     return [];
   }
   return data ?? [];
@@ -89,7 +90,7 @@ export async function addSalonLinkAction(input: {
     .single();
 
   if (error || !created) {
-    console.error("[addSalonLinkAction] insert failed", error);
+    logError("addSalonLinkAction", error);
     return { success: false, error: "リンクの登録に失敗しました。もう一度お試しください。" };
   }
 
@@ -115,7 +116,7 @@ export async function deleteSalonLinkAction(linkId: string): Promise<DeleteSalon
     .eq("salon_user_id", user.id);
 
   if (error) {
-    console.error("[deleteSalonLinkAction] delete failed", error);
+    logError("deleteSalonLinkAction", error);
     return { success: false, error: "リンクの削除に失敗しました。もう一度お試しください。" };
   }
 

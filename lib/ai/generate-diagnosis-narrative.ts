@@ -1,4 +1,5 @@
 import type { TraitScores } from "@/lib/diagnosis";
+import { logError } from "@/lib/security/log";
 
 const MODEL = "claude-sonnet-4-6";
 const PROMPT_VERSION = "1.0.0";
@@ -66,7 +67,7 @@ export async function generateDiagnosisNarrative(
 
     return { narrative, model: MODEL, promptVersion: PROMPT_VERSION };
   } catch (err) {
-    console.error("generateDiagnosisNarrative: request failed", err);
+    logError("generateDiagnosisNarrative", err);
     return null;
   }
 }

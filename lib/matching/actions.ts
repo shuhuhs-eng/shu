@@ -9,6 +9,7 @@ import type {
   StylistStoreMatchResult,
 } from "@/lib/matching/types";
 import type { SalonPhotoCategory } from "@/types/database";
+import { logError } from "@/lib/security/log";
 
 /**
  * 「あなたらしさ × サロンらしさ」の相性を、指定サロンについて計算する。
@@ -35,11 +36,7 @@ export async function calculateStylistSalonMatch(
   });
 
   if (error || !data) {
-    console.error("[calculateStylistSalonMatch] RPC failed", {
-      message: error?.message,
-      code: error?.code,
-      salonUserId,
-    });
+    logError("calculateStylistSalonMatch", error);
     return null;
   }
 
@@ -88,11 +85,7 @@ export async function getPublicSalonCultureDetail(
   });
 
   if (error || !data) {
-    console.error("[getPublicSalonCultureDetail] RPC failed", {
-      message: error?.message,
-      code: error?.code,
-      salonUserId,
-    });
+    logError("getPublicSalonCultureDetail", error);
     return null;
   }
 
@@ -140,12 +133,7 @@ export async function calculateStoreStylistMatch(
   });
 
   if (error || !data) {
-    console.error("[calculateStoreStylistMatch] RPC failed", {
-      message: error?.message,
-      code: error?.code,
-      storeId,
-      stylistUserId,
-    });
+    logError("calculateStoreStylistMatch", error);
     return null;
   }
 
@@ -181,11 +169,7 @@ export async function calculateStylistStoreMatch(
   });
 
   if (error || !data) {
-    console.error("[calculateStylistStoreMatch] RPC failed", {
-      message: error?.message,
-      code: error?.code,
-      storeId,
-    });
+    logError("calculateStylistStoreMatch", error);
     return null;
   }
 

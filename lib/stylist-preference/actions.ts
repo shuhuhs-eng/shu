@@ -7,6 +7,7 @@ import {
   type StylistPreferenceStepInput,
 } from "@/lib/validation/stylist-preference";
 import type { Database } from "@/types/database";
+import { logError } from "@/lib/security/log";
 
 type StylistPreferenceProfileRow = Database["public"]["Tables"]["stylist_preference_profiles"]["Row"];
 
@@ -50,14 +51,7 @@ export async function saveStylistPreferenceStep(
   });
 
   if (error || !data) {
-    console.error("[saveStylistPreferenceStep] RPC failed", {
-      message: error?.message,
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
-      status: v.status,
-      currentStep: v.currentStep,
-    });
+    logError("saveStylistPreferenceStep", error);
     return { success: false, error: "保存に失敗しました。もう一度お試しください。" };
   }
 

@@ -119,7 +119,6 @@ export async function updateSession(request: NextRequest) {
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   );
   if (requiresAuth && !user) {
-    console.log("[MW] requiresAuth redirect to /login", { pathname, hasUser: !!user });
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
@@ -156,7 +155,6 @@ export async function updateSession(request: NextRequest) {
     if (isStylistOnlyPath) {
       const hasSalon = await hasCompletedRole(supabase, user.id, "salon");
       if (hasSalon) {
-        console.log("[MW] salon-role user blocked from stylist-only path", { pathname, userId: user.id });
         const url = request.nextUrl.clone();
         url.pathname = "/salon/mypage";
         url.search = "";
@@ -167,7 +165,6 @@ export async function updateSession(request: NextRequest) {
     if (isSalonOnlyPath) {
       const hasStylist = await hasCompletedRole(supabase, user.id, "stylist");
       if (hasStylist) {
-        console.log("[MW] stylist-role user blocked from salon-only path", { pathname, userId: user.id });
         const url = request.nextUrl.clone();
         url.pathname = "/stylist/mypage";
         url.search = "";
@@ -182,7 +179,6 @@ export async function updateSession(request: NextRequest) {
     COMPANY_LEVEL_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
     !(await hasCompanyLevelRole(supabase, user.id))
   ) {
-    console.log("[MW] store-level user blocked from company-level path", { pathname, userId: user.id });
     const url = request.nextUrl.clone();
     url.pathname = "/salon/company";
     url.search = "";
@@ -194,7 +190,6 @@ export async function updateSession(request: NextRequest) {
     COMPANY_BILLING_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
     !(await canViewCompanyBilling(supabase, user.id))
   ) {
-    console.log("[MW] non-owner/admin blocked from billing path", { pathname, userId: user.id });
     const url = request.nextUrl.clone();
     url.pathname = "/salon/company";
     url.search = "";
@@ -202,7 +197,6 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (GUEST_ONLY_PATHS.includes(pathname) && user) {
-    console.log("[MW] guest-only redirect to /", { pathname, userId: user.id });
     const url = request.nextUrl.clone();
     url.pathname = "/";
     url.search = "";
@@ -221,7 +215,6 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
     if (await hasCompletedRole(supabase, user.id, "salon")) {
-      console.log("[MW] salon-role user blocked from /onboarding (stylist)", { userId: user.id });
       const url = request.nextUrl.clone();
       url.pathname = "/salon/mypage";
       url.search = "";
@@ -237,7 +230,6 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
     if (await hasCompletedRole(supabase, user.id, "stylist")) {
-      console.log("[MW] stylist-role user blocked from /onboarding/salon", { userId: user.id });
       const url = request.nextUrl.clone();
       url.pathname = "/stylist/mypage";
       url.search = "";

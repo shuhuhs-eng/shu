@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { SALON_PHOTO_SIGNED_URL_EXPIRES_IN } from "@/lib/salon-photos/constants";
 import type { Database, SalonPhotoCategory } from "@/types/database";
+import { logError } from "@/lib/security/log";
 
 type SalonPhotoRow = Database["public"]["Tables"]["salon_photos"]["Row"];
 
@@ -38,7 +39,7 @@ export async function getSalonPhotosWithSignedUrls(): Promise<{
     .order("sort_order", { ascending: true });
 
   if (error) {
-    console.error("[getSalonPhotosWithSignedUrls] fetch failed", error);
+    logError("getSalonPhotosWithSignedUrls", error);
     return null;
   }
 
@@ -129,7 +130,7 @@ export async function addSalonPhotoAction(
   });
 
   if (error || !created) {
-    console.error("[addSalonPhotoAction] add_salon_photo RPC failed", error);
+    logError("addSalonPhotoAction", error);
     // ★DB登録に失敗した場合、アップロード済みのStorageオブジェクトを削除し
     // 孤児ファイルを残さない。
     await supabase.storage.from("salon-photos").remove([storagePath]);
@@ -177,14 +178,14 @@ export async function deleteSalonPhotoAction(
   // ①Storage object削除
   const { error: storageErr } = await supabase.storage.from("salon-photos").remove([storagePath]);
   if (storageErr) {
-    console.error("[deleteSalonPhotoAction] storage remove failed", storageErr);
+    logError("deleteSalonPhotoAction.storage", storageErr);
     return { success: false, error: "画像の削除に失敗しました。もう一度お試しください。" };
   }
 
   // ②Storage削除が成功した場合のみDB行を削除する。
   const { error: dbErr } = await supabase.rpc("delete_salon_photo", { p_photo_id: photoId });
   if (dbErr) {
-    console.error("[deleteSalonPhotoAction] delete_salon_photo RPC failed", dbErr);
+    logError("deleteSalonPhotoAction.rpc", dbErr);
     return {
       success: false,
       error: "画像データの削除に失敗しました。画面を更新してもう一度お試しください。",

@@ -7,6 +7,7 @@ import {
   type SalonCultureStepInput,
 } from "@/lib/validation/salon-culture";
 import type { Database } from "@/types/database";
+import { logError } from "@/lib/security/log";
 
 type SalonStoreCultureProfileRow = Database["public"]["Tables"]["salon_store_culture_profiles"]["Row"];
 
@@ -57,15 +58,7 @@ export async function saveSalonStoreCultureStep(
   });
 
   if (error || !data) {
-    console.error("[saveSalonStoreCultureStep] RPC failed", {
-      message: error?.message,
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
-      storeId,
-      status: v.status,
-      currentStep: v.currentStep,
-    });
+    logError("saveSalonStoreCultureStep", error);
     return { success: false, error: "保存に失敗しました。もう一度お試しください。" };
   }
 

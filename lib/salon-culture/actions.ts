@@ -9,6 +9,7 @@ import {
 } from "@/lib/validation/salon-culture";
 import { runSalonCultureAiGenerationJob } from "@/lib/salon-culture/run-culture-ai-job";
 import type { Database } from "@/types/database";
+import { logError } from "@/lib/security/log";
 
 type SalonCultureProfileRow = Database["public"]["Tables"]["salon_culture_profiles"]["Row"];
 
@@ -54,14 +55,7 @@ export async function saveSalonCultureStep(input: SalonCultureStepInput): Promis
     // ★診断用ログ: PostgrestErrorの各フィールドを明示的に出力する
     // （console.error(error)だけだとNode側でオブジェクトの詳細が
     // 省略され、code/details/hintが見えないことがあるため）。
-    console.error("[saveSalonCultureStep] RPC failed", {
-      message: error?.message,
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
-      status: v.status,
-      currentStep: v.currentStep,
-    });
+    logError("saveSalonCultureStep", error);
     return { success: false, error: "保存に失敗しました。もう一度お試しください。" };
   }
 

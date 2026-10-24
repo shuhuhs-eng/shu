@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import type { EvidenceType } from "@/lib/match-profile/evidence-options";
 import type { Database } from "@/types/database";
+import { logError } from "@/lib/security/log";
 
 type EvidenceRow = Database["public"]["Tables"]["stylist_evidence_documents"]["Row"];
 
@@ -49,6 +50,6 @@ export async function deleteEvidenceDocument(documentId: string, storagePath: st
     return { success: false, error: "資料を削除できませんでした。" };
   }
   const { error: storageError } = await supabase.storage.from("stylist-evidence").remove([registeredPath]);
-  if (storageError) console.error("[deleteEvidenceDocument] storage cleanup failed", storageError);
+  if (storageError) logError("deleteEvidenceDocument.storage", storageError);
   return { success: true };
 }

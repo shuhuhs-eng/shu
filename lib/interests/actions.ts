@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { RECRUITING_PAUSED_MESSAGE, isRecruitingPausedError } from "@/lib/contracts/recruiting-access";
+import { logError } from "@/lib/security/log";
 
 const salonUserIdSchema = z.string().uuid();
 
@@ -22,11 +23,7 @@ export async function setSalonInterestAction(
   });
 
   if (error) {
-    console.error("[setSalonInterestAction] RPC failed", {
-      message: error.message,
-      code: error.code,
-      salonUserId: parsedSalonUserId.data,
-    });
+    logError("setSalonInterestAction", error);
     return;
   }
 
@@ -57,11 +54,7 @@ export async function setStoreInterestAction(
   });
 
   if (error) {
-    console.error("[setStoreInterestAction] RPC failed", {
-      message: error.message,
-      code: error.code,
-      storeId: parsedStoreId.data,
-    });
+    logError("setStoreInterestAction", error);
     // 新規の「話を聞いてみたい」は停止中の店舗には送れない（既に送信済みの再送・取り消しは影響なし）。
     if (isRecruitingPausedError(error.message)) {
       return { success: false, error: RECRUITING_PAUSED_MESSAGE };

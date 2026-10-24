@@ -12,6 +12,7 @@ import { SalonOfferForm } from "@/components/salary-offers/salon-offer-form";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { getNotificationsForBell, getUnreadNotificationRefs } from "@/lib/notifications/get-notifications";
 import { CardNotificationBadge } from "@/components/notifications/card-notification-badge";
+import { logError } from "@/lib/security/log";
 
 type SalonCultureAiOutputRow = Database["public"]["Tables"]["salon_culture_ai_outputs"]["Row"];
 type ReceivedInterest = Database["public"]["Functions"]["get_received_salon_interests"]["Returns"][number];
@@ -97,10 +98,7 @@ export default async function SalonMyPage() {
     "get_received_salon_interests",
   );
   if (interestsError) {
-    console.error("[SalonMyPage] get_received_salon_interests failed", {
-      message: interestsError.message,
-      code: interestsError.code,
-    });
+    logError("SalonMyPage", interestsError);
   }
   const interests: ReceivedInterest[] = receivedInterests ?? [];
   const { data: salaryOffers } = await supabase.from("salary_offers").select("*").eq("salon_user_id", user.id).order("created_at", { ascending: false });

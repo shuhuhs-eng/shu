@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { salonStoreProfileFormSchema } from "@/lib/validation/salon-store-profile";
 import type { AuthActionState } from "@/lib/auth/types";
+import { logError } from "@/lib/security/log";
 
 /**
  * 店舗単位プロフィール保存（法人・複数店舗対応 Phase 3B）。
@@ -62,11 +63,7 @@ export async function saveSalonStoreProfileAction(
   });
 
   if (error) {
-    console.error("[saveSalonStoreProfileAction] RPC failed", {
-      message: error.message,
-      code: error.code,
-      storeId,
-    });
+    logError("saveSalonStoreProfileAction", error);
     return { error: "保存に失敗しました。しばらくしてから再度お試しください。" };
   }
 

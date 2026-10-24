@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/security/log";
 
 const salonUserIdSchema = z.string().uuid();
 
@@ -21,11 +22,7 @@ export async function setFavoriteSalonAction(
   });
 
   if (error) {
-    console.error("[setFavoriteSalonAction] RPC failed", {
-      message: error.message,
-      code: error.code,
-      salonUserId: parsedSalonUserId.data,
-    });
+    logError("setFavoriteSalonAction", error);
     return;
   }
 

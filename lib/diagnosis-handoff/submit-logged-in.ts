@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { computeDiagnosis, isValidAnswers, type DiagnosisMode } from "@/lib/diagnosis";
 import { runAiGenerationJob } from "@/lib/diagnosis-handoff/claim";
+import { logError } from "@/lib/security/log";
 
 export type SubmitLoggedInResult =
   | { success: true; diagnosisResultId: string }
@@ -99,7 +100,7 @@ export async function submitDiagnosisForLoggedInUser(
     .single();
 
   if (insertResult.error || !insertResult.data) {
-    console.error("submitDiagnosisForLoggedInUser: failed to insert diagnosis_results", insertResult.error);
+    logError("submitDiagnosis.insert", insertResult.error);
     return { success: false, error: "save_failed" };
   }
 
@@ -113,7 +114,7 @@ export async function submitDiagnosisForLoggedInUser(
       p_diagnosis_result_id: diagnosisResultId,
     });
     if (coreTypeError) {
-      console.error("submitDiagnosisForLoggedInUser: save_core_type_result failed", coreTypeError);
+      logError("submitDiagnosis.coreType", coreTypeError);
     }
   }
 
