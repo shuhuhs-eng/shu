@@ -6,6 +6,20 @@ const nextConfig = {
   serverExternalPackages: ["subset-font", "harfbuzzjs", "fontverter"],
   // 請求書PDFの日本語フォント（npmパッケージ。Gitには入れていない）を、
   // PDFを作る（運営者の発行操作が動く）ルートの実行環境へ含める。
+  // 基本のセキュリティヘッダ（CSPは影響が大きいため、本番公開前の検証で別途検討する）。
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
+  },
   outputFileTracingIncludes: {
     "/admin/**": ["./node_modules/@expo-google-fonts/noto-sans-jp/400Regular/NotoSansJP_400Regular.ttf", "./node_modules/@expo-google-fonts/noto-sans-jp/700Bold/NotoSansJP_700Bold.ttf"],
   },
