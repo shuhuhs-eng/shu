@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAdminSuccessFees } from "@/lib/billing/actions";
+import { countPaymentStates, paymentState } from "@/lib/billing/payment";
 import { getAdminInvoiceDocuments } from "@/lib/invoices/actions";
 import { SuccessFeeCard } from "@/components/admin/success-fee-card";
 
@@ -25,13 +26,20 @@ export default async function AdminSuccessFeesPage({ searchParams }: Props) {
   const documents = await getAdminInvoiceDocuments();
   const documentByFee = new Map((documents ?? []).map((d) => [d.success_fee_id, d.document_id]));
 
-  // 要確認の絞り込み：基準額と請求額が異なる／基準額が未記録（異常と断定するものではない）。
+  // 絞り込み。入金状況（請求前／未入金／期限超過／入金済み）は、請求済み＋支払期限から導出する（DBには保存しない）。
+  const pay = countPaymentStates(fees);
   const scoped =
     view === "diff"
       ? fees.filter((f) => f.contract_success_fee_amount !== null && f.fee_amount !== null && f.fee_amount !== f.contract_success_fee_amount)
       : view === "unrecorded"
         ? fees.filter((f) => f.contract_success_fee_amount === null)
-        : fees;
+        : view === "pre_invoice" || view === "unpaid" || view === "overdue" || view === "paid"
+          ? fees.filter((f) => {
+              const st = paymentState(f);
+              // 「未入金」は期限超過も含める（期限内の未入金＋期限超過）。
+              return view === "unpaid" ? st === "unpaid" || st === "overdue" : st === view;
+            })
+          : fees;
   const open = scoped.filter((f) => ["pending_confirmation", "confirmed", "invoiced"].includes(f.fee_status));
   const closed = scoped.filter((f) => !open.includes(f));
 
@@ -52,6 +60,10 @@ export default async function AdminSuccessFeesPage({ searchParams }: Props) {
       <nav className="mt-4 flex flex-wrap gap-2" aria-label="絞り込み">
         {[
           { key: "all", label: "すべて", href: "/admin/success-fees" },
+          { key: "pre_invoice", label: `請求前（${pay.pre_invoice}）`, href: "/admin/success-fees?view=pre_invoice" },
+          { key: "unpaid", label: `未入金（${pay.unpaid + pay.overdue}）`, href: "/admin/success-fees?view=unpaid" },
+          { key: "overdue", label: `支払期限超過（${pay.overdue}）`, href: "/admin/success-fees?view=overdue" },
+          { key: "paid", label: `入金済み（${pay.paid}）`, href: "/admin/success-fees?view=paid" },
           { key: "diff", label: "基準額と請求額が異なる", href: "/admin/success-fees?view=diff" },
           { key: "unrecorded", label: "契約基準額が未記録", href: "/admin/success-fees?view=unrecorded" },
         ].map((f) => (

@@ -5,6 +5,8 @@ import { getAdminOrganizationOverview, getAdminSuccessFees, getBillingIntegrityI
 import { formatYen } from "@/lib/billing/format";
 import { countSeverities } from "@/lib/billing/integrity";
 import { summarizeFees } from "@/lib/billing/summary";
+import { countPaymentStates } from "@/lib/billing/payment";
+import { getAdminInvoiceDocuments } from "@/lib/invoices/actions";
 import { getAdminOrganizationContracts } from "@/lib/contracts/actions";
 
 /**
@@ -19,11 +21,12 @@ export default async function AdminDashboardPage() {
   const { data: isAdmin } = await supabase.rpc("is_platform_admin");
   if (!isAdmin) redirect("/mypage");
 
-  const [fees, issues, orgs, contracts] = await Promise.all([
+  const [fees, issues, orgs, contracts, documents] = await Promise.all([
     getAdminSuccessFees(),
     getBillingIntegrityIssues(),
     getAdminOrganizationOverview(),
     getAdminOrganizationContracts(),
+    getAdminInvoiceDocuments(),
   ]);
   // 契約まわりの「要確認」の件数（異常と断定するものではなく、確認の目安）。
   const contractChecks = contracts
@@ -51,6 +54,30 @@ export default async function AdminDashboardPage() {
     : null;
   const integrity = issues ? countSeverities(issues) : null;
   const summary = fees ? summarizeFees(fees) : null;
+
+  const payStates = fees ? countPaymentStates(fees) : null;
+  // 発行済みの請求書PDFが無い、0045以降の請求（旧請求データは対象外）。取得できなければ判断しない。
+  const withoutPdf = fees && documents
+    ? (() => {
+        const issued = new Set(documents.map((d) => d.success_fee_id));
+        return fees.filter((f) => (f.fee_status === "invoiced" || f.fee_status === "paid") && f.invoice_number !== null && !issued.has(f.fee_id)).length;
+      })()
+    : null;
+  const daily: Array<{ label: string; value: number; href: string; alert?: boolean }> | null =
+    summary && payStates && integrity && withoutPdf !== null
+      ? [
+          { label: "成功報酬の確認待ち", value: summary.counts.pending_confirmation, href: "/admin/success-fees?view=pre_invoice" },
+          { label: "請求待ち（金額確定済み）", value: summary.counts.confirmed, href: "/admin/success-fees?view=pre_invoice" },
+          { label: "請求書PDFが未発行", value: withoutPdf, href: "/admin/success-fees" },
+          { label: "未入金", value: payStates.unpaid + payStates.overdue, href: "/admin/success-fees?view=unpaid" },
+          { label: "支払期限超過", value: payStates.overdue, href: "/admin/success-fees?view=overdue", alert: true },
+          { label: "整合性の異常", value: integrity.total, href: "/admin/integrity", alert: true },
+          ...(contracts
+            ? [{ label: "契約が停止中の会社", value: contracts.filter((o) => o.contract?.contract_status === "suspended").length, href: "/admin/contracts?filter=suspended" }]
+            : []),
+          { label: "採用成立（累計）", value: summary.hiredCount, href: "/admin/success-fees" },
+        ]
+      : null;
 
   const countCards: Array<{ label: string; value: number }> = summary
     ? [
@@ -102,20 +129,17 @@ export default async function AdminDashboardPage() {
       )}
 
       <section className="mt-8">
-        <p className="eyebrow mb-3">運営の監視</p>
-        {summary === null || integrity === null ? (
-          <p className="rounded-lg bg-[#C24545]/10 px-3 py-2 text-[12px] text-[#8A2E2E]">監視に必要な情報を取得できませんでした。</p>
+        <p className="eyebrow mb-1">毎日の確認</p>
+        <p className="mb-3 text-[11.5px] leading-relaxed text-sub">対応が必要な件数です。押すと該当の一覧へ移動します。</p>
+        {daily === null ? (
+          <p className="rounded-lg bg-[#C24545]/10 px-3 py-2 text-[12px] text-[#8A2E2E]">確認に必要な情報を取得できませんでした。時間をおいて再度お試しください。</p>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              { label: "採用成立", value: `${summary.hiredCount}件`, href: "/admin/success-fees" },
-              { label: "成功報酬が未確定", value: `${summary.counts.pending_confirmation}件`, href: "/admin/success-fees" },
-              { label: "請求済み・未入金", value: `${summary.counts.invoiced}件`, href: "/admin/success-fees" },
-              { label: "整合性の異常", value: `${integrity.total}件`, href: "/admin/integrity" },
-            ].map((m) => (
-              <Link key={m.label} href={m.href} className="rounded-2xl border border-line bg-surface p-4">
+            {daily.map((m) => (
+              <Link key={m.label} href={m.href}
+                className={`rounded-2xl border p-4 ${m.alert && m.value > 0 ? "border-[#C24545]/40 bg-[#C24545]/5" : "border-line bg-surface"}`}>
                 <p className="text-[11px] text-sub">{m.label}</p>
-                <p className="mt-1 font-serif text-[22px] font-bold text-ink">{m.value}</p>
+                <p className={`mt-1 font-serif text-[22px] font-bold ${m.alert && m.value > 0 ? "text-[#8A2E2E]" : "text-ink"}`}>{m.value}件</p>
               </Link>
             ))}
           </div>

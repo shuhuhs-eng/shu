@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { adminUpdateSuccessFeeAction } from "@/lib/billing/actions";
-import { availableFeeActions, feeStatusLabel, formatDueDate, jstToday, parseYenInput, standardDueDate } from "@/lib/billing/format";
+import { availableFeeActions, feeStatusLabel, formatDueDate, formatYen, isLegacyInvoice, jstToday, parseYenInput, standardDueDate } from "@/lib/billing/format";
 import type { AdminSuccessFee, SuccessFeeAction } from "@/lib/billing/types";
 import { BaselineSummary } from "@/components/contracts/baseline-summary";
 import { InvoiceSummary } from "@/components/billing/invoice-summary";
+import { overdueDays, paymentState, PAYMENT_STATE_CLASSES, PAYMENT_STATE_LABELS } from "@/lib/billing/payment";
 import { InvoicePdfPanel } from "@/components/admin/invoice-pdf-panel";
 
 function fmtDate(iso: string | null): string {
@@ -20,6 +21,7 @@ export function SuccessFeeCard({ fee, documentId }: { fee: AdminSuccessFee; docu
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  const pay = paymentState(fee);
   const actions = availableFeeActions(fee.fee_status);
   const canEditAmount = actions.includes("confirm");
   const needsReason = (a: SuccessFeeAction) => a === "waive" || a === "cancel";
@@ -46,7 +48,11 @@ export function SuccessFeeCard({ fee, documentId }: { fee: AdminSuccessFee; docu
     }
     const label = { confirm: "金額を確定", invoice: "請求済みに変更", paid: "入金済みに変更", waive: "免除", cancel: "取消" }[action];
     const dueText = action === "invoice" ? `\n支払期限：${formatDueDate(dueDate ?? standardDueDate(jstToday()))}` : "";
-    if (!window.confirm(`${label}します。よろしいですか？${dueText}`)) return;
+    // 入金済みは取り消せない操作なので、請求書番号・会社・請求額・支払期限を見せて確認する。
+    const paidText = action === "paid"
+      ? `\n\n会社：${fee.organization_name ?? "—"}\n請求書番号：${fee.invoice_number ?? "旧請求データ（番号なし）"}\n請求額（税込）：${formatYen(fee.total_amount)}\n支払期限：${formatDueDate(fee.due_date)}\n\n銀行口座で入金を確認できた場合のみ実行してください。`
+      : "";
+    if (!window.confirm(`${label}します。よろしいですか？${dueText}${paidText}`)) return;
     setBusy(true);
     const result = await adminUpdateSuccessFeeAction({
       feeId: fee.fee_id,
@@ -75,7 +81,14 @@ export function SuccessFeeCard({ fee, documentId }: { fee: AdminSuccessFee; docu
           <h2 className="mt-1 font-serif text-lg font-bold text-ink">{fee.stylist_name ?? "美容師"}</h2>
           <p className="mt-1 text-[11px] text-sub">採用成立日 {fmtDate(fee.hired_at)}</p>
         </div>
-        <span className="shrink-0 rounded-full bg-surface2 px-3 py-1 text-[11px] font-semibold text-sub">{feeStatusLabel(fee.fee_status)}</span>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span className="rounded-full bg-surface2 px-3 py-1 text-[11px] font-semibold text-sub">{feeStatusLabel(fee.fee_status)}</span>
+          {(pay === "unpaid" || pay === "overdue") && (
+            <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${PAYMENT_STATE_CLASSES[pay]}`}>
+              {PAYMENT_STATE_LABELS[pay]}{pay === "overdue" ? `（${overdueDays(fee.due_date)}日）` : ""}
+            </span>
+          )}
+        </div>
       </div>
 
       <BaselineSummary
@@ -98,6 +111,9 @@ export function SuccessFeeCard({ fee, documentId }: { fee: AdminSuccessFee; docu
       {/* 0045以降に請求された請求書だけPDFを扱う。旧請求データ（番号なし）にはボタンを出さない。 */}
       {(fee.fee_status === "invoiced" || fee.fee_status === "paid") && fee.invoice_number !== null && (
         <InvoicePdfPanel feeId={fee.fee_id} documentId={documentId} />
+      )}
+      {isLegacyInvoice(fee.fee_status, fee.invoice_number) && (
+        <p className="mt-3 rounded-lg bg-surface2 px-3 py-2 text-[11.5px] leading-relaxed text-sub">旧請求データのため、請求書PDFは発行できません。</p>
       )}
       <dl className="mt-3 grid grid-cols-5 gap-2 text-[10.5px] text-sub">
         <div><dt>確定日</dt><dd className="text-charcoal">{fmtDate(fee.confirmed_at)}</dd></div>

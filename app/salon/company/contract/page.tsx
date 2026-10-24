@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { CompanyBillingNav } from "@/components/billing/company-billing-nav";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { canViewCompanyBilling } from "@/lib/billing/permissions";
@@ -26,6 +27,7 @@ export default async function CompanyContractPage() {
     <main className="mx-auto max-w-[760px] px-5 py-12">
       <div className="mb-7 flex items-center gap-2.5"><span className="eyebrow">Beauty Reach</span><hr className="h-px flex-1 border-0 bg-line" /></div>
       <Link href="/salon/company" className="text-[13px] font-semibold text-sub underline">← 会社ダッシュボードに戻る</Link>
+      <CompanyBillingNav current="/salon/company/contract" />
       <p className="eyebrow mb-2 mt-5">契約内容</p>
       <h1 className="font-serif text-2xl font-bold text-ink">ご契約の内容</h1>
       <p className="mt-3 text-[13px] leading-relaxed text-charcoal">
