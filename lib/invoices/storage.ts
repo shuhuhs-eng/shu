@@ -1,3 +1,4 @@
+import "server-only";
 import { createHash } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -17,7 +18,7 @@ export async function ensureInvoiceBucket(): Promise<boolean> {
   const admin = createServiceClient();
   const { data: bucket } = await admin.storage.getBucket(INVOICE_BUCKET);
   if (!bucket) {
-    const { error } = await admin.storage.createBucket(INVOICE_BUCKET, { public: false });
+    const { error } = await admin.storage.createBucket(INVOICE_BUCKET, { public: false, fileSizeLimit: 5 * 1024 * 1024, allowedMimeTypes: ["application/pdf"] });
     if (error && !/already exists/i.test(error.message)) {
       console.error("[ensureInvoiceBucket] create failed", { message: error.message });
       return false;

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 
 /**
@@ -20,7 +21,10 @@ export async function POST(request: Request) {
   }
 
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${secret}`) {
+  // 定数時間で比較する（長さが違う場合は不一致）。
+  const expected = Buffer.from(`Bearer ${secret}`);
+  const given = Buffer.from(authHeader ?? "");
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
