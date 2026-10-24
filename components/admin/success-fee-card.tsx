@@ -6,13 +6,14 @@ import { availableFeeActions, feeStatusLabel, formatDueDate, jstToday, parseYenI
 import type { AdminSuccessFee, SuccessFeeAction } from "@/lib/billing/types";
 import { BaselineSummary } from "@/components/contracts/baseline-summary";
 import { InvoiceSummary } from "@/components/billing/invoice-summary";
+import { InvoicePdfPanel } from "@/components/admin/invoice-pdf-panel";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "numeric", day: "numeric" });
 }
 
-export function SuccessFeeCard({ fee }: { fee: AdminSuccessFee }) {
+export function SuccessFeeCard({ fee, documentId }: { fee: AdminSuccessFee; documentId: string | null }) {
   const [feeInput, setFeeInput] = useState(fee.fee_amount === null ? "" : String(fee.fee_amount));
   const [customDue, setCustomDue] = useState("");
   const [note, setNote] = useState("");
@@ -94,6 +95,10 @@ export function SuccessFeeCard({ fee }: { fee: AdminSuccessFee }) {
         taxAmount={fee.tax_amount}
         totalAmount={fee.total_amount}
       />
+      {/* 0045以降に請求された請求書だけPDFを扱う。旧請求データ（番号なし）にはボタンを出さない。 */}
+      {(fee.fee_status === "invoiced" || fee.fee_status === "paid") && fee.invoice_number !== null && (
+        <InvoicePdfPanel feeId={fee.fee_id} documentId={documentId} />
+      )}
       <dl className="mt-3 grid grid-cols-5 gap-2 text-[10.5px] text-sub">
         <div><dt>確定日</dt><dd className="text-charcoal">{fmtDate(fee.confirmed_at)}</dd></div>
         <div><dt>請求日</dt><dd className="text-charcoal">{fmtDate(fee.invoiced_at)}</dd></div>

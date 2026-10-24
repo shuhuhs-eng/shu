@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { canViewCompanyBilling } from "@/lib/billing/permissions";
 import { getCompanySuccessFees } from "@/lib/billing/actions";
+import { getCompanyInvoiceDocuments } from "@/lib/invoices/actions";
 import { feeStatusLabel, formatYen } from "@/lib/billing/format";
 import { summarizeFees } from "@/lib/billing/summary";
 import { BaselineSummary } from "@/components/contracts/baseline-summary";
@@ -31,6 +32,9 @@ export default async function CompanyBillingPage() {
 
   const fees = await getCompanySuccessFees();
   const summary = fees ? summarizeFees(fees) : null;
+  // 発行済みの請求書PDF（保存先・hashは返らない）。取得できない場合は案内だけ出す。
+  const documents = await getCompanyInvoiceDocuments();
+  const documentByFee = new Map((documents ?? []).map((d) => [d.success_fee_id, d.document_id]));
 
   return (
     <main className="mx-auto max-w-[760px] px-5 py-12">
@@ -40,6 +44,10 @@ export default async function CompanyBillingPage() {
       <h1 className="font-serif text-2xl font-bold text-ink">採用に伴う請求の状況</h1>
       <p className="mt-3 text-[13px] leading-relaxed text-charcoal">
         採用が成立した件ごとの請求状況です。内容は運営が確認のうえ確定します。この画面から内容を変更することはできません。
+      </p>
+
+      <p className="mt-3 text-[12px]">
+        <Link href="/salon/company/billing-profile" className="font-semibold text-ink underline">請求書の宛名・住所（請求先）を設定する</Link>
       </p>
 
       {fees === null || summary === null ? (
@@ -95,6 +103,17 @@ export default async function CompanyBillingPage() {
                   taxAmount={f.tax_amount}
                   totalAmount={f.total_amount}
                 />
+                {/* 0045以降に請求された請求書だけ。旧請求データ（番号なし）にはPDFの表示を出さない。 */}
+                {(f.fee_status === "invoiced" || f.fee_status === "paid") && f.invoice_number !== null && (
+                  documentByFee.has(f.fee_id) ? (
+                    <p className="mt-3">
+                      <a href={`/api/invoices/${documentByFee.get(f.fee_id)}/pdf?download=1`}
+                        className="inline-block rounded-full bg-[#285B45] px-4 py-2 text-[12px] font-bold text-white">請求書PDFをダウンロード</a>
+                    </p>
+                  ) : (
+                    <p className="mt-3 text-[11.5px] text-sub">請求書PDFは準備中です。発行されるとここからダウンロードできます。</p>
+                  )
+                )}
                 <dl className="mt-3 grid grid-cols-3 gap-2 text-[10.5px] text-sub">
                   <div><dt>請求確定日</dt><dd className="text-charcoal">{fmtDate(f.confirmed_at)}</dd></div>
                   <div><dt>請求日</dt><dd className="text-charcoal">{fmtDate(f.invoiced_at)}</dd></div>

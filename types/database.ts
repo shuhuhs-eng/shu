@@ -1143,6 +1143,18 @@ export type Database = {
           contract_status: string | null; success_fee_amount: number | null; monthly_fee: number | null;
         };
       };
+      // ---- 0046（請求書PDFの基盤）。戻り値はjsonbのため Json で受け、アプリ側でzod検証する。 ----
+      get_admin_billing_issuer_settings: { Args: Record<string, never>; Returns: Json };
+      admin_update_billing_issuer_settings: { Args: { p_changes: Json; p_reason?: string | null }; Returns: Json };
+      get_organization_billing_profile: { Args: { p_organization_id: string }; Returns: Json };
+      update_organization_billing_profile: { Args: { p_organization_id: string; p_changes: Json }; Returns: Json };
+      get_invoice_issue_readiness: { Args: { p_success_fee_id: string }; Returns: Json };
+      prepare_invoice_document: { Args: { p_success_fee_id: string }; Returns: Json };
+      register_invoice_document: { Args: { p_success_fee_id: string; p_snapshot_digest: string; p_file_sha256: string }; Returns: Json };
+      get_admin_invoice_documents: { Args: { p_organization_id?: string | null }; Returns: Json };
+      get_admin_invoice_document: { Args: { p_document_id: string }; Returns: Json };
+      get_company_invoice_documents: { Args: { p_organization_id?: string | null }; Returns: Json };
+      authorize_invoice_document_download: { Args: { p_document_id: string }; Returns: Json };
       get_store_recruiting_access: {
         // 0044で追加。店舗スタッフのみ。契約status・金額は返さない。
         Args: { p_store_id: string };

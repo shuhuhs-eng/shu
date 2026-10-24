@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAdminSuccessFees } from "@/lib/billing/actions";
+import { getAdminInvoiceDocuments } from "@/lib/invoices/actions";
 import { SuccessFeeCard } from "@/components/admin/success-fee-card";
 
 /**
@@ -20,6 +21,9 @@ export default async function AdminSuccessFeesPage({ searchParams }: Props) {
 
   const fees = await getAdminSuccessFees();
   if (fees === null) throw new Error("成功報酬の一覧を取得できませんでした。");
+  // 発行済みの請求書PDF（取得できなかった場合は発行済みを判別できないため、操作を出さずに案内する）。
+  const documents = await getAdminInvoiceDocuments();
+  const documentByFee = new Map((documents ?? []).map((d) => [d.success_fee_id, d.document_id]));
 
   // 要確認の絞り込み：基準額と請求額が異なる／基準額が未記録（異常と断定するものではない）。
   const scoped =
@@ -37,8 +41,13 @@ export default async function AdminSuccessFeesPage({ searchParams }: Props) {
       <Link href="/admin" className="text-[13px] font-semibold text-sub underline">← 運営ダッシュボード</Link>
       <h1 className="mt-4 font-serif text-2xl font-bold text-ink">成功報酬の管理</h1>
       <p className="mt-2 text-[12.5px] leading-relaxed text-sub">
-        採用が成立すると自動で「請求確認中」の記録ができます。金額・税額は契約内容に従って入力してください（整数円）。免除・取消には理由が必要です。ここでは請求書の発行や決済は行いません。
+        採用が成立すると自動で「請求確認中」の記録ができます。金額・税額は契約内容に従って入力してください（整数円）。免除・取消には理由が必要です。請求済みの請求書は、ここから請求書PDFを発行できます（決済は行いません）。
       </p>
+
+      {documents === null && (
+        <p className="mt-4 rounded-lg bg-[#C24545]/10 px-3 py-2 text-[12px] text-[#8A2E2E]">発行済みの請求書を取得できませんでした。請求書PDFの発行は、画面を更新してから行ってください。</p>
+      )}
+      <p className="mt-3 text-[12px]"><Link href="/admin/issuer-settings" className="font-semibold text-ink underline">請求書の発行事業者・振込先を設定する</Link></p>
 
       <nav className="mt-4 flex flex-wrap gap-2" aria-label="絞り込み">
         {[
@@ -55,13 +64,13 @@ export default async function AdminSuccessFeesPage({ searchParams }: Props) {
 
       <h2 className="mt-8 font-serif text-base font-bold text-ink">対応が必要・進行中（{open.length}件）</h2>
       <div className="mt-3 space-y-5">
-        {open.length > 0 ? open.map((f) => <SuccessFeeCard key={f.fee_id} fee={f} />) : <p className="rounded-2xl border border-line bg-surface p-8 text-center text-[13px] text-sub">対応が必要な成功報酬はありません。</p>}
+        {open.length > 0 ? open.map((f) => <SuccessFeeCard key={f.fee_id} fee={f} documentId={documentByFee.get(f.fee_id) ?? null} />) : <p className="rounded-2xl border border-line bg-surface p-8 text-center text-[13px] text-sub">対応が必要な成功報酬はありません。</p>}
       </div>
 
       {closed.length > 0 && (
         <>
           <h2 className="mt-10 font-serif text-base font-bold text-ink">完了・終了（{closed.length}件）</h2>
-          <div className="mt-3 space-y-5">{closed.map((f) => <SuccessFeeCard key={f.fee_id} fee={f} />)}</div>
+          <div className="mt-3 space-y-5">{closed.map((f) => <SuccessFeeCard key={f.fee_id} fee={f} documentId={documentByFee.get(f.fee_id) ?? null} />)}</div>
         </>
       )}
     </main>
