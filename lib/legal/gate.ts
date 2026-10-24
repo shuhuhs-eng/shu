@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { safeInternalPath } from "@/lib/auth/safe-path";
 
 /**
  * 規約・プライバシーポリシーへの同意ゲート（middlewareから使う）。
@@ -48,7 +49,9 @@ export async function checkLegalAcceptance(supabase: SupabaseClient<Database>): 
 
 /** 同意後の戻り先。アプリ内の絶対パスだけ許す（外部URLへの誘導を防ぐ）。 */
 export function safeNextPath(raw: string | null | undefined): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return "/";
+  const safe = safeInternalPath(raw);
+  if (!safe) return "/";
+  raw = safe;
   if (raw === "/legal/accept" || raw.startsWith("/legal/accept?") || raw.startsWith("/legal/unavailable")) return "/";
   return raw;
 }

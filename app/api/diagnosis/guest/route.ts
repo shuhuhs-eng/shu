@@ -34,9 +34,19 @@ export async function POST(request: Request) {
     );
   }
 
+  // 異常に大きなボディは読み込む前に拒否（診断回答は数KB以内）。
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > 32 * 1024) {
+    return NextResponse.json({ error: "payload_too_large" }, { status: 413 });
+  }
+
   let body: unknown;
   try {
-    body = await request.json();
+    const raw = await request.text();
+    if (raw.length > 32 * 1024) {
+      return NextResponse.json({ error: "payload_too_large" }, { status: 413 });
+    }
+    body = JSON.parse(raw);
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 import { issueInvoiceDocumentAction } from "@/lib/invoices/actions";
-import { needsIssuerSettings } from "@/lib/invoices/messages";
 
 type Props = {
   feeId: string;

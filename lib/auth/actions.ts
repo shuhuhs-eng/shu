@@ -3,6 +3,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSiteUrl } from "@/lib/site-url";
+import { headers } from "next/headers";
+import { checkRateLimit, getClientIpFromHeaders } from "@/lib/rate-limit/memory-rate-limiter";
+import { safeInternalPath } from "@/lib/auth/safe-path";
 import { mapAuthError } from "@/lib/auth/errors";
 import { determinePostAuthPath, determineRoleEntryPath } from "@/lib/auth/post-auth-redirect";
 import { claimPendingDiagnosisIfPresent } from "@/lib/diagnosis-handoff/claim";
@@ -14,12 +17,6 @@ import {
 } from "@/lib/validation/auth";
 import type { AuthActionState } from "@/lib/auth/types";
 
-/** "/" 始まり・"//" で始まらない内部パスのみ許可する（オープンリダイレクト対策）。 */
-function safeInternalPath(value: FormDataEntryValue | null): string | null {
-  if (typeof value !== "string") return null;
-  if (!value.startsWith("/") || value.startsWith("//")) return null;
-  return value;
-}
 
 // ---------------------------------------------------------------------------
 // 新規登録（stylist / salon 共通ヘルパー）
@@ -43,6 +40,18 @@ async function performSignUp(
   }
 
   const { displayName, email, password } = parsed.data;
+
+  // 大量アカウント作成の抑止（IP単位 1時間10件）。Supabase Auth 側の制限に加えた最低限の防御。
+  // ★インメモリ実装（複数インスタンスでは完全でない）。共有リミッタは販売開始後の改善項目。
+  const signupLimit = checkRateLimit(
+    `signup:${getClientIpFromHeaders(await headers())}`,
+    10,
+    60 * 60 * 1000,
+  );
+  if (!signupLimit.allowed) {
+    return { error: "短時間に登録操作が集中しています。しばらく待ってからお試しください。" };
+  }
+
   const supabase = await createClient();
 
   const { data, error } = await supabase.auth.signUp({
@@ -122,6 +131,17 @@ export async function signInAction(
   }
 
   const { email, password } = parsed.data;
+
+  // パスワード総当たりの抑止（IP単位 10分30回）。共有NAT（サロンの店内回線）を考慮して緩めに設定。
+  const loginLimit = checkRateLimit(
+    `login:${getClientIpFromHeaders(await headers())}`,
+    30,
+    10 * 60 * 1000,
+  );
+  if (!loginLimit.allowed) {
+    return { error: "ログイン試行が多すぎます。しばらく待ってからお試しください。" };
+  }
+
   const supabase = await createClient();
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -176,6 +196,16 @@ export async function requestPasswordResetAction(
       error: "入力内容をご確認ください。",
       fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
     };
+  }
+
+  // メール送信の乱用抑止（IP単位 1時間5回）。超過時も存在有無を示唆しない同一メッセージを返す。
+  const resetLimit = checkRateLimit(
+    `password-reset:${getClientIpFromHeaders(await headers())}`,
+    5,
+    60 * 60 * 1000,
+  );
+  if (!resetLimit.allowed) {
+    return { success: "再設定メールを送信しました。" };
   }
 
   const supabase = await createClient();

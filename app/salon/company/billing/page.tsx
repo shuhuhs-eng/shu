@@ -6,7 +6,7 @@ import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { canViewCompanyBilling } from "@/lib/billing/permissions";
 import { getCompanySuccessFees } from "@/lib/billing/actions";
 import { getCompanyInvoiceDocuments } from "@/lib/invoices/actions";
-import { feeStatusLabel, formatYen } from "@/lib/billing/format";
+import { feeStatusLabel } from "@/lib/billing/format";
 import { countPaymentStates, overdueDays, paymentState, PAYMENT_STATE_CLASSES, PAYMENT_STATE_LABELS } from "@/lib/billing/payment";
 import { summarizeFees } from "@/lib/billing/summary";
 import { BaselineSummary } from "@/components/contracts/baseline-summary";

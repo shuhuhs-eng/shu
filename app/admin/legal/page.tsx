@@ -69,7 +69,7 @@ export default async function AdminLegalPage() {
                   コードの本文が、公開済みの版 {doc.version} と異なっています。版を上げてから公開してください（公開済みの版は変更できません）。
                 </p>
               )}
-              {!same && <LegalPublishButton type={type} label={`${doc.title}（版 ${doc.version}）`} defaultDate={jstToday()} disabled={!operatorComplete} />}
+              {!same && <LegalPublishButton type={type} defaultDate={jstToday()} disabled={!operatorComplete} />}
               {same && !mismatch && <p className="mt-2 text-[12px] text-sub">この版は公開済みです。</p>}
 
               {rows.length > 0 && (

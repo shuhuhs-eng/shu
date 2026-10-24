@@ -1,5 +1,7 @@
 "use server";
 
+import { createHash } from "node:crypto";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -115,4 +117,33 @@ export async function publishLegalDocumentAction(input: { type: string; effectiv
   revalidatePath("/terms");
   revalidatePath("/privacy");
   return { success: true, message: "公開しました。施行日以降、ユーザーに同意を求めます。" };
+}
+
+export type LegalPublishPreview =
+  | { success: true; title: string; version: string; effectiveDate: string; hash: string }
+  | { success: false; error: string };
+
+/**
+ * 公開確認ダイアログ用：これから公開される本文のハッシュを事前に計算して返す（DB変更なし）。
+ * DBは保存本文のSHA-256（UTF-8）をcontent_hashとして保存するため、同じ計算で一致する。
+ * 運営者のみ。
+ */
+export async function previewLegalPublishAction(input: { type: string; effectiveDate: string }): Promise<LegalPublishPreview> {
+  const type = legalTypeSchema.safeParse(input.type);
+  if (!type.success || !/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveDate)) {
+    return { success: false, error: "入力内容を確認してください。" };
+  }
+  const supabase = await createClient();
+  const { data: isAdmin } = await supabase.rpc("is_platform_admin");
+  if (isAdmin !== true) return { success: false, error: "この操作は運営者のみ行えます。" };
+
+  const operator = getLegalOperatorInfo();
+  if (!isLegalOperatorInfoComplete(operator)) {
+    return { success: false, error: "運営者の名称・所在地・問い合わせ先の設定が未完了のため、公開できません。" };
+  }
+  const doc = LEGAL_DOCUMENTS[type.data];
+  const snapshot = buildLegalSnapshot(doc, operator, input.effectiveDate);
+  if (!snapshot) return { success: false, error: "公開する本文を作成できませんでした。" };
+  const hash = createHash("sha256").update(serializeLegalSnapshot(snapshot), "utf8").digest("hex");
+  return { success: true, title: doc.title, version: doc.version, effectiveDate: input.effectiveDate, hash };
 }

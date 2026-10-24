@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeInternalPath } from "@/lib/auth/safe-path";
 import { createClient } from "@/lib/supabase/server";
 import { determinePostAuthPath } from "@/lib/auth/post-auth-redirect";
 import { claimPendingDiagnosisIfPresent } from "@/lib/diagnosis-handoff/claim";
@@ -15,7 +16,7 @@ import { claimPendingDiagnosisIfPresent } from "@/lib/diagnosis-handoff/claim";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next");
+  const next = safeInternalPath(searchParams.get("next"));
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=invalid_callback`);
@@ -33,7 +34,7 @@ export async function GET(request: Request) {
   await claimPendingDiagnosisIfPresent();
 
   // パスワード再設定フローなど、行き先が明示されている場合はそちらを優先。
-  if (next && next.startsWith("/") && !next.startsWith("//")) {
+  if (next) {
     return NextResponse.redirect(`${origin}${next}`);
   }
 

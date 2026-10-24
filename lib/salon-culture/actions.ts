@@ -7,6 +7,7 @@ import {
   salonCultureCompletedSchema,
   type SalonCultureStepInput,
 } from "@/lib/validation/salon-culture";
+import { checkRateLimit } from "@/lib/rate-limit/memory-rate-limiter";
 import { runSalonCultureAiGenerationJob } from "@/lib/salon-culture/run-culture-ai-job";
 import type { Database } from "@/types/database";
 import { logError } from "@/lib/security/log";
@@ -77,7 +78,12 @@ export async function saveSalonCultureStep(input: SalonCultureStepInput): Promis
     } = await supabase.auth.getSession();
     const accessToken = session?.access_token ?? null;
 
-    if (accessToken) {
+    // AI生成は有料APIを呼ぶため、ユーザー単位で回数を制限する（1時間5回）。超過時は生成だけ省略（保存は成功扱い）。
+    const aiAllowed = checkRateLimit(`salon-culture-ai:${session?.user.id ?? "anon"}`, 5, 60 * 60 * 1000).allowed;
+
+    if (accessToken && !aiAllowed) {
+      // 生成をスキップ（保存済みデータには影響しない）
+    } else if (accessToken) {
       after(() => runSalonCultureAiGenerationJob(data, accessToken));
     } else {
       console.error("[saveSalonCultureStep] no access token available, skipping salon AI generation");
