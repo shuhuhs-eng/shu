@@ -79,6 +79,13 @@ export default function SignUpPage() {
             />
           </div>
         </PendingFieldset>
+        <p className="text-[12px] leading-relaxed text-sub">
+          ご登録後の最初のログインで、
+          <Link href="/terms" target="_blank" rel="noopener noreferrer" className="underline">利用規約</Link>
+          と
+          <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="underline">プライバシーポリシー</Link>
+          への同意をお願いしています。
+        </p>
         <SubmitButton pendingText="登録中...">登録する</SubmitButton>
       </form>
 

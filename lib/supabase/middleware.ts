@@ -4,10 +4,12 @@ import type { Database } from "@/types/database";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { hasCompanyLevelRole } from "@/lib/hiring/permissions";
 import { canViewCompanyBilling } from "@/lib/billing/permissions";
+import { checkLegalAcceptance, isLegalGatedPath, legalGateDecision } from "@/lib/legal/gate";
 
 /** ログイン必須のルート（本人のみ表示すべきページ）。前方一致で判定する。 */
 const AUTH_REQUIRED_PREFIXES = [
   "/onboarding",
+  "/legal/accept",
   "/update-password",
   // 旧URL（リダイレクトシム）。役割別新URLへ移行後も、直接アクセスされた
   // 場合の保護として残す。
@@ -123,6 +125,21 @@ export async function updateSession(request: NextRequest) {
     url.search = "";
     url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
+  }
+
+  // ★規約・プライバシーポリシーへの同意（fail-closed）。ログイン済みユーザーがサービス本体へ入る際、
+  // 現在の版に未同意なら同意画面へ、確認できなければ「確認できません」画面へ誘導する。
+  // 規約・ログイン・認証・同意画面・API・静的ファイルは対象外なのでループしない。
+  // 公開された版が無い間は同意不要（既存ユーザーを止めない）。
+  if (user && isLegalGatedPath(pathname)) {
+    const decision = legalGateDecision(pathname, await checkLegalAcceptance(supabase));
+    if (decision !== "allow") {
+      const url = request.nextUrl.clone();
+      url.pathname = decision === "accept" ? "/legal/accept" : "/legal/unavailable";
+      url.search = "";
+      url.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
+      return NextResponse.redirect(url);
+    }
   }
 
   // ★role別ルート制御（1 auth user = 1 role方針）。未ログインユーザーは

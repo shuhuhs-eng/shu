@@ -1155,6 +1155,16 @@ export type Database = {
       get_admin_invoice_document: { Args: { p_document_id: string }; Returns: Json };
       get_company_invoice_documents: { Args: { p_organization_id?: string | null }; Returns: Json };
       authorize_invoice_document_download: { Args: { p_document_id: string }; Returns: Json };
+      // ---- 0047（規約・プライバシーの同意記録）。jsonbはJsonで受け、アプリ側でzod検証する。 ----
+      get_current_legal_documents: { Args: Record<string, never>; Returns: Json };
+      get_my_legal_acceptance_status: { Args: Record<string, never>; Returns: Json };
+      accept_legal_documents: { Args: { p_documents: Json }; Returns: Json };
+      admin_publish_legal_document: {
+        Args: { p_document_type: string; p_version: string; p_title: string; p_content_snapshot: string; p_effective_at: string };
+        Returns: Json;
+      };
+      get_admin_legal_documents: { Args: Record<string, never>; Returns: Json };
+      get_admin_user_legal_acceptances: { Args: { p_user_id: string }; Returns: Json };
       get_store_recruiting_access: {
         // 0044で追加。店舗スタッフのみ。契約status・金額は返さない。
         Args: { p_store_id: string };

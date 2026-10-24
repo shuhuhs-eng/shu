@@ -8,6 +8,7 @@ const ITEMS = [
   { href: "/admin/issuer-settings", label: "請求書の発行事業者" },
   { href: "/admin/integrity", label: "整合性チェック" },
   { href: "/admin/evidence", label: "実績資料" },
+  { href: "/admin/legal", label: "規約・同意" },
 ] as const;
 
 /** 運営画面の共通ナビ（運営者だけに表示。layoutで権限を確認している）。 */
