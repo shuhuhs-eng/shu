@@ -324,7 +324,7 @@ test("静的検査: payment_method_types を指定するコードが無い（Str
   for (const s of sources) assert.ok(!/payment_method_types/.test(code(s.text)), s.p);
 });
 test("静的検査: Stripe秘密鍵/webhook secretは server 側ファイルだけが参照し、NEXT_PUBLICに置かない", () => {
-  const allowed = ["lib/stripe/client.ts", "lib/stripe/config.ts", "app/api/stripe/webhook/route.ts", "lib/env/validate.ts"];
+  const allowed = ["lib/stripe/client.ts", "lib/stripe/config.ts", "app/api/stripe/webhook/route.ts", "lib/env/validate.ts", "lib/stripe/readiness.ts"];
   for (const s of sources) {
     const t = code(s.text);
     assert.ok(!/NEXT_PUBLIC_STRIPE/.test(t), `${s.p}: NEXT_PUBLIC_STRIPE を使わない`);

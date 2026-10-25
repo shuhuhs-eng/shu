@@ -51,3 +51,10 @@ export function collectCharsWith(staticText: string, value: unknown): string {
   walk(value);
   return Array.from(set).join("");
 }
+
+/**
+ * Noto Sans JP は GSUB の locl が「ラテン文字・空白の後ろの半角数字」を別字形（cmapに無いグリフ）へ置換する。
+ * そのため `TEL 03-1234-5678` のような数字列が間隔の広い見た目になり、テキスト抽出でも数字が欠けていた。
+ * locl だけ無効にして標準の数字グリフを使う（日本語文字の表示には影響しない）。
+ */
+export const INVOICE_FONT_FEATURES = { locl: false } as unknown as Record<string, boolean>;

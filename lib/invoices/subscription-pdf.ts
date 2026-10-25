@@ -2,7 +2,7 @@ import subsetFont from "subset-font";
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { loadInvoiceFonts } from "./fonts";
-import { collectCharsWith, formatRate, jpDate, wrap, yen } from "./pdf-common";
+import { INVOICE_FONT_FEATURES, collectCharsWith, formatRate, jpDate, wrap, yen } from "./pdf-common";
 import type { PreparedSubscriptionInvoice } from "./subscription-types";
 
 /**
@@ -40,8 +40,8 @@ export async function renderSubscriptionInvoicePdf(prepared: PreparedSubscriptio
     subsetFont(Buffer.from(fonts.regular), chars, { targetFormat: "truetype" }),
     subsetFont(Buffer.from(fonts.bold), chars, { targetFormat: "truetype" }),
   ]);
-  const regular = await doc.embedFont(regularBytes, { subset: false });
-  const bold = await doc.embedFont(boldBytes, { subset: false });
+  const regular = await doc.embedFont(regularBytes, { subset: false, features: INVOICE_FONT_FEATURES });
+  const bold = await doc.embedFont(boldBytes, { subset: false, features: INVOICE_FONT_FEATURES });
 
   doc.setTitle(`請求書 ${c.invoice_number}`);
   doc.setAuthor(issuer.legal_name);

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "verify:stripe": "tsx scripts/verify-stripe.mts",
     "verify:diagnosis": "tsx scripts/verify-diagnosis.mts",
     "generate:golden": "tsx scripts/generate-golden.mts",
     "test": "node --import tsx --test tests/*.test.ts"
