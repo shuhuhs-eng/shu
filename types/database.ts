@@ -148,6 +148,25 @@ export type AdminScoutCreditPackage = {
   active: boolean; updated_at: string;
 };
 
+// ----- 0049 月額カード決済の支払履歴・適格請求書 -----
+export type SubscriptionInvoicePaymentResult = {
+  result: "recorded" | "already_recorded" | "subscription_not_synced" | "ignored_zero_amount" | "integrity_issue";
+  payment_id?: string; invoice_number?: string; organization_id?: string;
+};
+export type CompanySubscriptionInvoice = {
+  payment_id: string; invoice_number: string; period_start: string; period_end: string;
+  amount_excl_tax: number; tax_rate: number; tax_amount: number; total_amount: number;
+  paid_at: string; payment_method: "credit_card"; document_id: string | null;
+};
+export type AdminSubscriptionInvoice = {
+  payment_id: string; organization_id: string; invoice_number: string; stripe_invoice_id: string;
+  period_start: string; period_end: string; amount_excl_tax: number; tax_rate: number; tax_amount: number;
+  total_amount: number; paid_at: string; document_id: string | null; document_generated_at: string | null;
+};
+export type AdminUnissuedSubscriptionInvoice = {
+  payment_id: string; organization_id: string; invoice_number: string; paid_at: string; missing: string[];
+};
+
 export type Database = {
   // 【重要】このマーカーは @supabase/supabase-js 2.112.2 では49件の型エラーの
   // 解消には至らなかった（実機npm run typecheckで確認済み）。原因は
@@ -1608,6 +1627,23 @@ export type Database = {
       get_admin_stripe_integrity_issues: { Args: { p_include_resolved?: boolean }; Returns: AdminStripeIssue[] };
       admin_resolve_stripe_integrity_issue: { Args: { p_issue_id: string; p_note: string }; Returns: { issue_id: string; resolved: boolean } };
       get_admin_scout_credit_packages: { Args: Record<string, never>; Returns: AdminScoutCreditPackage[] };
+      record_subscription_invoice_payment: {
+        Args: {
+          p_customer_id: string; p_subscription_id: string; p_stripe_invoice_id: string; p_payment_intent_id: string | null;
+          p_amount_paid: number; p_currency: string; p_period_start: string; p_period_end: string;
+          p_paid_at: string; p_livemode: boolean; p_event_id?: string | null;
+        };
+        Returns: SubscriptionInvoicePaymentResult;
+      };
+      get_company_subscription_invoices: { Args: { p_organization_id: string }; Returns: CompanySubscriptionInvoice[] };
+      get_admin_subscription_invoices: { Args: { p_organization_id?: string | null }; Returns: AdminSubscriptionInvoice[] };
+      get_admin_unissued_subscription_invoices: { Args: Record<string, never>; Returns: AdminUnissuedSubscriptionInvoice[] };
+      get_subscription_invoice_issue_readiness: { Args: { p_payment_id: string }; Returns: { already_issued: boolean; missing: string[]; warnings: string[] } };
+      prepare_subscription_invoice_document: { Args: { p_payment_id: string }; Returns: unknown };
+      register_subscription_invoice_document: { Args: { p_payment_id: string; p_snapshot_digest: string; p_file_sha256: string }; Returns: unknown };
+      service_prepare_subscription_invoice: { Args: { p_payment_id: string }; Returns: unknown };
+      service_register_subscription_invoice: { Args: { p_payment_id: string; p_snapshot_digest: string; p_file_sha256: string }; Returns: unknown };
+      authorize_subscription_invoice_download: { Args: { p_document_id: string }; Returns: unknown };
       admin_upsert_scout_credit_package: {
         Args: { p_package_id: string | null; p_label: string; p_credits_count: number; p_price_excl_tax: number; p_tax_rate: number | null; p_active: boolean };
         Returns: { package_id: string };

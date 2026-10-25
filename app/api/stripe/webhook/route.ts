@@ -3,6 +3,7 @@ import { getStripe } from "@/lib/stripe/client";
 import { checkStripeWebhookEnv } from "@/lib/stripe/config";
 import { processStripeEvent, type CallRpc, type StripeApi } from "@/lib/stripe/webhook-handler";
 import { createServiceClient } from "@/lib/supabase/service";
+import { issueSubscriptionInvoiceAsSystem } from "@/lib/invoices/subscription-issue";
 import { logError } from "@/lib/security/log";
 
 /**
@@ -62,6 +63,7 @@ export async function POST(request: Request): Promise<Response> {
       return typeof si.payment_method === "string" ? si.payment_method : (si.payment_method?.id ?? null);
     },
     retrieveSubscription: (id) => stripe.subscriptions.retrieve(id),
+    retrieveInvoice: (id) => stripe.invoices.retrieve(id, { expand: ["payments"] }),
     async setCustomerDefaultPaymentMethod(customerId, pm) {
       await stripe.customers.update(customerId, { invoice_settings: { default_payment_method: pm } });
     },
@@ -74,6 +76,11 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const outcome = await processStripeEvent(event, {
       callRpc, stripe: stripeApi, now: () => new Date(), expectedLivemode: env.livemode,
+      // 月額の適格請求書PDF。失敗しても支払記録は確定済み（未発行として運営画面に出る）。
+      issueSubscriptionInvoice: async (paymentId) => {
+        const r = await issueSubscriptionInvoiceAsSystem(paymentId);
+        if (r.status === "failed") logError("stripeWebhook: subscription invoice pdf not issued", { message: r.reason });
+      },
     });
     await supabase.rpc("complete_stripe_webhook_event", {
       p_event_id: event.id, p_result: outcome.result, p_error_code: outcome.note ?? null,

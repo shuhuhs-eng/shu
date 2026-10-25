@@ -18,7 +18,8 @@ type Functions = Database["public"]["Functions"];
 export type ApplyFnName =
   | "apply_payment_method_setup" | "set_payment_method_state" | "apply_subscription_checkout_completed"
   | "apply_stripe_subscription_snapshot" | "apply_stripe_invoice_result" | "mark_stripe_checkout_expired"
-  | "apply_success_fee_card_payment" | "apply_scout_credit_payment" | "record_stripe_refund_or_dispute";
+  | "apply_success_fee_card_payment" | "apply_scout_credit_payment" | "record_stripe_refund_or_dispute"
+  | "record_subscription_invoice_payment";
 
 export type CallRpc = <T extends ApplyFnName>(fn: T, args: Functions[T]["Args"]) => Promise<Functions[T]["Returns"]>;
 
@@ -27,9 +28,19 @@ export type StripeApi = {
   retrieveSubscription(subscriptionId: string): Promise<Stripe.Subscription>;
   setCustomerDefaultPaymentMethod(customerId: string, paymentMethodId: string): Promise<void>;
   listCustomerCardPaymentMethods(customerId: string): Promise<string[]>;
+  /** 月額invoiceの最新状態（通知本文ではなくStripeの現在値で検証する）。payments を展開して返すこと。 */
+  retrieveInvoice(invoiceId: string): Promise<Stripe.Invoice>;
 };
 
-export type HandlerDeps = { callRpc: CallRpc; stripe: StripeApi; now: () => Date; expectedLivemode: boolean };
+export type HandlerDeps = {
+  callRpc: CallRpc; stripe: StripeApi; now: () => Date; expectedLivemode: boolean;
+  /**
+   * 月額の適格請求書PDFを発行する（支払記録が確定した後にだけ呼ばれる）。
+   * ★失敗しても支払記録は確定したまま。ここで投げられた例外は握りつぶし、webhookは成功扱いにする
+   *   （PDFは「未発行」として運営画面に出て、後から再試行できる）。
+   */
+  issueSubscriptionInvoice?: (paymentId: string) => Promise<void>;
+};
 export type HandlerOutcome = { result: "processed" | "ignored" | "integrity_issue"; note?: string };
 
 /** 購読するイベント（Stripeダッシュボードのwebhook設定にはこの一覧だけを登録する）。 */
@@ -132,7 +143,10 @@ export async function processStripeEvent(event: Stripe.Event, deps: HandlerDeps)
         p_event_at: new Date(event.created * 1000).toISOString(),
         p_event_id: event.id,
       });
-      return { result: worst([snap, r.result]) };
+      if (event.type !== "invoice.paid") return { result: worst([snap, r.result]) };
+      // 支払事実の記録が最優先。記録の検証・保存に失敗したら例外のまま（=500、Stripeが再送）。
+      const rec = await recordInvoicePayment(deps, inv.id, subId, customerId, event, latest.livemode);
+      return { result: worst([snap, r.result, rec.result]), note: rec.note };
     }
 
     case "payment_method.detached": {
@@ -165,6 +179,48 @@ export async function processStripeEvent(event: Stripe.Event, deps: HandlerDeps)
     default:
       return { result: "ignored", note: "unhandled_type" };
   }
+}
+
+/** Stripe invoiceの最新状態を検証し、月額の支払履歴へ記録する。成功後にPDF発行を試みる（失敗は無視）。 */
+async function recordInvoicePayment(
+  deps: HandlerDeps, invoiceId: string, subId: string, customerId: string, event: Stripe.Event, livemode: boolean,
+): Promise<{ result: HandlerOutcome["result"]; note?: string }> {
+  const inv = await deps.stripe.retrieveInvoice(invoiceId);
+  // 通知ではなくStripeの現在値で検証する：支払済み・同じcustomer・同じsubscription。
+  if (inv.status !== "paid") return { result: "ignored", note: "invoice_not_paid" };
+  if (idOf(inv.customer) !== customerId || idOf(inv.parent?.subscription_details?.subscription ?? null) !== subId) {
+    return { result: "integrity_issue", note: "invoice_identity_mismatch" };
+  }
+  const f = invoiceFacts(inv, event.created);
+  const r = await deps.callRpc("record_subscription_invoice_payment", {
+    p_customer_id: customerId, p_subscription_id: subId, p_stripe_invoice_id: inv.id,
+    p_payment_intent_id: f.paymentIntentId, p_amount_paid: inv.amount_paid, p_currency: inv.currency,
+    p_period_start: f.periodStart, p_period_end: f.periodEnd, p_paid_at: f.paidAt,
+    p_livemode: inv.livemode ?? livemode, p_event_id: event.id,
+  });
+  if (r.result === "integrity_issue") return { result: "integrity_issue", note: "invoice_amount_mismatch" };
+  if ((r.result === "recorded" || r.result === "already_recorded") && r.payment_id && deps.issueSubscriptionInvoice) {
+    try {
+      await deps.issueSubscriptionInvoice(r.payment_id);
+    } catch {
+      // 支払記録は確定済み。PDFは未発行として残り、運営が再試行できる。
+    }
+  }
+  return { result: r.result === "recorded" || r.result === "already_recorded" ? "processed" : "ignored", note: r.result };
+}
+
+/** invoiceから期間・支払日時・PaymentIntentを取り出す（純粋関数。テスト対象）。 */
+export function invoiceFacts(inv: Stripe.Invoice, eventCreated: number) {
+  const line = inv.lines?.data?.[0];
+  const start = line?.period?.start ?? inv.period_start;
+  const end = line?.period?.end ?? inv.period_end;
+  const paidPayment = inv.payments?.data?.find((p) => p.status === "paid");
+  const pi = paidPayment?.payment?.type === "payment_intent" ? idOf(paidPayment.payment.payment_intent ?? null) : null;
+  return {
+    periodStart: iso(start)!, periodEnd: iso(end)!,
+    paidAt: iso(inv.status_transitions?.paid_at ?? eventCreated)!,
+    paymentIntentId: pi,
+  };
 }
 
 async function handleCheckoutCompleted(s: Stripe.Checkout.Session, eventId: string, deps: HandlerDeps): Promise<HandlerOutcome> {

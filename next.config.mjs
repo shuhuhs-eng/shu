@@ -22,6 +22,8 @@ const nextConfig = {
   },
   outputFileTracingIncludes: {
     "/admin/**": ["./node_modules/@expo-google-fonts/noto-sans-jp/400Regular/NotoSansJP_400Regular.ttf", "./node_modules/@expo-google-fonts/noto-sans-jp/700Bold/NotoSansJP_700Bold.ttf"],
+    // 月額の請求書PDFはStripe webhook（invoice.paid）から自動発行する。
+    "/api/stripe/webhook": ["./node_modules/@expo-google-fonts/noto-sans-jp/400Regular/NotoSansJP_400Regular.ttf", "./node_modules/@expo-google-fonts/noto-sans-jp/700Bold/NotoSansJP_700Bold.ttf"],
   },
 };
 

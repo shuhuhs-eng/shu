@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AdminScoutCreditPackage, AdminStripeIssue, AdminStripeOrganizationDetail, AdminStripeOverviewRow, AdminSuccessFeePaymentRow, CompanyPaymentOverview, Database } from "@/types/database";
+import type { AdminSubscriptionInvoice, AdminUnissuedSubscriptionInvoice, CompanySubscriptionInvoice, AdminScoutCreditPackage, AdminStripeIssue, AdminStripeOrganizationDetail, AdminStripeOverviewRow, AdminSuccessFeePaymentRow, CompanyPaymentOverview, Database } from "@/types/database";
 import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/security/log";
 
@@ -44,3 +44,13 @@ export const getAdminStripeIssues = (includeResolved = false): Promise<AdminStri
   adminRpc("getAdminStripeIssues", (s) => s.rpc("get_admin_stripe_integrity_issues", { p_include_resolved: includeResolved }));
 export const getAdminScoutCreditPackages = (): Promise<AdminScoutCreditPackage[] | null> =>
   adminRpc("getAdminScoutCreditPackages", (s) => s.rpc("get_admin_scout_credit_packages"));
+
+export async function getCompanySubscriptionInvoices(supabase: Supa, organizationId: string): Promise<CompanySubscriptionInvoice[] | null> {
+  const { data, error } = await supabase.rpc("get_company_subscription_invoices", { p_organization_id: organizationId });
+  if (error) { logError("getCompanySubscriptionInvoices", error); return null; }
+  return data;
+}
+export const getAdminSubscriptionInvoices = (): Promise<AdminSubscriptionInvoice[] | null> =>
+  adminRpc("getAdminSubscriptionInvoices", (s) => s.rpc("get_admin_subscription_invoices", { p_organization_id: null }));
+export const getAdminUnissuedSubscriptionInvoices = (): Promise<AdminUnissuedSubscriptionInvoice[] | null> =>
+  adminRpc("getAdminUnissuedSubscriptionInvoices", (s) => s.rpc("get_admin_unissued_subscription_invoices"));

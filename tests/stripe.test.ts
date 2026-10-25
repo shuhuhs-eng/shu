@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type Stripe from "stripe";
 import { buildReturnUrl, checkStripeEnv, checkStripeWebhookEnv, parseReturn, stripeKeyMode } from "../lib/stripe/config";
 import { isAllowedStripeRedirect, mapStripeActionError } from "../lib/stripe/errors";
-import { HANDLED_EVENT_TYPES, idOf, processStripeEvent, subscriptionFacts, type CallRpc, type HandlerDeps, type StripeApi } from "../lib/stripe/webhook-handler";
+import { HANDLED_EVENT_TYPES, idOf, invoiceFacts, processStripeEvent, subscriptionFacts, type CallRpc, type HandlerDeps, type StripeApi } from "../lib/stripe/webhook-handler";
 import { cardBrandLabel, formatCardExpiry, subscriptionStateLabel } from "../lib/stripe/labels";
 import { collectEnvProblems } from "../lib/env/validate";
 
@@ -70,12 +70,22 @@ test("表示文言: カードはブランド・下4桁・有効期限のみ想�
 
 // ---------------------------------------------------------------- webhook handler
 type Call = { fn: string; args: Record<string, unknown> };
-function makeDeps(opts: { rpcResults?: Record<string, { result: string }>; livemode?: boolean; sub?: Partial<Stripe.Subscription>; pms?: string[] } = {}) {
+const PAID_INVOICE = {
+  id: "in_1", object: "invoice", status: "paid", customer: "cus_1", currency: "jpy", amount_paid: 55000, livemode: false,
+  period_start: 1_700_000_000, period_end: 1_700_000_000,
+  parent: { subscription_details: { subscription: "sub_1" } },
+  lines: { data: [{ period: { start: 1_700_000_000, end: 1_702_592_000 } }] },
+  status_transitions: { paid_at: 1_700_000_050 },
+  payments: { data: [{ status: "paid", payment: { type: "payment_intent", payment_intent: "pi_77" } }] },
+};
+function makeDeps(opts: { rpcResults?: Record<string, Record<string, unknown>>; livemode?: boolean; sub?: Partial<Stripe.Subscription>; pms?: string[]; invoice?: unknown; issue?: (id: string) => Promise<void> } = {}) {
+  const issued: string[] = [];
   const calls: Call[] = [];
   const stripeCalls: string[] = [];
   const callRpc: CallRpc = async (fn, args) => {
     calls.push({ fn, args: args as Record<string, unknown> });
-    return (opts.rpcResults?.[fn] ?? { result: "applied" }) as never;
+    const dflt = fn === "record_subscription_invoice_payment" ? { result: "recorded", payment_id: "11111111-1111-4111-8111-111111111111" } : { result: "applied" };
+    return (opts.rpcResults?.[fn] ?? dflt) as never;
   };
   const sub = {
     id: "sub_1", customer: "cus_1", status: "active", cancel_at_period_end: false,
@@ -88,9 +98,13 @@ function makeDeps(opts: { rpcResults?: Record<string, { result: string }>; livem
     retrieveSubscription: async () => { stripeCalls.push("retrieveSubscription"); return sub; },
     setCustomerDefaultPaymentMethod: async (c, pm) => { stripeCalls.push(`default:${c}:${pm}`); },
     listCustomerCardPaymentMethods: async () => { stripeCalls.push("listPMs"); return opts.pms ?? []; },
+    retrieveInvoice: async () => { stripeCalls.push("retrieveInvoice"); return (opts.invoice ?? PAID_INVOICE) as Stripe.Invoice; },
   };
-  const deps: HandlerDeps = { callRpc, stripe, now: () => new Date("2026-10-24T00:00:00Z"), expectedLivemode: opts.livemode ?? false };
-  return { deps, calls, stripeCalls };
+  const deps: HandlerDeps = {
+    callRpc, stripe, now: () => new Date("2026-10-24T00:00:00Z"), expectedLivemode: opts.livemode ?? false,
+    issueSubscriptionInvoice: opts.issue ?? (async (id) => { issued.push(id); }),
+  };
+  return { deps, calls, stripeCalls, issued };
 }
 const ev = (type: string, object: unknown, extra: Record<string, unknown> = {}) =>
   ({ id: "evt_1", type, livemode: false, created: 1_700_000_100, data: { object }, ...extra }) as unknown as Stripe.Event;
@@ -182,7 +196,10 @@ test("webhook: invoice.paid/failed はsnapshotを先に反映してから支払�
     const invoice = { id: "in_1", customer: "cus_1", parent: { subscription_details: { subscription: "sub_1" } } };
     const r = await processStripeEvent(ev(type, invoice), deps);
     assert.equal(r.result, "processed");
-    assert.deepEqual(calls.map((c) => c.fn), ["apply_stripe_subscription_snapshot", "apply_stripe_invoice_result"]);
+    const expectedFns = type === "invoice.paid"
+      ? ["apply_stripe_subscription_snapshot", "apply_stripe_invoice_result", "record_subscription_invoice_payment"]
+      : ["apply_stripe_subscription_snapshot", "apply_stripe_invoice_result"];
+    assert.deepEqual(calls.map((c) => c.fn), expectedFns);
     assert.equal(calls[1]!.args.p_result, expected);
     assert.equal(calls[1]!.args.p_event_at, new Date(1_700_000_100 * 1000).toISOString());
   }
@@ -193,6 +210,69 @@ test("webhook: 支払い失敗でも契約状態を変えるRPCは呼ばない�
   const { deps, calls } = makeDeps({ sub: { status: "unpaid" } });
   await processStripeEvent(ev("invoice.payment_failed", { id: "in_1", customer: "cus_1", parent: { subscription_details: { subscription: "sub_1" } } }), deps);
   assert.ok(calls.every((c) => c.fn === "apply_stripe_subscription_snapshot" || c.fn === "apply_stripe_invoice_result"));
+});
+
+// ---- Phase 50: invoice.paid → 支払履歴 → PDF発行（失敗しても支払は確定）
+const paidEvent = () => ev("invoice.paid", { id: "in_1", customer: "cus_1", parent: { subscription_details: { subscription: "sub_1" } } });
+test("webhook: invoice.paid はStripeの最新invoiceを取得し、検証した値で月額支払を記録してからPDF発行を試みる", async () => {
+  const { deps, calls, stripeCalls, issued } = makeDeps();
+  const r = await processStripeEvent(paidEvent(), deps);
+  assert.equal(r.result, "processed");
+  assert.ok(stripeCalls.includes("retrieveInvoice"));
+  const rec = calls.find((c) => c.fn === "record_subscription_invoice_payment")!;
+  assert.deepEqual(
+    { ...rec.args },
+    {
+      p_customer_id: "cus_1", p_subscription_id: "sub_1", p_stripe_invoice_id: "in_1", p_payment_intent_id: "pi_77",
+      p_amount_paid: 55000, p_currency: "jpy",
+      p_period_start: new Date(1_700_000_000 * 1000).toISOString(), p_period_end: new Date(1_702_592_000 * 1000).toISOString(),
+      p_paid_at: new Date(1_700_000_050 * 1000).toISOString(), p_livemode: false, p_event_id: "evt_1",
+    },
+  );
+  assert.deepEqual(issued, ["11111111-1111-4111-8111-111111111111"]);
+});
+test("webhook: PDF発行が例外でも支払記録は確定済みで、webhookは成功(500にしない)", async () => {
+  const { deps, calls } = makeDeps({ issue: async () => { throw new Error("storage down"); } });
+  const r = await processStripeEvent(paidEvent(), deps);
+  assert.equal(r.result, "processed");
+  assert.ok(calls.some((c) => c.fn === "record_subscription_invoice_payment"));
+});
+test("webhook: 支払記録そのものが失敗したら例外のまま(=500・再送対象)で、PDF発行は試みない", async () => {
+  const { deps, issued } = makeDeps();
+  const failing: HandlerDeps = {
+    ...deps,
+    callRpc: (async (fn: string) => {
+      if (fn === "record_subscription_invoice_payment") throw new Error("db down");
+      return { result: "applied" };
+    }) as CallRpc,
+  };
+  await assert.rejects(processStripeEvent(paidEvent(), failing), /db down/);
+  assert.deepEqual(issued, []);
+});
+test("webhook: 金額不一致(integrity_issue)ならPDFは発行しない。再送(already_recorded)は発行を再試行", async () => {
+  const bad = makeDeps({ rpcResults: { record_subscription_invoice_payment: { result: "integrity_issue" } } });
+  assert.equal((await processStripeEvent(paidEvent(), bad.deps)).result, "integrity_issue");
+  assert.deepEqual(bad.issued, []);
+  const again = makeDeps({ rpcResults: { record_subscription_invoice_payment: { result: "already_recorded", payment_id: "22222222-2222-4222-8222-222222222222" } } });
+  assert.equal((await processStripeEvent(paidEvent(), again.deps)).result, "processed");
+  assert.deepEqual(again.issued, ["22222222-2222-4222-8222-222222222222"]);
+});
+test("webhook: 未払いinvoice・customer/subscription不一致は記録しない", async () => {
+  const unpaid = makeDeps({ invoice: { ...PAID_INVOICE, status: "open" } });
+  assert.equal((await processStripeEvent(paidEvent(), unpaid.deps)).result, "processed", "snapshot自体は反映される");
+  assert.ok(!unpaid.calls.some((c) => c.fn === "record_subscription_invoice_payment"));
+  const other = makeDeps({ invoice: { ...PAID_INVOICE, customer: "cus_other" } });
+  assert.equal((await processStripeEvent(paidEvent(), other.deps)).result, "integrity_issue");
+  assert.ok(!other.calls.some((c) => c.fn === "record_subscription_invoice_payment"));
+});
+test("invoiceFacts: 対象期間は明細行の期間、支払日時はstatus_transitions、PaymentIntentはpaidのpaymentから", () => {
+  const f = invoiceFacts(PAID_INVOICE as unknown as Stripe.Invoice, 1);
+  assert.equal(f.periodEnd, new Date(1_702_592_000 * 1000).toISOString());
+  assert.equal(f.paymentIntentId, "pi_77");
+  const noLines = invoiceFacts({ ...PAID_INVOICE, lines: { data: [] }, payments: undefined, status_transitions: {} } as unknown as Stripe.Invoice, 1_700_000_999);
+  assert.equal(noLines.periodStart, new Date(1_700_000_000 * 1000).toISOString());
+  assert.equal(noLines.paymentIntentId, null);
+  assert.equal(noLines.paidAt, new Date(1_700_000_999 * 1000).toISOString());
 });
 test("webhook: 返金/チャージバックは確認事項として記録(integrity_issue)。自動で入金を戻さない", async () => {
   const { deps, calls } = makeDeps({ rpcResults: { record_stripe_refund_or_dispute: { result: "recorded" } } });

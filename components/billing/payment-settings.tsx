@@ -41,12 +41,12 @@ export function PaymentSettings({ organizationId, overview, card, stripeReady }:
         ) : (
           <p className="mt-2 text-[13px] text-sub">カードは登録されていません。</p>
         )}
-        <p className="mt-2 text-[11px] leading-relaxed text-sub">カード番号は当社では保存せず、決済代行会社（Stripe）が安全に管理します。</p>
+        <p className="mt-2 text-[11px] leading-relaxed text-sub">カード番号は当社では保存せず、決済代行会社（Stripe）が安全に管理します。Stripeから届く領収・明細メールやStripe上の履歴は決済サービスの利用明細であり、適格請求書ではありません。適格請求書は下の「月額のお支払い履歴」からダウンロードできます。</p>
         {stripeReady && (
           <div className="mt-3 flex flex-wrap items-start gap-2">
             <StripeStartButton kind="card" organizationId={organizationId} label={overview.payment_method_available ? "カードを変更する" : "カードを登録する"} />
             {overview.has_payment_account && (
-              <StripeStartButton kind="portal" organizationId={organizationId} label="Stripeでお支払い履歴を見る" variant="secondary" />
+              <StripeStartButton kind="portal" organizationId={organizationId} label="Stripeでカード情報・決済履歴を確認" variant="secondary" />
             )}
           </div>
         )}

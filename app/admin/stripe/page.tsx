@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getAdminScoutCreditPackages, getAdminStripeIssues, getAdminStripeOverview, getAdminSuccessFeePayments } from "@/lib/stripe/queries";
+import { getAdminScoutCreditPackages, getAdminStripeIssues, getAdminStripeOverview, getAdminSubscriptionInvoices, getAdminSuccessFeePayments, getAdminUnissuedSubscriptionInvoices } from "@/lib/stripe/queries";
+import { ADMIN_INVOICE_STATE_LABELS, adminInvoiceState } from "@/lib/invoices/subscription-status";
+import { missingLabels } from "@/lib/invoices/messages";
+import { SubscriptionInvoiceRetry } from "@/components/admin/subscription-invoice-retry";
 import { ISSUE_TYPE_LABELS, SYNC_FLAG_LABELS } from "@/lib/stripe/admin-labels";
 import { subscriptionStateLabel } from "@/lib/stripe/labels";
 import { StripeIssueResolve } from "@/components/admin/stripe-issue-resolve";
@@ -26,9 +29,13 @@ export default async function AdminStripePage() {
   const { data: isAdmin } = await supabase.rpc("is_platform_admin");
   if (!isAdmin) redirect("/mypage");
 
-  const [overview, payments, issues, packages] = await Promise.all([
+  const [overview, payments, issues, packages, subInvoices, unissued] = await Promise.all([
     getAdminStripeOverview(), getAdminSuccessFeePayments(), getAdminStripeIssues(false), getAdminScoutCreditPackages(),
+    getAdminSubscriptionInvoices(), getAdminUnissuedSubscriptionInvoices(),
   ]);
+  const orgName = new Map((overview ?? []).map((o) => [o.organization_id, o.organization_name ?? "（名称未設定）"]));
+  const missingByPayment = new Map((unissued ?? []).map((u) => [u.payment_id, u.missing]));
+  const now = new Date();
 
   return (
     <main className="mx-auto max-w-[900px] px-5 py-12">
@@ -114,6 +121,54 @@ export default async function AdminStripePage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </section>
+
+      <section className="mt-10">
+        <h2 className="font-serif text-[18px] font-bold text-ink">月額決済履歴と請求書PDF</h2>
+        <p className="mt-1 text-[11.5px] leading-relaxed text-sub">
+          月額のカード決済（Stripe invoice）ごとに、Beauty Reachの適格請求書PDFを自動発行します。支払の記録とPDFの発行は別の処理で、PDFが作れなくても支払記録は残ります。
+          未発行は発行条件が揃えば再試行できます（Stripeが送る領収・明細は決済サービスの利用明細で、適格請求書ではありません）。
+        </p>
+        {subInvoices === null || unissued === null ? <p className={`mt-3 ${ERR}`}>取得できませんでした。</p> : subInvoices.length === 0 ? (
+          <p className="mt-3 text-[12px] text-sub">月額のカード決済はまだありません。</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto rounded-2xl border border-line bg-surface">
+            <table className="w-full min-w-[760px] text-left text-[12px]">
+              <thead className="border-b border-line text-[11px] text-sub"><tr>
+                <th className="p-3">会社</th><th className="p-3">請求書番号</th><th className="p-3">対象期間</th><th className="p-3">税込（税抜＋税）</th><th className="p-3">決済日</th><th className="p-3">請求書PDF</th>
+              </tr></thead>
+              <tbody>
+                {subInvoices.map((p) => {
+                  const missing = missingByPayment.get(p.payment_id) ?? [];
+                  const st = adminInvoiceState(p.document_id !== null, missing, p.paid_at, now);
+                  return (
+                    <tr key={p.payment_id} className="border-b border-line/60 align-top">
+                      <td className="p-3">{orgName.get(p.organization_id) ?? "—"}</td>
+                      <td className="p-3">{p.invoice_number}</td>
+                      <td className="p-3">{fmtDate(p.period_start)}〜{fmtDate(new Date(new Date(p.period_end).getTime() - 86_400_000).toISOString())}</td>
+                      <td className="p-3">{yen(p.total_amount)}<span className="block text-[11px] text-sub">{yen(p.amount_excl_tax)} ＋ {yen(p.tax_amount)}（{p.tax_rate}%）</span></td>
+                      <td className="p-3">{fmtDate(p.paid_at)}</td>
+                      <td className="p-3">
+                        <span className={st === "issued" ? "font-semibold text-[#285B45]" : st === "processing" ? "text-sub" : "font-semibold text-[#8A5A12]"}>{ADMIN_INVOICE_STATE_LABELS[st]}</span>
+                        {st === "issued" && p.document_id && (
+                          <a className="ml-2 underline" href={`/api/subscription-invoices/${p.document_id}/pdf`} target="_blank" rel="noreferrer">開く</a>
+                        )}
+                        {st === "missing" && <ul className="mt-1 list-disc pl-4 text-[11px] text-[#8A5A12]">{missingLabels(missing).map((m) => <li key={m}>{m}</li>)}</ul>}
+                        {(st === "failed" || st === "missing") && <div className="mt-1"><SubscriptionInvoiceRetry paymentId={p.payment_id} /></div>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {unissued && unissued.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <p className="text-[12px] text-[#8A5A12]">PDF未発行 {unissued.length}件</p>
+            <SubscriptionInvoiceRetry />
           </div>
         )}
       </section>

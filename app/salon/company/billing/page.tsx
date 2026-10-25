@@ -15,7 +15,8 @@ import { PaymentSettings } from "@/components/billing/payment-settings";
 import { FeePaymentBlock } from "@/components/billing/fee-payment-block";
 import { checkStripeEnv, parseReturn } from "@/lib/stripe/config";
 import { getDefaultCardDisplay } from "@/lib/stripe/checkout";
-import { getBillingOrganizationIds, getCompanyPaymentOverview, getFeePaymentInfo } from "@/lib/stripe/queries";
+import { getBillingOrganizationIds, getCompanyPaymentOverview, getCompanySubscriptionInvoices, getFeePaymentInfo } from "@/lib/stripe/queries";
+import { SubscriptionInvoiceHistory } from "@/components/billing/subscription-invoice-history";
 import { RETURN_MESSAGES } from "@/lib/stripe/labels";
 
 function fmtDate(iso: string | null): string {
@@ -44,6 +45,7 @@ export default async function CompanyBillingPage({ searchParams }: { searchParam
   const orgIds = await getBillingOrganizationIds(supabase, user.id);
   const organizationId = orgIds[0] ?? null;
   const overview = organizationId ? await getCompanyPaymentOverview(supabase, organizationId) : null;
+  const subInvoices = organizationId ? await getCompanySubscriptionInvoices(supabase, organizationId) : null;
   const card = organizationId && stripeReady && overview?.payment_method_available ? await getDefaultCardDisplay(supabase, organizationId) : null;
   const feePayInfo = organizationId ? await getFeePaymentInfo(supabase, organizationId) : null;
 
@@ -73,6 +75,7 @@ export default async function CompanyBillingPage({ searchParams }: { searchParam
       )}
 
       {organizationId && <PaymentSettings organizationId={organizationId} overview={overview} card={card} stripeReady={stripeReady} />}
+      {organizationId && <SubscriptionInvoiceHistory invoices={subInvoices} />}
 
       {fees === null || summary === null ? (
         <p className="mt-6 rounded-lg bg-[#C24545]/10 px-3 py-2 text-[12px] text-[#8A2E2E]">請求情報を取得できませんでした。時間をおいて再度お試しください。</p>
