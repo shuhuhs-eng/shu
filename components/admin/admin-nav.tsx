@@ -5,6 +5,7 @@ const ITEMS = [
   { href: "/admin/companies", label: "会社" },
   { href: "/admin/contracts", label: "契約" },
   { href: "/admin/success-fees", label: "成功報酬・請求" },
+  { href: "/admin/stripe", label: "カード決済" },
   { href: "/admin/issuer-settings", label: "請求書の発行事業者" },
   { href: "/admin/integrity", label: "整合性チェック" },
   { href: "/admin/evidence", label: "実績資料" },

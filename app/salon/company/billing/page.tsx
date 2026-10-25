@@ -11,6 +11,12 @@ import { countPaymentStates, overdueDays, paymentState, PAYMENT_STATE_CLASSES, P
 import { summarizeFees } from "@/lib/billing/summary";
 import { BaselineSummary } from "@/components/contracts/baseline-summary";
 import { InvoiceSummary } from "@/components/billing/invoice-summary";
+import { PaymentSettings } from "@/components/billing/payment-settings";
+import { FeePaymentBlock } from "@/components/billing/fee-payment-block";
+import { checkStripeEnv, parseReturn } from "@/lib/stripe/config";
+import { getDefaultCardDisplay } from "@/lib/stripe/checkout";
+import { getBillingOrganizationIds, getCompanyPaymentOverview, getFeePaymentInfo } from "@/lib/stripe/queries";
+import { RETURN_MESSAGES } from "@/lib/stripe/labels";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -25,12 +31,21 @@ function fmtDate(iso: string | null): string {
  * ★運営者メモは取得もしない（RPCが返さない）。金額が未確定(null)の場合は0円ではなく「未確定」。
  * ★会社側からの金額変更・状態変更・免除・取消はできない（操作UIも作らない）。
  */
-export default async function CompanyBillingPage() {
+export default async function CompanyBillingPage({ searchParams }: { searchParams: Promise<{ stripe?: string; kind?: string }> }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/salon/company/billing");
   if (!(await hasCompletedRole(supabase, user.id, "salon"))) redirect("/onboarding/salon");
   if (!(await canViewCompanyBilling(supabase, user.id))) redirect("/salon/company");
+
+  // Stripe決済（Phase 48）。カード決済は追加手段で、銀行振込・請求書は従来どおり。
+  const stripeReady = checkStripeEnv(process.env).ok;
+  const returned = parseReturn(await searchParams);
+  const orgIds = await getBillingOrganizationIds(supabase, user.id);
+  const organizationId = orgIds[0] ?? null;
+  const overview = organizationId ? await getCompanyPaymentOverview(supabase, organizationId) : null;
+  const card = organizationId && stripeReady && overview?.payment_method_available ? await getDefaultCardDisplay(supabase, organizationId) : null;
+  const feePayInfo = organizationId ? await getFeePaymentInfo(supabase, organizationId) : null;
 
   const fees = await getCompanySuccessFees();
   const summary = fees ? summarizeFees(fees) : null;
@@ -51,6 +66,13 @@ export default async function CompanyBillingPage() {
         採用が成立した件ごとの請求状況です。内容は運営が確認のうえ確定します。この画面から内容を変更することはできません。
       </p>
 
+      {returned && (
+        <p role="status" className="mt-4 rounded-lg bg-surface2 px-3 py-2 text-[12px] leading-relaxed text-charcoal">
+          {RETURN_MESSAGES[returned.kind]?.[returned.status]}
+        </p>
+      )}
+
+      {organizationId && <PaymentSettings organizationId={organizationId} overview={overview} card={card} stripeReady={stripeReady} />}
 
       {fees === null || summary === null ? (
         <p className="mt-6 rounded-lg bg-[#C24545]/10 px-3 py-2 text-[12px] text-[#8A2E2E]">請求情報を取得できませんでした。時間をおいて再度お試しください。</p>
@@ -123,6 +145,9 @@ export default async function CompanyBillingPage() {
                   ) : (
                     <p className="mt-3 text-[11.5px] text-sub">請求書PDFは準備中です。発行されるとここからダウンロードできます。</p>
                   )
+                )}
+                {organizationId && (
+                  <FeePaymentBlock organizationId={organizationId} feeId={f.fee_id} info={feePayInfo?.get(f.fee_id)} stripeReady={stripeReady} />
                 )}
                 <dl className="mt-3 grid grid-cols-3 gap-2 text-[10.5px] text-sub">
                   <div><dt>請求確定日</dt><dd className="text-charcoal">{fmtDate(f.confirmed_at)}</dd></div>

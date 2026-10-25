@@ -83,6 +83,71 @@ export type SalonCultureAxes = Partial<{
 
 type Timestamps = { created_at: string; updated_at: string };
 
+// ----- 0048 Stripe決済基盤のRPC戻り値 -----
+export type StripeBeginResult = {
+  record_id: string; stripe_customer_id: string; livemode: boolean; expires_at: string;
+  expected_amount: number | null; reuse_stripe_session_id: string | null; reused: boolean;
+  // 決済時のDB確定税snapshot（setupではnull）。Stripeへ渡すのはtotal_amount。
+  amount_excl_tax: number | null; tax_rate: number | null; tax_amount: number | null; total_amount: number | null;
+};
+export type StripeApplyResult = { result: string; organization_id?: string };
+export type CompanyPaymentOverview = {
+  organization_id: string; has_payment_account: boolean; payment_method_available: boolean;
+  contract_status: string | null; monthly_fee: number | null; monthly_fee_state: "unset" | "none" | "set";
+  // monthly_fee は税抜。税額・税込はDBが計算して返す。
+  monthly_tax_rate: number; monthly_tax_amount: number | null; monthly_total_amount: number | null;
+  subscription_startable: boolean;
+  subscription: null | {
+    payment_state: "pending" | "active" | "past_due" | "payment_failed" | "cancelled";
+    subscription_status: string; current_period_start: string | null; current_period_end: string | null;
+    cancel_at_period_end: boolean;
+    amount_excl_tax: number | null; tax_rate: number | null; tax_amount: number | null; total_amount: number | null;
+    stripe_total_amount: number | null;
+    last_payment_status: "succeeded" | "failed" | null; last_payment_at: string | null; last_payment_failed_at: string | null;
+  };
+  scout_credit_packages: Array<{
+    package_id: string; label: string; credits: number;
+    price_excl_tax: number; tax_rate: number; tax_amount: number; total_amount: number;
+  }>;
+  scout_credit_purchasable: boolean;
+};
+export type AdminStripeOverviewRow = {
+  organization_id: string; organization_name: string | null; contract_status: string | null;
+  contract_monthly_fee: number | null; customer_created: boolean; payment_method_available: boolean;
+  subscription_payment_state: string | null; subscription_status: string | null; current_period_end: string | null;
+  cancel_at_period_end: boolean | null;
+  subscription_amount_excl_tax: number | null; subscription_total_amount: number | null; subscription_stripe_total_amount: number | null;
+  last_payment_status: string | null; last_payment_at: string | null; last_payment_failed_at: string | null;
+  open_issue_count: number; sync_flags: string[];
+};
+export type AdminStripeOrganizationDetail = {
+  organization_id: string; stripe_customer_id: string | null; livemode: boolean | null;
+  payment_method_available: boolean; payment_method_checked_at: string | null;
+  stripe_subscription_id: string | null; subscription_status: string | null; payment_state: string | null; synced_at: string | null;
+  recent_checkouts: Array<{
+    record_id: string; purpose: string; status: string; expected_amount: number | null;
+    amount_excl_tax: number | null; tax_rate: number | null; tax_amount: number | null; success_fee_id: string | null;
+    credits: number | null; stripe_checkout_session_id: string | null; stripe_payment_intent_id: string | null;
+    created_at: string; completed_at: string | null;
+  }>;
+};
+export type AdminSuccessFeePaymentRow = {
+  fee_id: string; organization_id: string; organization_name: string | null; invoice_number: string | null;
+  fee_status: string; total_amount: number | null; paid_at: string | null;
+  payment_method: "card" | "bank_transfer" | null; card_checkout_status: string | null; card_checkout_at: string | null;
+  open_issue_count: number;
+};
+export type AdminStripeIssue = {
+  issue_id: string; issue_type: string; severity: string; organization_id: string | null; organization_name: string | null;
+  success_fee_id: string | null; detail: string | null; stripe_event_id: string | null; stripe_object_id: string | null;
+  created_at: string; resolved_at: string | null; resolution_note: string | null;
+};
+export type AdminScoutCreditPackage = {
+  package_id: string; label: string; credits_count: number;
+  price_excl_tax: number; tax_rate: number; tax_amount: number; total_amount: number;
+  active: boolean; updated_at: string;
+};
+
 export type Database = {
   // 【重要】このマーカーは @supabase/supabase-js 2.112.2 では49件の型エラーの
   // 解消には至らなかった（実機npm run typecheckで確認済み）。原因は
@@ -1463,6 +1528,89 @@ export type Database = {
           p_comment: string | null;
         };
         Returns: Database["public"]["Tables"]["salon_store_culture_profiles"]["Row"];
+      };
+      // ----- 0048 Stripe決済基盤 -----
+      // 会社向け（company_owner / company_admin のみ）。
+      get_organization_stripe_customer: {
+        Args: { p_organization_id: string };
+        Returns: { organization_id: string; organization_name: string | null; stripe_customer_id: string | null; livemode: boolean | null };
+      };
+      register_stripe_customer: {
+        Args: { p_organization_id: string; p_stripe_customer_id: string; p_livemode: boolean };
+        Returns: { stripe_customer_id: string; livemode: boolean; created: boolean };
+      };
+      begin_payment_method_setup: { Args: { p_organization_id: string }; Returns: StripeBeginResult };
+      begin_monthly_subscription_checkout: { Args: { p_organization_id: string }; Returns: StripeBeginResult & { monthly_fee_excl_tax: number; tax_amount: number; total_amount: number } };
+      begin_success_fee_card_checkout: {
+        Args: { p_fee_id: string };
+        Returns: StripeBeginResult & { success_fee_id: string; organization_id: string; invoice_number: string; total_amount: number };
+      };
+      begin_scout_credit_checkout: {
+        Args: { p_organization_id: string; p_package_id: string };
+        Returns: StripeBeginResult & { label: string; credits: number; total_amount: number };
+      };
+      attach_stripe_checkout_session: {
+        Args: { p_record_id: string; p_stripe_session_id: string };
+        Returns: { record_id: string; status: string };
+      };
+      get_company_payment_overview: { Args: { p_organization_id: string }; Returns: CompanyPaymentOverview };
+      get_company_success_fee_payment_info: {
+        Args: { p_organization_id: string };
+        Returns: Array<{ fee_id: string; fee_status: string; can_pay_by_card: boolean; card_checkout_in_progress: boolean; payment_method: "card" | "bank_transfer" | null }>;
+      };
+      // webhook適用（service_roleのみ）。
+      claim_stripe_webhook_event: { Args: { p_event_id: string; p_event_type: string; p_livemode: boolean }; Returns: string };
+      complete_stripe_webhook_event: { Args: { p_event_id: string; p_result: string; p_error_code?: string | null }; Returns: undefined };
+      apply_payment_method_setup: {
+        Args: { p_checkout_record_id: string; p_session_id: string; p_customer_id: string; p_payment_method_id: string | null; p_session_status: string; p_event_id?: string | null };
+        Returns: StripeApplyResult;
+      };
+      set_payment_method_state: {
+        Args: { p_customer_id: string; p_available: boolean; p_payment_method_id: string | null; p_event_id?: string | null };
+        Returns: StripeApplyResult;
+      };
+      apply_subscription_checkout_completed: {
+        Args: { p_checkout_record_id: string; p_session_id: string; p_customer_id: string; p_session_status: string; p_event_id?: string | null };
+        Returns: StripeApplyResult;
+      };
+      apply_stripe_subscription_snapshot: {
+        Args: {
+          p_customer_id: string; p_subscription_id: string; p_status: string;
+          p_period_start: string | null; p_period_end: string | null; p_cancel_at_period_end: boolean;
+          p_amount: number | null; p_currency: string; p_retrieved_at: string; p_event_id?: string | null;
+        };
+        Returns: StripeApplyResult & { payment_state?: string };
+      };
+      apply_stripe_invoice_result: {
+        Args: { p_customer_id: string; p_subscription_id: string; p_result: "succeeded" | "failed"; p_event_at: string; p_event_id?: string | null };
+        Returns: StripeApplyResult;
+      };
+      mark_stripe_checkout_expired: { Args: { p_checkout_record_id: string; p_session_id: string }; Returns: StripeApplyResult };
+      apply_success_fee_card_payment: {
+        Args: {
+          p_checkout_record_id: string; p_session_id: string; p_customer_id: string; p_payment_intent_id: string | null;
+          p_amount_total: number | null; p_currency: string; p_payment_status: string; p_event_id?: string | null;
+        };
+        Returns: StripeApplyResult;
+      };
+      apply_scout_credit_payment: {
+        Args: {
+          p_checkout_record_id: string; p_session_id: string; p_customer_id: string; p_payment_intent_id: string | null;
+          p_amount_total: number | null; p_currency: string; p_payment_status: string; p_event_id?: string | null;
+        };
+        Returns: StripeApplyResult;
+      };
+      record_stripe_refund_or_dispute: { Args: { p_payment_intent_id: string; p_event_id: string; p_kind: string }; Returns: StripeApplyResult };
+      // platform admin。
+      get_admin_stripe_overview: { Args: Record<string, never>; Returns: AdminStripeOverviewRow[] };
+      get_admin_stripe_organization_detail: { Args: { p_organization_id: string }; Returns: AdminStripeOrganizationDetail };
+      get_admin_success_fee_payments: { Args: Record<string, never>; Returns: AdminSuccessFeePaymentRow[] };
+      get_admin_stripe_integrity_issues: { Args: { p_include_resolved?: boolean }; Returns: AdminStripeIssue[] };
+      admin_resolve_stripe_integrity_issue: { Args: { p_issue_id: string; p_note: string }; Returns: { issue_id: string; resolved: boolean } };
+      get_admin_scout_credit_packages: { Args: Record<string, never>; Returns: AdminScoutCreditPackage[] };
+      admin_upsert_scout_credit_package: {
+        Args: { p_package_id: string | null; p_label: string; p_credits_count: number; p_price_excl_tax: number; p_tax_rate: number | null; p_active: boolean };
+        Returns: { package_id: string };
       };
     };
     Enums: {

@@ -21,6 +21,8 @@ export const ENV_SPECS: EnvSpec[] = [
   { key: "LEGAL_OPERATOR_ADDRESS", kind: "productionOnly", note: "規約の運営者所在地" },
   { key: "LEGAL_CONTACT_EMAIL", kind: "productionOnly", note: "規約の問い合わせ先" },
   { key: "LEGAL_EFFECTIVE_DATE", kind: "productionOnly", note: "規約の施行日 YYYY-MM-DD" },
+  { key: "STRIPE_SECRET_KEY", kind: "productionOnly", note: "Stripe秘密鍵（サーバー専用。カード決済・月額課金に必須）" },
+  { key: "STRIPE_WEBHOOK_SECRET", kind: "productionOnly", note: "Stripe webhook署名シークレット（サーバー専用）" },
 ];
 
 export type EnvProblem = { key: string; level: "error" | "warn"; message: string };
@@ -44,6 +46,19 @@ export function collectEnvProblems(env: Env, isProduction: boolean): EnvProblem[
   }
   if (isProduction && site && !/^https:\/\//.test(site)) {
     problems.push({ key: "NEXT_PUBLIC_SITE_URL", level: "warn", message: "NEXT_PUBLIC_SITE_URL が https:// ではない" });
+  }
+  // Stripe: 鍵の種類を検査（値は出さない）。実カード課金(live鍵)は明示的な許可フラグが無い限りエラー。
+  const stripeKey = env.STRIPE_SECRET_KEY?.trim();
+  if (stripeKey) {
+    if (!/^(sk|rk)_(test|live)_/.test(stripeKey)) {
+      problems.push({ key: "STRIPE_SECRET_KEY", level: "error", message: "STRIPE_SECRET_KEY の形式が正しくない（sk_test_/sk_live_ で始まる秘密鍵が必要。公開可能キー pk_ ではない）" });
+    } else if (/^(sk|rk)_live_/.test(stripeKey) && env.STRIPE_ALLOW_LIVE_MODE !== "true") {
+      problems.push({ key: "STRIPE_ALLOW_LIVE_MODE", level: "error", message: "本番(live)鍵が設定されているが STRIPE_ALLOW_LIVE_MODE=true が無い（Test Modeのまま公開前確認を終えるまで有効にしない）" });
+    }
+  }
+  const stripeWebhook = env.STRIPE_WEBHOOK_SECRET?.trim();
+  if (stripeWebhook && !/^whsec_/.test(stripeWebhook)) {
+    problems.push({ key: "STRIPE_WEBHOOK_SECRET", level: "error", message: "STRIPE_WEBHOOK_SECRET は whsec_ で始まる値" });
   }
   const date = env.LEGAL_EFFECTIVE_DATE;
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
