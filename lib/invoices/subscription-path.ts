@@ -1,15 +1,14 @@
 /**
- * 月額請求書のStorageオブジェクトキー。
+ * 月額請求書のStorage保存先。
  *
- * DB（0049）の storage_path は 'invoices/<組織ID>/<請求書番号>.pdf'（CHECK制約で固定・変更不可）。
- * 請求書番号は成功報酬と同じカウンタから払い出されるため衝突しないが、保存場所を明確に分けるため、
- * Storage上の実キーだけを 'subscription-invoices/<組織ID>/<請求書番号>.pdf' に変換する。
- * アップロードとダウンロードは必ずこの関数を通す（DBの論理パスをそのままStorageに使わない）。
+ * ★0050以降、DBの storage_path ＝ Supabase Storage上の実際のobject key
+ *   （'subscription-invoices/<組織ID>/<請求書番号>.pdf'。成功報酬の 'invoices/...' とは別の場所）。
+ *   変換はしない。この関数は「想定した形か」を確認するだけで、返す値はDBの値そのもの。
+ * ★0050未適用のDB（旧形式 'invoices/...'）では例外にして、誤った場所への保存・取得を防ぐ。
  */
-const DB_PATH = /^invoices\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(BR-[0-9]{4}-[0-9]{6})\.pdf$/;
+const SUBSCRIPTION_PATH = /^subscription-invoices\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/BR-[0-9]{4}-[0-9]{6}\.pdf$/;
 
-export function subscriptionObjectKey(dbStoragePath: string): string {
-  const m = DB_PATH.exec(dbStoragePath);
-  if (!m) throw new Error("invalid subscription invoice storage path");
-  return `subscription-invoices/${m[1]}/${m[2]}.pdf`;
+export function subscriptionStorageKey(dbStoragePath: string): string {
+  if (!SUBSCRIPTION_PATH.test(dbStoragePath)) throw new Error("invalid subscription invoice storage path");
+  return dbStoragePath;
 }

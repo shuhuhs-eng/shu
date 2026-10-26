@@ -4,7 +4,7 @@ import type { Database } from "@/types/database";
 import { createServiceClient } from "@/lib/supabase/service";
 import { readinessForAdmin } from "./subscription-readiness";
 import { renderSubscriptionInvoicePdf } from "./subscription-pdf";
-import { subscriptionObjectKey } from "./subscription-path";
+import { subscriptionStorageKey } from "./subscription-path";
 import { ensureInvoiceBucket, invoicePdfAgeMs, removeInvoicePdf, sha256Hex, uploadInvoicePdf } from "./storage";
 import {
   preparedSubscriptionInvoiceSchema, subscriptionPrepareResultSchema, subscriptionRegisteredSchema,
@@ -18,7 +18,7 @@ import {
  *   結果は例外ではなく戻り値で返し、呼び出し側（webhook）は握りつぶして200を返せる。
  * ★順序：prepare（状態確認＋固定snapshot）→ snapshotだけからPDF生成 → SHA-256 → privateへupload
  *   → register（DBがsnapshotを再計算しdigest一致のときだけ記録）→ registerに失敗したらuploadを削除。
- * ★Storageのキーは subscriptionObjectKey() で 'subscription-invoices/...' に変換（成功報酬の 'invoices/...' と分離）。
+ * ★Storageのキーは subscriptionStorageKey() で 'subscription-invoices/...' に変換（成功報酬の 'invoices/...' と分離）。
  */
 const ORPHAN_AGE_MS = 10 * 60 * 1000;
 
@@ -57,7 +57,7 @@ async function run(adapter: Adapter): Promise<SubscriptionIssueResult> {
   const sha = sha256Hex(bytes);
   let key: string;
   try {
-    key = subscriptionObjectKey(p.prepared.storage_path);
+    key = subscriptionStorageKey(p.prepared.storage_path);
   } catch {
     return { status: "failed", reason: "invalid storage path" };
   }

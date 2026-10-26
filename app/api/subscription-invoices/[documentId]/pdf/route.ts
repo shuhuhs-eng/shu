@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { subscriptionAuthorizedDownloadSchema } from "@/lib/invoices/subscription-types";
-import { subscriptionObjectKey } from "@/lib/invoices/subscription-path";
+import { subscriptionStorageKey } from "@/lib/invoices/subscription-path";
 import { downloadInvoicePdf, sha256Hex } from "@/lib/invoices/storage";
 
 /**
@@ -35,7 +35,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ documentId:
 
   let key: string;
   try {
-    key = subscriptionObjectKey(doc.data.storage_path);
+    key = subscriptionStorageKey(doc.data.storage_path);
   } catch {
     return plain(500, "請求書を取得できませんでした。");
   }

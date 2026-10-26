@@ -12,7 +12,7 @@
 
 ## 2. Storage
 - 既存の private bucket `invoice-documents` を再利用（公開URL・署名URLなし）。
-- DB（0049・変更不可）の `storage_path` は `invoices/<組織ID>/<請求書番号>.pdf` の論理パス。**Storage上の実キーだけを `subscription-invoices/<組織ID>/<請求書番号>.pdf` に変換**（`lib/invoices/subscription-path.ts`。アップロード・ダウンロードは必ずこの関数を通す）。成功報酬の `invoices/…` とは物理的に分離され、請求書番号も同一カウンタ由来で衝突しない。
+- DB の `storage_path` は **Storage上の実object keyそのもの**：`subscription-invoices/<組織ID>/<請求書番号>.pdf`（0050で整列。0049の `invoices/…` 論理パス＋アプリ側変換は廃止）。成功報酬の `invoices/…` とは物理的に分離され、請求書番号も同一カウンタ由来で衝突しない。
 - ダウンロード：ログイン → `authorize_subscription_invoice_download`（権限＋監査）→ Storage取得 → SHA-256照合 → bytes返却。`storage_path` は会社に返さない。
 
 ## 3. 画面

@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { subscriptionObjectKey } from "../lib/invoices/subscription-path";
+import { subscriptionStorageKey } from "../lib/invoices/subscription-path";
 import { ADMIN_INVOICE_STATE_LABELS, adminInvoiceState, companyInvoiceState, COMPANY_INVOICE_TEXT, PREPARING_WINDOW_MS } from "../lib/invoices/subscription-status";
 import { preparedSubscriptionInvoiceSchema, subscriptionPrepareResultSchema } from "../lib/invoices/subscription-types";
 import { renderSubscriptionInvoicePdf } from "../lib/invoices/subscription-pdf";
@@ -26,14 +26,15 @@ const prepared = {
     line_items: [{ description: "Beauty Reach 月額利用料", quantity: 1, unit: "か月", amount: 10000 }],
     payment: { method: "credit_card" as const, status: "paid" as const, paid_at: "2026-10-01T01:00:00+00:00", stripe_invoice_id: "in_test123", stripe_payment_intent_id: "pi_test123" },
   },
-  storage_path: `invoices/${ORG}/BR-2026-000123.pdf`,
+  storage_path: `subscription-invoices/${ORG}/BR-2026-000123.pdf`,
   snapshot_digest: "a".repeat(64),
 };
 
-test("Storageキー: DBの論理パス invoices/ を subscription-invoices/ に変換し、成功報酬のパスと分離", () => {
-  assert.equal(subscriptionObjectKey(`invoices/${ORG}/BR-2026-000123.pdf`), `subscription-invoices/${ORG}/BR-2026-000123.pdf`);
-  for (const bad of ["", "subscription-invoices/x/BR-2026-000123.pdf", `invoices/${ORG}/../BR-2026-000123.pdf`, `invoices/${ORG}/BR-2026-000123.txt`, `/invoices/${ORG}/BR-2026-000123.pdf`, "invoices/not-a-uuid/BR-2026-000123.pdf"]) {
-    assert.throws(() => subscriptionObjectKey(bad), /invalid/, bad);
+test("Storageキー: DBのstorage_pathがそのまま実キー（変換しない）。旧形式・不正形式は拒否", () => {
+  const p = `subscription-invoices/${ORG}/BR-2026-000123.pdf`;
+  assert.equal(subscriptionStorageKey(p), p, "DB値をそのまま返す");
+  for (const bad of ["", `invoices/${ORG}/BR-2026-000123.pdf`, `subscription-invoices/${ORG}/../BR-2026-000123.pdf`, `subscription-invoices/${ORG}/BR-2026-000123.txt`, `/subscription-invoices/${ORG}/BR-2026-000123.pdf`, "subscription-invoices/not-a-uuid/BR-2026-000123.pdf"]) {
+    assert.throws(() => subscriptionStorageKey(bad), /invalid/, bad);
   }
 });
 
@@ -110,14 +111,14 @@ test("静的検査: ダウンロードは認可RPC→Storage→SHA-256照合。�
   assert.ok(iAuth > 0 && iDl > iAuth && iSha > iDl, "認可→取得→照合の順");
   assert.ok(!/createSignedUrl|getPublicUrl|createSignedUploadUrl/.test(route));
   assert.ok(!/storage_path/.test(route.replace(/doc\.data\.storage_path/g, "")), "storage_pathをレスポンスへ出さない");
-  assert.match(route, /subscriptionObjectKey\(/);
+  assert.match(route, /subscriptionStorageKey\(/);
 });
 
 test("静的検査: 会社向け画面・クエリにstorage_path/Stripe参照を出さない。発行は失敗を握りつぶさずresult型で返す", () => {
   const ui = read("components/billing/subscription-invoice-history.tsx");
   assert.ok(!/storage_path|stripe_invoice_id|file_sha256|missing/.test(strip(ui)));
   const issue = read("lib/invoices/subscription-issue.ts");
-  assert.match(issue, /subscriptionObjectKey\(p\.prepared\.storage_path\)/);
+  assert.match(issue, /subscriptionStorageKey\(p\.prepared\.storage_path\)/);
   assert.ok(!/createSignedUrl|getPublicUrl/.test(issue));
   const webhook = read("lib/stripe/webhook-handler.ts");
   assert.match(webhook, /issueSubscriptionInvoice\(r\.payment_id\)/);
