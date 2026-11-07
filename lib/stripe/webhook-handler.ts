@@ -136,6 +136,8 @@ export async function processStripeEvent(event: Stripe.Event, deps: HandlerDeps)
       const latest = await deps.stripe.retrieveSubscription(subId);
       if (!isOurSubscription(latest)) return { result: "ignored", note: "not_monthly_subscription" };
       const snap = await applySubscription(deps, latest, event.id);
+      // 支払い成功＝カードが使えた事実。カード登録状態が未反映でも、ここで自己修復する。
+      if (event.type === "invoice.paid") await syncPaymentMethodFromSubscription(deps, customerId, latest, event.id);
       const r = await deps.callRpc("apply_stripe_invoice_result", {
         p_customer_id: customerId,
         p_subscription_id: subId,
@@ -252,14 +254,8 @@ async function handleCheckoutCompleted(s: Stripe.Checkout.Session, eventId: stri
     if ((r.result === "applied" || r.result === "already_applied") && subId) {
       const sub = await deps.stripe.retrieveSubscription(subId);
       results.push(await applySubscription(deps, sub, eventId));
-      const pm = idOf(sub.default_payment_method);
-      if (pm) {
-        const st = await deps.callRpc("set_payment_method_state", {
-          p_customer_id: customerId, p_available: true, p_payment_method_id: pm, p_event_id: eventId,
-        });
-        results.push(st.result);
-        await deps.stripe.setCustomerDefaultPaymentMethod(customerId, pm);
-      }
+      const synced = await syncPaymentMethodFromSubscription(deps, customerId, sub, eventId);
+      if (synced) results.push(synced);
     }
     return { result: worst(results) };
   }
@@ -275,4 +271,22 @@ async function handleCheckoutCompleted(s: Stripe.Checkout.Session, eventId: stri
   }
 
   return { result: "ignored", note: "unknown_purpose" };
+}
+
+/**
+ * 月額開始後に「請求に使うカード」をDBへ反映する。
+ * Checkout(subscription)では、カードが Subscription.default_payment_method ではなく
+ * 顧客のカード一覧にだけ現れることがある。その場合も「カード未登録」と誤判定しないよう、
+ * Subscription → 顧客のカード一覧 の順に探す。見つからなければ何も変えない（解除は payment_method.detached が扱う）。
+ */
+async function syncPaymentMethodFromSubscription(
+  deps: HandlerDeps, customerId: string, sub: Stripe.Subscription, eventId: string,
+): Promise<string | null> {
+  const pm = idOf(sub.default_payment_method) ?? (await deps.stripe.listCustomerCardPaymentMethods(customerId))[0] ?? null;
+  if (!pm) return null;
+  const st = await deps.callRpc("set_payment_method_state", {
+    p_customer_id: customerId, p_available: true, p_payment_method_id: pm, p_event_id: eventId,
+  });
+  await deps.stripe.setCustomerDefaultPaymentMethod(customerId, pm);
+  return st.result;
 }

@@ -197,11 +197,12 @@ test("webhook: invoice.paid/failed はsnapshotを先に反映してから支払�
     const r = await processStripeEvent(ev(type, invoice), deps);
     assert.equal(r.result, "processed");
     const expectedFns = type === "invoice.paid"
-      ? ["apply_stripe_subscription_snapshot", "apply_stripe_invoice_result", "record_subscription_invoice_payment"]
+      ? ["apply_stripe_subscription_snapshot", "set_payment_method_state", "apply_stripe_invoice_result", "record_subscription_invoice_payment"]
       : ["apply_stripe_subscription_snapshot", "apply_stripe_invoice_result"];
     assert.deepEqual(calls.map((c) => c.fn), expectedFns);
-    assert.equal(calls[1]!.args.p_result, expected);
-    assert.equal(calls[1]!.args.p_event_at, new Date(1_700_000_100 * 1000).toISOString());
+    const res = calls.find((c) => c.fn === "apply_stripe_invoice_result")!;
+    assert.equal(res.args.p_result, expected);
+    assert.equal(res.args.p_event_at, new Date(1_700_000_100 * 1000).toISOString());
   }
   const none = makeDeps();
   assert.equal((await processStripeEvent(ev("invoice.paid", { id: "in_2", customer: "cus_1", parent: null }), none.deps)).result, "ignored");
@@ -425,4 +426,32 @@ test("署名検証: 正しい署名は通り、本文改ざん・別secret・古
   const old = stripe.webhooks.generateTestHeaderString({ payload, secret, timestamp: Math.floor(Date.now() / 1000) - 3600 });
   assert.throws(() => stripe.webhooks.constructEvent(payload, old, secret), /tolerance|timestamp/i);
   assert.throws(() => stripe.webhooks.constructEvent(payload, "", secret), /signature/i);
+});
+
+// ---- カード登録状態の誤判定（Checkoutではカードが Subscription.default_payment_method に無いことがある）
+test("webhook: 月額Checkout完了で Subscription に既定カードが無くても、顧客のカード一覧から登録済みを記録する", async () => {
+  const { deps, calls, stripeCalls } = makeDeps({ sub: { default_payment_method: null }, pms: ["pm_card42"] });
+  const session = { id: "cs_m", customer: "cus_1", subscription: "sub_1", status: "complete", metadata: { checkout_record_id: "rm", purpose: "monthly_subscription" } };
+  await processStripeEvent(ev("checkout.session.completed", session), deps);
+  const st = calls.find((c) => c.fn === "set_payment_method_state")!;
+  assert.equal(st.args.p_available, true);
+  assert.equal(st.args.p_payment_method_id, "pm_card42");
+  assert.ok(stripeCalls.includes("default:cus_1:pm_card42"));
+});
+test("webhook: カードがどこにも無ければカード状態を変更しない（解除は payment_method.detached が扱う）", async () => {
+  const { deps, calls } = makeDeps({ sub: { default_payment_method: null }, pms: [] });
+  const session = { id: "cs_m", customer: "cus_1", subscription: "sub_1", status: "complete", metadata: { checkout_record_id: "rm", purpose: "monthly_subscription" } };
+  await processStripeEvent(ev("checkout.session.completed", session), deps);
+  assert.ok(!calls.some((c) => c.fn === "set_payment_method_state"));
+});
+test("webhook: invoice.paid でもカード登録状態を自己修復する（Subscriptionに既定カードが無い場合は顧客のカード一覧）", async () => {
+  const { deps, calls } = makeDeps({ sub: { default_payment_method: null }, pms: ["pm_card42"] });
+  await processStripeEvent(ev("invoice.paid", { id: "in_1", customer: "cus_1", parent: { subscription_details: { subscription: "sub_1" } } }), deps);
+  const st = calls.find((c) => c.fn === "set_payment_method_state")!;
+  assert.equal(st.args.p_payment_method_id, "pm_card42");
+});
+test("webhook: invoice.payment_failed ではカード登録状態を変更しない", async () => {
+  const { deps, calls } = makeDeps({ sub: { status: "unpaid" }, pms: ["pm_card42"] });
+  await processStripeEvent(ev("invoice.payment_failed", { id: "in_1", customer: "cus_1", parent: { subscription_details: { subscription: "sub_1" } } }), deps);
+  assert.ok(!calls.some((c) => c.fn === "set_payment_method_state"));
 });
