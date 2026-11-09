@@ -65,7 +65,7 @@ export function StylistScoutCard({ scout, salonName, history, storeId = null, ar
   }
 
   return (
-    <article className="rounded-2xl border border-line bg-surface p-5">
+    <article id={`scout-${scout.id}`} className="scroll-mt-6 rounded-2xl border border-line bg-surface p-5">
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="eyebrow mb-1">スカウト</p>

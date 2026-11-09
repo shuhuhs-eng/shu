@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getStoreScoutQuota } from "@/lib/store-activity/actions";
+import { getStoreScoutQuota, getStoreScouts } from "@/lib/store-activity/actions";
+import { getStoreHiringProcesses } from "@/lib/hiring/actions";
+import { countPendingPositiveScouts } from "@/lib/hiring/pending";
 import { ScoutQuotaCard } from "@/components/store-activity/scout-quota-card";
 
 type Props = {
@@ -48,6 +50,9 @@ export default async function StoreWorkspacePage({ params }: Props) {
   }
 
   const quota = await getStoreScoutQuota(storeId);
+  // 前向きなScout返信のうち、まだ採用進捗に追加していない人数（案内のみ。取得できなければ出さない）。
+  const [scouts, processes] = await Promise.all([getStoreScouts(storeId), getStoreHiringProcesses(storeId)]);
+  const pendingScouts = scouts && processes ? countPendingPositiveScouts(scouts, processes) : 0;
 
   return (
     <main className="mx-auto max-w-[560px] px-5 py-12">
@@ -65,6 +70,20 @@ export default async function StoreWorkspacePage({ params }: Props) {
       <div className="mt-6">
         <ScoutQuotaCard quota={quota} />
       </div>
+
+      {pendingScouts > 0 && (
+        <Link
+          href={`/salon/stores/${storeId}/scouts`}
+          className="mt-6 block rounded-2xl border border-[#285B45]/30 bg-[#EAF3EC] p-5"
+        >
+          <p className="font-serif text-[15px] font-bold text-[#1F5A3F]">
+            スカウトに前向きな返信が届いています（{pendingScouts}名）
+          </p>
+          <p className="mt-1 text-[12px] leading-relaxed text-charcoal">
+            スカウト履歴から「採用進捗に追加」すると、面談や選考を進められます ›
+          </p>
+        </Link>
+      )}
 
       <div className="mt-6 space-y-3">
         <Link

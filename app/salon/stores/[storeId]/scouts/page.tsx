@@ -74,7 +74,7 @@ export default async function StoreScoutsPage({ params }: Props) {
       ) : (
         <div className="mt-8 space-y-3">
           {scouts.map((scout) => (
-            <article key={scout.id} className="rounded-xl border border-line bg-surface p-4">
+            <article key={scout.id} id={`scout-${scout.id}`} className="scroll-mt-6 rounded-xl border border-line bg-surface p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="font-serif text-[15px] font-bold text-ink">
@@ -115,7 +115,15 @@ export default async function StoreScoutsPage({ params }: Props) {
                 </div>
               )}
 
-              {/* 前向きな返信（興味あり/質問あり）のスカウトだけ、採用進捗に追加できる。 */}
+              {/* 前向きな返信（興味あり/質問あり）のスカウトだけ、採用進捗に追加できる。
+                  追加は店舗側の明示操作のみ（自動では候補者にしない）。 */}
+              {(scout.response_status === "interested" || scout.response_status === "question") &&
+                !hiringProcessByStylist.has(scout.stylist_user_id) && (
+                  <p className="mt-3 text-[11.5px] leading-relaxed text-charcoal">
+                    前向きな返信が届いています。採用進捗に追加すると、面談の調整や選考の管理ができます。
+                    {!canShowAddHiring && "（追加できるのは、採用担当者以上の権限を持つ方です）"}
+                  </p>
+                )}
               {(scout.response_status === "interested" || scout.response_status === "question" ||
                 hiringProcessByStylist.has(scout.stylist_user_id)) && (
                 <AddCandidateButton
