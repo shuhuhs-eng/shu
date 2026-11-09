@@ -176,7 +176,7 @@ function ActivitySection({ activity }: { activity: ActivityResult }) {
   const a = activity.activity;
   const items: Array<[string, number]> = [
     ["候補者追加", a.added_count], ["面談化", a.interview_reached_count], ["面談実施", a.interview_completed_count],
-    ["選考到達", a.selection_count], ["内定到達", a.offered_count], ["採用", a.hired_count],
+    ["選考到達", a.selection_count], ["採用", a.hired_count],
     ["辞退", a.declined_count], ["不採用", a.rejected_count],
   ];
   const srcMap = new Map(activity.by_source.map((s) => [s.source, s]));
@@ -192,7 +192,7 @@ function ActivitySection({ activity }: { activity: ActivityResult }) {
         <table className="w-full min-w-[480px] text-[12px]">
           <thead><tr className="border-b border-line text-left text-sub">
             <th className="px-3 py-2.5 font-semibold">入口</th><th className={TH}>候補者追加</th><th className={TH}>面談化</th>
-            <th className={TH}>面談実施</th><th className={TH}>内定</th><th className={TH}>採用</th>
+            <th className={TH}>面談実施</th><th className={TH}>採用</th>
           </tr></thead>
           <tbody>
             {SOURCES.map((s) => {
@@ -201,7 +201,7 @@ function ActivitySection({ activity }: { activity: ActivityResult }) {
                 <tr key={s} className="border-b border-line last:border-0">
                   <td className="px-3 py-2.5 font-semibold text-ink">{HIRING_SOURCE_LABELS[s]}</td>
                   <td className={TD}>{r?.added_count ?? 0}</td><td className={TD}>{r?.interview_reached_count ?? 0}</td>
-                  <td className={TD}>{r?.interview_completed_count ?? 0}</td><td className={TD}>{r?.offered_count ?? 0}</td>
+                  <td className={TD}>{r?.interview_completed_count ?? 0}</td>
                   <td className={TD}>{r?.hired_count ?? 0}</td>
                 </tr>
               );
@@ -216,14 +216,14 @@ function ActivitySection({ activity }: { activity: ActivityResult }) {
           <table className="w-full min-w-[640px] text-[12px]">
             <thead><tr className="border-b border-line text-left text-sub">
               <th className="px-3 py-2.5 font-semibold">店舗</th><th className={TH}>追加</th><th className={TH}>面談化</th><th className={TH}>面談実施</th>
-              <th className={TH}>選考</th><th className={TH}>内定</th><th className={TH}>採用</th><th className={TH}>辞退</th><th className={TH}>不採用</th>
+              <th className={TH}>選考</th><th className={TH}>採用</th><th className={TH}>辞退</th><th className={TH}>不採用</th>
             </tr></thead>
             <tbody>
               {activity.by_store.map((st) => (
                 <tr key={st.store_id} className="border-b border-line last:border-0">
                   <td className="px-3 py-2.5 font-semibold text-ink">{st.store_name}</td>
                   <td className={TD}>{st.added_count}</td><td className={TD}>{st.interview_reached_count}</td><td className={TD}>{st.interview_completed_count}</td>
-                  <td className={TD}>{st.selection_count}</td><td className={TD}>{st.offered_count}</td><td className={TD}>{st.hired_count}</td>
+                  <td className={TD}>{st.selection_count}</td><td className={TD}>{st.hired_count}</td>
                   <td className={TD}>{st.declined_count}</td><td className={TD}>{st.rejected_count}</td>
                 </tr>
               ))}
@@ -241,11 +241,11 @@ function CohortSection({ cohort }: { cohort: CohortResult }) {
   const c = t.candidate_count;
   const steps: Array<[string, number]> = [
     ["候補者数", c], ["面談化", t.interview_reached_count], ["面談実施", t.interview_completed_count],
-    ["選考到達", t.selection_count], ["内定到達", t.offered_count], ["採用", t.hired_count],
+    ["選考到達", t.selection_count], ["採用", t.hired_count],
   ];
   const rates: Array<[string, string]> = [
     ["面談化率", percent(t.interview_reached_count, c)], ["面談実施率", percent(t.interview_completed_count, c)],
-    ["内定率", percent(t.offered_count, c)], ["採用率", percent(t.hired_count, c)],
+    ["採用率", percent(t.hired_count, c)],
   ];
   const srcMap = new Map(cohort.by_source.map((s) => [s.source, s]));
   const unknown = cohort.unknown_dates.cohort_date_unknown_count;
@@ -273,7 +273,7 @@ function CohortSection({ cohort }: { cohort: CohortResult }) {
         <table className="w-full min-w-[520px] text-[12px]">
           <thead><tr className="border-b border-line text-left text-sub">
             <th className="px-3 py-2.5 font-semibold">入口</th><th className={TH}>候補者</th><th className={TH}>面談化</th>
-            <th className={TH}>面談実施</th><th className={TH}>内定</th><th className={TH}>採用</th><th className={TH}>採用率</th>
+            <th className={TH}>面談実施</th><th className={TH}>採用</th><th className={TH}>採用率</th>
           </tr></thead>
           <tbody>
             {SOURCES.map((s) => {
@@ -283,7 +283,7 @@ function CohortSection({ cohort }: { cohort: CohortResult }) {
                 <tr key={s} className="border-b border-line last:border-0">
                   <td className="px-3 py-2.5 font-semibold text-ink">{HIRING_SOURCE_LABELS[s]}</td>
                   <td className={TD}>{cand}</td><td className={TD}>{r?.interview_reached_count ?? 0}</td>
-                  <td className={TD}>{r?.interview_completed_count ?? 0}</td><td className={TD}>{r?.offered_count ?? 0}</td>
+                  <td className={TD}>{r?.interview_completed_count ?? 0}</td>
                   <td className={TD}>{r?.hired_count ?? 0}</td><td className={TD}>{percent(r?.hired_count ?? 0, cand)}</td>
                 </tr>
               );
@@ -300,14 +300,14 @@ function CohortSection({ cohort }: { cohort: CohortResult }) {
           <table className="w-full min-w-[700px] text-[12px]">
             <thead><tr className="border-b border-line text-left text-sub">
               <th className="px-3 py-2.5 font-semibold">店舗</th><th className={TH}>候補者</th><th className={TH}>面談化</th><th className={TH}>面談実施</th>
-              <th className={TH}>選考</th><th className={TH}>内定</th><th className={TH}>採用</th><th className={TH}>辞退</th><th className={TH}>不採用</th><th className={TH}>採用率</th>
+              <th className={TH}>選考</th><th className={TH}>採用</th><th className={TH}>辞退</th><th className={TH}>不採用</th><th className={TH}>採用率</th>
             </tr></thead>
             <tbody>
               {cohort.by_store.map((st) => (
                 <tr key={st.store_id} className="border-b border-line last:border-0">
                   <td className="px-3 py-2.5 font-semibold text-ink">{st.store_name}</td>
                   <td className={TD}>{st.candidate_count}</td><td className={TD}>{st.interview_reached_count}</td><td className={TD}>{st.interview_completed_count}</td>
-                  <td className={TD}>{st.selection_count}</td><td className={TD}>{st.offered_count}</td><td className={TD}>{st.hired_count}</td>
+                  <td className={TD}>{st.selection_count}</td><td className={TD}>{st.hired_count}</td>
                   <td className={TD}>{st.declined_count}</td><td className={TD}>{st.rejected_count}</td>
                   <td className={TD}>{percent(st.hired_count, st.candidate_count)}</td>
                 </tr>
@@ -328,7 +328,7 @@ function Comparison({ activity, prevActivity, cohort, prevCohort }: {
   const a = activity.activity, p = prevActivity.activity;
   const rows: Array<[string, number, number]> = [
     ["候補者追加", a.added_count, p.added_count], ["面談化", a.interview_reached_count, p.interview_reached_count],
-    ["内定到達", a.offered_count, p.offered_count], ["採用", a.hired_count, p.hired_count],
+    ["採用", a.hired_count, p.hired_count],
   ];
   const c = cohort.cohort, pc = prevCohort.cohort;
   const rateRows: Array<[string, number, number, number, number]> = [
@@ -382,7 +382,7 @@ function CurrentSection({ current }: { current: NonNullable<Awaited<ReturnType<t
   const c = total.candidate_count;
   const steps: Array<[string, number]> = [
     ["候補者", total.candidate_count], ["面談化", total.interview_reached_count], ["面談実施", total.interview_completed_count],
-    ["選考", total.selection_count], ["内定", total.offered_count], ["採用", total.hired_count],
+    ["選考", total.selection_count], ["採用", total.hired_count],
   ];
   return (
     <>
@@ -407,7 +407,7 @@ function CurrentSection({ current }: { current: NonNullable<Awaited<ReturnType<t
       <div className="mt-8">
         <p className="eyebrow mb-1">要確認の候補者</p>
         <p className="mb-3 text-[11.5px] leading-relaxed text-sub">
-          更新が止まっている目安は、連絡調整中が{ATTENTION_THRESHOLD_DAYS.contacting}日、選考中が{ATTENTION_THRESHOLD_DAYS.inProgress}日、内定が{ATTENTION_THRESHOLD_DAYS.offered}日です（参考の目安です）。
+          更新が止まっている目安は、連絡調整中が{ATTENTION_THRESHOLD_DAYS.contacting}日、選考中が{ATTENTION_THRESHOLD_DAYS.inProgress}日です（参考の目安です。過去データの旧ステータスも選考中として扱います）。
         </p>
         {attention.length === 0 ? (
           <p className="rounded-2xl border border-line bg-surface p-6 text-center text-[13px] text-charcoal">確認が必要な候補者はいません。</p>

@@ -69,11 +69,13 @@ export default async function CompanyHiringPage({ searchParams }: Props) {
   const kpis: Array<{ label: string; value: number }> = [
     { label: "選考中（進行中の合計）", value: activeCount(totalCounts) },
     { label: "面談予定", value: totalCounts.interview_scheduled ?? 0 },
-    { label: "内定", value: totalCounts.offered ?? 0 },
     { label: "採用", value: totalCounts.hired ?? 0 },
     { label: "辞退", value: totalCounts.declined ?? 0 },
     { label: "不採用", value: totalCounts.rejected ?? 0 },
   ];
+
+  // 過去データの旧「内定」(offered)が残っている間だけ、列・絞り込みに「選考中（旧：内定）」を出す。
+  const statusColumns = STORE_COLUMNS.filter((s) => s !== "offered" || (totalCounts.offered ?? 0) > 0);
 
   const orgNames = [...new Set(stores.map((s) => s.organizationName).filter((n): n is string => !!n))];
 
@@ -129,7 +131,7 @@ export default async function CompanyHiringPage({ searchParams }: Props) {
               <thead>
                 <tr className="border-b border-line text-left text-sub">
                   <th className="px-3 py-2.5 font-semibold">店舗</th>
-                  {STORE_COLUMNS.map((s) => (
+                  {statusColumns.map((s) => (
                     <th key={s} className="px-2 py-2.5 text-center font-semibold">
                       {HIRING_STATUS_LABELS[s]}
                     </th>
@@ -150,7 +152,7 @@ export default async function CompanyHiringPage({ searchParams }: Props) {
                         </Link>
                         {failedIds.has(store.id) && <span className="ml-1 text-[10px] text-[#8A2E2E]">取得不可</span>}
                       </td>
-                      {STORE_COLUMNS.map((s) => (
+                      {statusColumns.map((s) => (
                         <td key={s} className="px-2 py-2.5 text-center text-charcoal">
                           {failedIds.has(store.id) ? "-" : (counts[s] ?? 0)}
                         </td>
@@ -176,7 +178,7 @@ export default async function CompanyHiringPage({ searchParams }: Props) {
           >
             すべての状況
           </Link>
-          {STORE_COLUMNS.map((s) => (
+          {statusColumns.map((s) => (
             <Link
               key={s}
               href={filterHref({ store: storeFilter, status: s })}

@@ -56,7 +56,7 @@ export default async function AdminCompanyDetailPage({ params }: Props) {
       <section className="mt-6 grid grid-cols-3 gap-3 sm:grid-cols-6">
         {[
           ["店舗数", org.store_count], ["利用中店舗", org.active_store_count], ["候補者", org.candidate_count],
-          ["面談到達", org.interview_count], ["内定", org.offered_count], ["採用", org.hired_count],
+          ["面談到達", org.interview_count], ["採用", org.hired_count],
         ].map(([label, value]) => (
           <div key={label} className="rounded-2xl border border-line bg-surface p-3">
             <p className="text-[11px] text-sub">{label}</p><p className="mt-1 font-serif text-[22px] font-bold text-ink">{value}</p>

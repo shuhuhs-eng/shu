@@ -35,7 +35,7 @@ export const ATTENTION_THRESHOLD_DAYS = {
   contacting: 7,
   /** 面談済み・選考中のまま更新が無い */
   inProgress: 14,
-  /** 内定のまま更新が無い */
+  /** 過去データの旧「内定」のまま更新が無い（新規には発生しない） */
   offered: 14,
 } as const;
 
@@ -57,7 +57,7 @@ export function findAttentionItems(rows: AttentionRow[], now: Date = new Date())
     ) {
       items.push({ row, reason: `選考中のまま${daysSince(row.updated_at)}日更新がありません` });
     } else if (row.status === "offered" && daysSince(row.updated_at) >= ATTENTION_THRESHOLD_DAYS.offered) {
-      items.push({ row, reason: `内定のまま${daysSince(row.updated_at)}日更新がありません` });
+      items.push({ row, reason: `選考中（旧：内定）のまま${daysSince(row.updated_at)}日更新がありません` });
     }
   }
   return items.sort((a, b) => a.row.updated_at.localeCompare(b.row.updated_at));
@@ -87,7 +87,7 @@ export function ratePointDiff(curNum: number, curDen: number, prevNum: number, p
 }
 
 // ---- CSV（集計値と店舗名・入口名だけ。個人名・社内メモ・IDは含めない） ----
-export const COHORT_CSV_HEADER = ["区分", "名称", "候補者", "面談化", "面談実施", "選考", "内定", "採用", "辞退", "不採用", "採用率(%)"];
+export const COHORT_CSV_HEADER = ["区分", "名称", "候補者", "面談化", "面談実施", "選考", "採用", "辞退", "不採用", "採用率(%)"];
 const CSV_SOURCE_LABELS: Record<string, string> = { interest: "興味あり", scout: "スカウト", salary_offer: "給与オファー" };
 
 function rateNumber(n: number, d: number): string {
@@ -97,10 +97,10 @@ function rateNumber(n: number, d: number): string {
 export function cohortCsvRows(cohort: CohortResult): Array<Array<string | number>> {
   const rows: Array<Array<string | number>> = [];
   for (const s of cohort.by_source) {
-    rows.push(["入口別", CSV_SOURCE_LABELS[s.source] ?? s.source, s.candidate_count, s.interview_reached_count, s.interview_completed_count, "", s.offered_count, s.hired_count, "", "", rateNumber(s.hired_count, s.candidate_count)]);
+    rows.push(["入口別", CSV_SOURCE_LABELS[s.source] ?? s.source, s.candidate_count, s.interview_reached_count, s.interview_completed_count, "", s.hired_count, "", "", rateNumber(s.hired_count, s.candidate_count)]);
   }
   for (const st of cohort.by_store) {
-    rows.push(["店舗別", st.store_name, st.candidate_count, st.interview_reached_count, st.interview_completed_count, st.selection_count, st.offered_count, st.hired_count, st.declined_count, st.rejected_count, rateNumber(st.hired_count, st.candidate_count)]);
+    rows.push(["店舗別", st.store_name, st.candidate_count, st.interview_reached_count, st.interview_completed_count, st.selection_count, st.hired_count, st.declined_count, st.rejected_count, rateNumber(st.hired_count, st.candidate_count)]);
   }
   return rows;
 }

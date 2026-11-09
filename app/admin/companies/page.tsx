@@ -31,7 +31,7 @@ export default async function AdminCompaniesPage() {
       <Link href="/admin" className="text-[13px] font-semibold text-sub underline">← 運営ダッシュボード</Link>
       <h1 className="mt-4 font-serif text-2xl font-bold text-ink">会社一覧</h1>
       <p className="mt-2 text-[12.5px] leading-relaxed text-sub">
-        会社ごとの店舗数、採用の進み具合、成功報酬の状況です。面談到達・内定数は、一度でもその段階に進んだ人数です。
+        会社ごとの店舗数、採用の進み具合、成功報酬の状況です。面談到達数は、一度でもその段階に進んだ人数です。
       </p>
 
       {orgs === null ? (

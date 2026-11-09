@@ -23,7 +23,7 @@ const TYPE_LABELS: Record<string, string> = {
   hiring_interview_scheduled: "面談予定",
   hiring_interview_rescheduled: "面談日時の変更",
   hiring_status_updated: "選考状況",
-  hiring_offered: "内定",
+  hiring_offered: "選考状況", // 過去の通知用（内定は廃止。新規には作られない）
   hiring_hired: "採用",
   hiring_declined_by_stylist: "選考の辞退",
 };

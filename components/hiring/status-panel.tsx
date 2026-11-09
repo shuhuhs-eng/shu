@@ -21,7 +21,8 @@ type Props = {
   recruitingPaused?: boolean;
 };
 
-type TargetStatus = Exclude<HiringStatus, "interview_scheduled">;
+// 面談予定は面談フォーム側、「内定」(offered)は廃止のため、ここでは選べない。
+type TargetStatus = Exclude<HiringStatus, "interview_scheduled" | "offered">;
 
 /**
  * ステータス変更パネル。現在の状態から移動できる候補だけを表示する
@@ -31,17 +32,17 @@ type TargetStatus = Exclude<HiringStatus, "interview_scheduled">;
 export function StatusPanel({ storeId, processId, currentStatus, recruitingPaused = false }: Props) {
   const router = useRouter();
   // 辞退・不採用から連絡調整中へ戻す再開は「新しい採用活動の再開」なので、停止中の店舗では出さない
-  // （DBのguardと同じ。面談・選考・内定・採用・辞退・不採用などの既存の進行は止めない）。
+  // （DBのguardと同じ。面談・選考・採用・辞退・不採用などの既存の進行は止めない）。
   const isReopenBlocked = recruitingPaused && (currentStatus === "declined" || currentStatus === "rejected");
   const targets = allowedNextStatuses(currentStatus).filter(
-    (s): s is TargetStatus => s !== "interview_scheduled" && !(isReopenBlocked && s === "contacting"),
+    (s): s is TargetStatus => s !== "interview_scheduled" && s !== "offered" && !(isReopenBlocked && s === "contacting"),
   );
   const [selected, setSelected] = useState<TargetStatus | null>(null);
   const [publicNote, setPublicNote] = useState("");
   const [internalNote, setInternalNote] = useState("");
   const [reasonCode, setReasonCode] = useState<HiringReasonCode | "">("");
   const [reasonNote, setReasonNote] = useState("");
-  const [confirmHired, setConfirmHired] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +62,7 @@ export function StatusPanel({ storeId, processId, currentStatus, recruitingPause
     setInternalNote("");
     setReasonCode("");
     setReasonNote("");
-    setConfirmHired(false);
+    setConfirmOpen(false);
     setError(null);
   }
 
@@ -116,15 +117,9 @@ export function StatusPanel({ storeId, processId, currentStatus, recruitingPause
           </p>
 
           {selected === "hired" && (
-            <label className="mt-3 flex items-start gap-2 rounded-lg bg-[#C24545]/10 p-3 text-[11px] leading-relaxed text-[#8A2E2E]">
-              <input
-                type="checkbox"
-                checked={confirmHired}
-                onChange={(e) => setConfirmHired(e.target.checked)}
-                className="mt-0.5"
-              />
-              <span>採用を確定すると、あとから元に戻したり確定日時を変更したりできません。よろしいですか？</span>
-            </label>
+            <p className="mt-3 rounded-lg bg-[#C24545]/10 p-3 text-[11px] leading-relaxed text-[#8A2E2E]">
+              採用を確定すると、成功報酬の請求対象になります。あとから元に戻したり確定日時を変更したりできません。
+            </p>
           )}
 
           {needsReason && (
@@ -180,11 +175,11 @@ export function StatusPanel({ storeId, processId, currentStatus, recruitingPause
           <div className="mt-4 flex gap-2">
             <button
               type="button"
-              onClick={submit}
-              disabled={busy || (selected === "hired" && !confirmHired)}
+              onClick={() => (selected === "hired" ? setConfirmOpen(true) : submit())}
+              disabled={busy}
               className="flex-1 rounded-full bg-ink px-4 py-3 text-[12px] font-bold text-surface disabled:opacity-50"
             >
-              {busy ? "保存しています…" : "変更する"}
+              {busy ? "保存しています…" : selected === "hired" ? "採用にする" : "変更する"}
             </button>
             <button
               type="button"
@@ -194,6 +189,42 @@ export function StatusPanel({ storeId, processId, currentStatus, recruitingPause
             >
               やめる
             </button>
+          </div>
+        </div>
+      )}
+
+      {confirmOpen && selected === "hired" && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="hire-confirm-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-5"
+        >
+          <div className="w-full max-w-[360px] rounded-2xl bg-surface p-5 shadow-xl">
+            <p id="hire-confirm-title" className="font-serif text-[16px] font-bold text-ink">
+              この美容師を採用にしますか？
+            </p>
+            <p className="mt-2 text-[12.5px] leading-relaxed text-charcoal">
+              採用を確定すると成功報酬の請求対象になります。
+            </p>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                disabled={busy}
+                className="flex-1 rounded-full border border-line px-4 py-3 text-[12px] font-semibold text-sub"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={submit}
+                disabled={busy}
+                className="flex-1 rounded-full bg-ink px-4 py-3 text-[12px] font-bold text-surface disabled:opacity-50"
+              >
+                {busy ? "確定しています…" : "採用を確定"}
+              </button>
+            </div>
           </div>
         </div>
       )}

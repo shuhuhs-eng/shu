@@ -41,7 +41,8 @@ const STATUS_NOTE: Record<string, string> = {
   interview_scheduled: "面談の日程が決まっています。内容をご確認ください。",
   interview_completed: "面談は完了しています。店舗からの連絡をお待ちください。",
   selection: "店舗で選考を進めています。",
-  offered: "店舗から内定が出ています。詳細は店舗からの連絡をご確認ください。",
+  // 過去データ(offered)は選考中と同じ案内にする（「内定」という中間状態は表示しない）。
+  offered: "店舗で選考を進めています。",
 };
 
 /**
@@ -60,7 +61,7 @@ export function StylistApplicationCard({ process: p }: { process: MyHiringProces
           <h3 className="font-serif text-[16px] font-bold text-ink">{p.store_name}</h3>
           {area && <p className="mt-1 text-[12px] text-sub">{area}</p>}
         </div>
-        <HiringStatusBadge status={p.status} />
+        <HiringStatusBadge status={p.status} audience="stylist" />
       </div>
 
       {p.status === "hired" ? (

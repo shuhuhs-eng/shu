@@ -104,7 +104,7 @@ export function countByStatus(rows: Array<{ status: string }>): StatusCounts {
   return counts;
 }
 
-/** 進行中（連絡調整中〜内定）の件数。採用・辞退・不採用は含めない。 */
+/** 進行中（連絡調整中〜選考中。過去データの旧「内定」も含む）の件数。採用・辞退・不採用は含めない。 */
 export function activeCount(counts: StatusCounts): number {
   return ["contacting", "interview_scheduled", "interview_completed", "selection", "offered"].reduce(
     (sum, s) => sum + (counts[s] ?? 0),

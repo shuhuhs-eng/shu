@@ -93,8 +93,8 @@ export function CompanyList({ companies }: { companies: CompanyRow[] }) {
           <ExportCsvButton
             filename="companies.csv"
             label="表示中の会社をCSVで保存"
-            header={["会社", "店舗数", "利用中店舗", "候補者", "面談到達", "内定", "採用", "成功報酬", "請求確認中", "請求済み", "入金済み", "成功報酬総額", "請求済み総額", "入金済み総額", "直近活動日"]}
-            rows={shown.map((o) => [o.organization_name, o.store_count, o.active_store_count, o.candidate_count, o.interview_count, o.offered_count, o.hired_count, o.success_fee_count, o.pending_confirmation_count, o.invoiced_count, o.paid_count, o.confirmed_total_amount, o.invoiced_total_amount, o.paid_total_amount, fmtDate(o.latest_activity_at)])}
+            header={["会社", "店舗数", "利用中店舗", "候補者", "面談到達", "採用", "成功報酬", "請求確認中", "請求済み", "入金済み", "成功報酬総額", "請求済み総額", "入金済み総額", "直近活動日"]}
+            rows={shown.map((o) => [o.organization_name, o.store_count, o.active_store_count, o.candidate_count, o.interview_count, o.hired_count, o.success_fee_count, o.pending_confirmation_count, o.invoiced_count, o.paid_count, o.confirmed_total_amount, o.invoiced_total_amount, o.paid_total_amount, fmtDate(o.latest_activity_at)])}
           />
         </div>
       </div>
@@ -112,7 +112,7 @@ export function CompanyList({ companies }: { companies: CompanyRow[] }) {
               <dl className="mt-3 grid grid-cols-3 gap-2 text-[11px] sm:grid-cols-6">
                 {[
                   ["店舗数", o.store_count], ["利用中店舗", o.active_store_count], ["候補者", o.candidate_count],
-                  ["面談到達", o.interview_count], ["内定", o.offered_count], ["採用", o.hired_count],
+                  ["面談到達", o.interview_count], ["採用", o.hired_count],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-lg bg-surface2 p-2"><dt className="text-sub">{label}</dt><dd className="mt-0.5 text-[15px] font-bold text-ink">{value}</dd></div>
                 ))}

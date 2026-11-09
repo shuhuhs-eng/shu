@@ -145,7 +145,8 @@ export async function scheduleHiringInterviewAction(
 const statusSchema = z.object({
   storeId: z.string().uuid(),
   processId: z.string().uuid(),
-  toStatus: z.enum(["contacting", "interview_completed", "selection", "offered", "hired", "declined", "rejected"]),
+  // 新規の「内定」(offered)は廃止（内定 = 採用）。DBも新しいofferedへの遷移を拒否する。
+  toStatus: z.enum(["contacting", "interview_completed", "selection", "hired", "declined", "rejected"]),
   publicNote: z.string().max(1000, "美容師への案内は1000文字以内で入力してください"),
   internalNote: z.string().max(2000, "社内メモは2000文字以内で入力してください"),
   reasonCode: z

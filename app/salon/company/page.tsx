@@ -79,7 +79,6 @@ export default async function SalonCompanyPage() {
           return [
             { label: "選考中", value: activeCount(counts) },
             { label: "面談予定", value: counts.interview_scheduled ?? 0 },
-            { label: "内定", value: counts.offered ?? 0 },
             { label: "採用", value: counts.hired ?? 0 },
           ];
         })()

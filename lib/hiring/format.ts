@@ -5,7 +5,8 @@ export const HIRING_STATUS_LABELS: Record<string, string> = {
   interview_scheduled: "面談予定",
   interview_completed: "面談済み",
   selection: "選考中",
-  offered: "内定",
+  // 過去データ用。「内定」は廃止（内定 = 採用）。新規の採用操作では使わない。
+  offered: "選考中（旧：内定）",
   hired: "採用",
   declined: "辞退",
   rejected: "不採用",
@@ -55,8 +56,9 @@ export const HIRING_EVENT_LABELS: Record<string, string> = {
 const TRANSITIONS: Record<HiringStatus, readonly HiringStatus[]> = {
   contacting: ["interview_scheduled", "rejected", "declined"],
   interview_scheduled: ["interview_scheduled", "interview_completed", "contacting", "rejected", "declined"],
-  interview_completed: ["interview_scheduled", "selection", "offered", "rejected", "declined"],
-  selection: ["interview_scheduled", "offered", "rejected", "declined"],
+  interview_completed: ["interview_scheduled", "selection", "rejected", "declined"],
+  selection: ["interview_scheduled", "hired", "rejected", "declined"],
+  // 過去データ互換（既存の offered だけ。新規には到達しない）。
   offered: ["selection", "hired", "rejected", "declined"],
   declined: ["contacting"],
   rejected: ["contacting"],
@@ -80,10 +82,15 @@ export function canScheduleInterview(current: string): boolean {
 export function statusActionLabel(from: string, to: HiringStatus): string {
   if ((from === "declined" || from === "rejected") && to === "contacting") return "選考を再開する";
   if (from === "interview_scheduled" && to === "contacting") return "面談を取り消して連絡調整中に戻す";
-  if (to === "hired") return "採用を確定する";
+  if (to === "hired") return "採用にする";
   if (to === "declined") return "辞退として記録する";
   if (to === "rejected") return "不採用にする";
   return `${HIRING_STATUS_LABELS[to]}にする`;
+}
+
+/** 美容師向けの表示名。「内定」という中間状態は見せない（過去の offered は選考中として表示する）。 */
+export function stylistStatusLabel(status: string): string {
+  return status === "offered" ? HIRING_STATUS_LABELS.selection : (HIRING_STATUS_LABELS[status] ?? status);
 }
 
 export function isClosedStatus(status: string): boolean {
