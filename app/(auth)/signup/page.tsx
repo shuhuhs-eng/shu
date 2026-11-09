@@ -6,6 +6,7 @@ import { signUpAction } from "@/lib/auth/actions";
 import { initialAuthActionState } from "@/lib/auth/types";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { PendingFieldset } from "@/components/auth/pending-fieldset";
+import { TurnstileWidget } from "@/components/security/turnstile-widget";
 import { FormErrorBanner, FormSuccessBanner } from "@/components/auth/form-messages";
 import { TextField } from "@/components/auth/text-field";
 import { PasswordRequirementsHint } from "@/components/auth/password-requirements-hint";
@@ -86,6 +87,7 @@ export default function SignUpPage() {
           <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="underline">プライバシーポリシー</Link>
           への同意をお願いしています。
         </p>
+        <TurnstileWidget resetKey={state} />
         <SubmitButton pendingText="登録中...">登録する</SubmitButton>
       </form>
 

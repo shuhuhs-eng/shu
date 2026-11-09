@@ -7,7 +7,8 @@ import {
   computeDiagnosis,
   type DiagnosisMode,
 } from "@/lib/diagnosis";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit/memory-rate-limiter";
+import { getClientIp } from "@/lib/rate-limit/memory-rate-limiter";
+import { checkSharedRateLimit } from "@/lib/rate-limit/shared-rate-limiter";
 import { CLAIM_TOKEN_COOKIE, CLAIM_TOKEN_MAX_AGE_SECONDS } from "@/lib/diagnosis-handoff/constants";
 
 /**
@@ -25,8 +26,8 @@ import { CLAIM_TOKEN_COOKIE, CLAIM_TOKEN_MAX_AGE_SECONDS } from "@/lib/diagnosis
  */
 export async function POST(request: Request) {
   // 未ログインで誰でも書き込めるAPIのため、IP単位で回数を制限する（1時間30回）。
-  // ★インメモリ実装（単一プロセス内のみ有効）。複数インスタンスで運用する場合は共有ストアへ置き換えること。
-  const limit = checkRateLimit(`guest-diagnosis:${getClientIp(request)}`, 30, 60 * 60 * 1000);
+  // 共有（DBベース）のレート制限。サーバーレスで複数インスタンスに分かれても同じカウンターを見る。
+  const limit = await checkSharedRateLimit(`guest-diagnosis:${getClientIp(request)}`, 30, 60 * 60 * 1000);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "rate_limited", retryAfterSeconds: limit.retryAfterSeconds },

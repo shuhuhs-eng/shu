@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createSalaryOffer, createStoreSalaryOffer } from "@/lib/salary-offers/actions";
+import { createStoreSalaryOffer } from "@/lib/salary-offers/actions";
 import { RECRUITING_PAUSED_MESSAGE } from "@/lib/contracts/recruiting-access";
 import type { Database } from "@/types/database";
 type Offer = Database["public"]["Tables"]["salary_offers"]["Row"];
@@ -24,9 +24,9 @@ function parseAmountInput(raw: string): AmountParseResult {
   return { kind: "valid", value };
 }
 
-// storeIdを渡した場合は店舗単位(create_salary_offer_v2)、渡さない場合は旧(create_salary_offer)で提示する。
-// 店舗側の新UIは必ずstoreIdを渡す。
-export function SalonOfferForm({ stylistUserId, existingOffer, storeId, recruitingPaused = false }: { stylistUserId: string; existingOffer: ExistingOffer | null; storeId?: string; recruitingPaused?: boolean }) {
+// 提示は常に店舗単位(create_salary_offer_v2)。storeIdは呼び出し元（店舗workspaceのparams.storeId）が必ず渡す。
+// （旧・サロン単位の create_salary_offer は 0053 で停止した。）
+export function SalonOfferForm({ stylistUserId, existingOffer, storeId, recruitingPaused = false }: { stylistUserId: string; existingOffer: ExistingOffer | null; storeId: string; recruitingPaused?: boolean }) {
   const [open, setOpen] = useState(false); const [busy, setBusy] = useState(false); const [message, setMessage] = useState<string | null>(null);
   const [guarantee, setGuarantee] = useState(250000); const [additionInput, setAdditionInput] = useState("0"); const [condition, setCondition] = useState(""); const [months, setMonths] = useState<1|3|6|12>(3); const [note, setNote] = useState("");
   const parsedAddition = parseAmountInput(additionInput);
@@ -52,7 +52,7 @@ export function SalonOfferForm({ stylistUserId, existingOffer, storeId, recruiti
     if (conditionMissing) { setMessage("実績加算を設定する場合は、支給条件を入力してください。"); return; }
     setBusy(true); setMessage(null);
     const offerInput = { stylistUserId, monthlyGuarantee: guarantee, performanceAddition: addition, performanceCondition: condition.trim() || null, guaranteeMonths: months, message: note || null };
-    const result = storeId ? await createStoreSalaryOffer({ storeId, ...offerInput }) : await createSalaryOffer(offerInput);
+    const result = await createStoreSalaryOffer({ storeId, ...offerInput });
     setBusy(false); setMessage(result.success ? "条件を提示しました。" : result.error);
   }
   return <div className="mt-3 rounded-xl border border-line bg-surface p-4">

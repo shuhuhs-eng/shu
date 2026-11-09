@@ -8,6 +8,8 @@
  *
  * 開発環境（NODE_ENV !== "production"）では errors を返さず、警告のみにする。
  */
+import { siteUrlProblem } from "../site-url";
+
 export type EnvSpec = { key: string; kind: "required" | "productionOnly"; note: string };
 
 export const ENV_SPECS: EnvSpec[] = [
@@ -23,6 +25,8 @@ export const ENV_SPECS: EnvSpec[] = [
   { key: "LEGAL_EFFECTIVE_DATE", kind: "productionOnly", note: "規約の施行日 YYYY-MM-DD" },
   { key: "STRIPE_SECRET_KEY", kind: "productionOnly", note: "Stripe秘密鍵（サーバー専用。カード決済・月額課金に必須）" },
   { key: "STRIPE_WEBHOOK_SECRET", kind: "productionOnly", note: "Stripe webhook署名シークレット（サーバー専用）" },
+  { key: "TURNSTILE_SECRET_KEY", kind: "productionOnly", note: "Cloudflare Turnstile秘密鍵（サーバー専用。Bot対策。未設定だと本番で登録・問い合わせが拒否される）" },
+  { key: "NEXT_PUBLIC_TURNSTILE_SITE_KEY", kind: "productionOnly", note: "Cloudflare Turnstileサイトキー（公開可。未設定だと本番でフォームが送信できない）" },
 ];
 
 export type EnvProblem = { key: string; level: "error" | "warn"; message: string };
@@ -41,11 +45,13 @@ export function collectEnvProblems(env: Env, isProduction: boolean): EnvProblem[
     }
   }
   const site = env.NEXT_PUBLIC_SITE_URL;
-  if (isProduction && site && /localhost|127\.0\.0\.1/.test(site)) {
-    problems.push({ key: "NEXT_PUBLIC_SITE_URL", level: "error", message: "NEXT_PUBLIC_SITE_URL が localhost を指している" });
+  if (isProduction && site?.trim()) {
+    const problem = siteUrlProblem(site);
+    if (problem) problems.push({ key: "NEXT_PUBLIC_SITE_URL", level: "error", message: problem });
   }
-  if (isProduction && site && !/^https:\/\//.test(site)) {
-    problems.push({ key: "NEXT_PUBLIC_SITE_URL", level: "warn", message: "NEXT_PUBLIC_SITE_URL が https:// ではない" });
+  // 開発用のBot対策bypassは本番では絶対に使えない（コード側でも無視するが、設定自体を異常として検出する）。
+  if (isProduction && env.BOT_PROTECTION_DEV_BYPASS?.trim()) {
+    problems.push({ key: "BOT_PROTECTION_DEV_BYPASS", level: "error", message: "BOT_PROTECTION_DEV_BYPASS は本番では設定してはいけない（開発専用）" });
   }
   // Stripe: 鍵の種類を検査（値は出さない）。実カード課金(live鍵)は明示的な許可フラグが無い限りエラー。
   const stripeKey = env.STRIPE_SECRET_KEY?.trim();
@@ -56,6 +62,13 @@ export function collectEnvProblems(env: Env, isProduction: boolean): EnvProblem[
       problems.push({ key: "STRIPE_ALLOW_LIVE_MODE", level: "error", message: "本番(live)鍵が設定されているが STRIPE_ALLOW_LIVE_MODE=true が無い（Test Modeのまま公開前確認を終えるまで有効にしない）" });
     }
   }
+  // Test/Liveの混在検出（値は出さない）。
+  if (isProduction && stripeKey && /^(sk|rk)_test_/.test(stripeKey) && env.STRIPE_ALLOW_LIVE_MODE === "true") {
+    problems.push({ key: "STRIPE_SECRET_KEY", level: "error", message: "STRIPE_ALLOW_LIVE_MODE=true なのに STRIPE_SECRET_KEY がTest鍵（sk_test_）。TestとLiveの設定が混在している" });
+  }
+  if (isProduction && stripeKey && /^(sk|rk)_live_/.test(stripeKey) && site?.trim() && siteUrlProblem(site)) {
+    problems.push({ key: "STRIPE_SECRET_KEY", level: "error", message: "Live鍵（sk_live_）なのに NEXT_PUBLIC_SITE_URL が本番向けではない。戻りURLが壊れる" });
+  }
   const stripeWebhook = env.STRIPE_WEBHOOK_SECRET?.trim();
   if (stripeWebhook && !/^whsec_/.test(stripeWebhook)) {
     problems.push({ key: "STRIPE_WEBHOOK_SECRET", level: "error", message: "STRIPE_WEBHOOK_SECRET は whsec_ で始まる値" });
@@ -65,4 +78,10 @@ export function collectEnvProblems(env: Env, isProduction: boolean): EnvProblem[
     problems.push({ key: "LEGAL_EFFECTIVE_DATE", level: "error", message: "LEGAL_EFFECTIVE_DATE は YYYY-MM-DD 形式" });
   }
   return problems;
+}
+
+/** 起動失敗時のメッセージ（変数名と理由のみ。値は含めない）。 */
+export function formatEnvFailure(errors: EnvProblem[]): string {
+  const keys = Array.from(new Set(errors.map((e) => e.key))).join(", ");
+  return `本番の環境変数が不足または不正のため起動を中止しました: ${keys}（詳細は [env] ログ参照）`;
 }

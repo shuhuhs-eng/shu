@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { createTokenClient } from "@/lib/supabase/token-client";
 import { computeDiagnosis, isValidAnswers, type ComputedDiagnosis } from "@/lib/diagnosis";
 import { generateDiagnosisNarrative } from "@/lib/ai/generate-diagnosis-narrative";
@@ -85,7 +86,9 @@ export async function claimPendingDiagnosisIfPresent(): Promise<ClaimResult> {
 
   let diagnosisResultId: string | null = null;
 
-  const insertResult = await supabase
+  const insertResult = // ★0053: diagnosis_results への直接INSERTはクライアント（本人のJWT）には許可しない。
+  // 認証済みの本人（上のgetUser）のuser_idと、サーバーが回答から再計算した値だけをservice roleで保存する。
+  await createServiceClient()
     .from("diagnosis_results")
     .insert({
       user_id: user.id,

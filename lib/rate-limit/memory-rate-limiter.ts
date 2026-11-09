@@ -57,11 +57,18 @@ export function getClientIp(request: Request): string {
 
 /** Server Action など Request が無い場所から使う版（next/headers の headers() を渡す）。 */
 export function getClientIpFromHeaders(h: { get(name: string): string | null }): string {
+  // ホスティング側が付け替える（クライアントが偽装できない）ヘッダを優先する。
+  //   Vercel: x-vercel-forwarded-for（Vercelが上書き）→ x-real-ip
+  // それが無い環境（自前ホスティング・開発）は x-forwarded-for の先頭を使う。
+  // ★前段のプロキシが x-forwarded-for を上書きしない構成では偽装できるため、本番はVercel等の
+  //   信頼できる前段を使うこと（docs/phase54 参照）。
+  const vercel = h.get("x-vercel-forwarded-for");
+  if (vercel) return vercel.split(",")[0]!.trim();
+  const realIp = h.get("x-real-ip");
+  if (realIp) return realIp.trim();
   const forwarded = h.get("x-forwarded-for");
   if (forwarded) {
     return forwarded.split(",")[0]!.trim();
   }
-  const realIp = h.get("x-real-ip");
-  if (realIp) return realIp.trim();
   return "unknown";
 }

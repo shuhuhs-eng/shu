@@ -1515,6 +1515,15 @@ export type Database = {
         Args: Record<string, never>;
         Returns: number;
       };
+      // 0053で追加。service_role専用（共有レート制限。キーはSHA-256済み）。
+      check_rate_limit: {
+        Args: { p_key_hash: string; p_limit: number; p_window_seconds: number };
+        Returns: { allowed: boolean; retry_after_seconds: number }[];
+      };
+      cleanup_rate_limit_counters: {
+        Args: { p_older_than?: string };
+        Returns: number;
+      };
       save_salon_store_profile: {
         // 0030で追加。法人・複数店舗対応Phase 3B。店舗単位プロフィール保存の
         // 唯一の経路。認可はis_store_accessible(p_store_id)のみで判定する。

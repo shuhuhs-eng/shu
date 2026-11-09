@@ -23,36 +23,6 @@ const conditionPresentWhenAddition = (v: {
 }): boolean =>
   v.performanceAddition === 0 || (v.performanceCondition != null && v.performanceCondition.length > 0);
 
-const offerSchema = z.object(offerFields).refine(
-  additionIsThousands,
-  { message: "実績加算は1,000円単位で入力してください。", path: ["performanceAddition"] },
-).refine(
-  conditionPresentWhenAddition,
-  { message: "実績加算を設定する場合は、支給条件を入力してください。", path: ["performanceCondition"] },
-);
-
-export async function createSalaryOffer(input: z.infer<typeof offerSchema>): Promise<{ success: true } | { success: false; error: string }> {
-  const parsed = offerSchema.safeParse(input);
-  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "提示条件を確認してください。" };
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("create_salary_offer", {
-    p_stylist_user_id: parsed.data.stylistUserId,
-    p_monthly_guarantee: parsed.data.monthlyGuarantee,
-    p_performance_addition: parsed.data.performanceAddition,
-    p_guarantee_months: parsed.data.guaranteeMonths,
-    p_performance_condition: parsed.data.performanceCondition,
-    p_salon_message: parsed.data.message,
-  });
-  if (error) {
-    console.error("[createSalaryOffer] RPC failed", { message: error.message, code: error.code });
-    if (isRecruitingPausedError(error.message)) return { success: false, error: RECRUITING_PAUSED_MESSAGE };
-    return { success: false, error: "条件を提示できませんでした。既に回答待ちの提示がないか確認してください。" };
-  }
-  revalidatePath("/salon/mypage");
-  revalidatePath("/stylist/mypage");
-  return { success: true };
-}
-
 const storeOfferSchema = z.object({ storeId: z.string().uuid(), ...offerFields }).refine(
   additionIsThousands,
   { message: "実績加算は1,000円単位で入力してください。", path: ["performanceAddition"] },

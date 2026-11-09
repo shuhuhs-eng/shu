@@ -8,7 +8,6 @@ import { deriveSalonTypes, SALON_TYPE_CONTENT } from "@/lib/salon-culture/salon-
 import type { AiOutputType, Database } from "@/types/database";
 import { JOB_CHANGE_INTENT_LABELS } from "@/lib/validation/profile-options";
 import { CAREER_GOAL_LABELS, type CareerGoalCode } from "@/lib/match-profile/options";
-import { SalonOfferForm } from "@/components/salary-offers/salon-offer-form";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { getNotificationsForBell, getUnreadNotificationRefs } from "@/lib/notifications/get-notifications";
 import { CardNotificationBadge } from "@/components/notifications/card-notification-badge";
@@ -102,8 +101,6 @@ export default async function SalonMyPage() {
   }
   const interests: ReceivedInterest[] = receivedInterests ?? [];
   const { data: salaryOffers } = await supabase.from("salary_offers").select("*").eq("salon_user_id", user.id).order("created_at", { ascending: false });
-  const latestOfferByStylist = new Map<string, NonNullable<typeof salaryOffers>[number]>();
-  for (const offer of salaryOffers ?? []) if (!latestOfferByStylist.has(offer.stylist_user_id)) latestOfferByStylist.set(offer.stylist_user_id, offer);
 
   const { notifications, unreadCount } = await getNotificationsForBell(supabase, user.id);
   const unreadRefs = await getUnreadNotificationRefs(supabase, user.id);
@@ -326,8 +323,15 @@ export default async function SalonMyPage() {
                 {interest.bio && (
                   <p className="mt-3 text-[12.5px] leading-relaxed text-charcoal">{interest.bio}</p>
                 )}
+                {/* ★0053: 旧・サロン単位の給与オファー提示（create_salary_offer）は停止した。
+                    給与条件の提示は、店舗単位の画面（create_salary_offer_v2）から行う。 */}
                 {interest.match_profile?.wants_performance_offer && interest.match_profile.verification_status === "verified" && (
-                  <SalonOfferForm stylistUserId={interest.stylist_user_id} existingOffer={latestOfferByStylist.get(interest.stylist_user_id) ?? null} />
+                  <Link
+                    href="/salon/company"
+                    className="mt-3 flex w-full items-center justify-center rounded-full border border-line bg-surface px-4 py-3 text-[12px] font-bold text-ink"
+                  >
+                    店舗の画面で給与条件を提示する
+                  </Link>
                 )}
               </article>
             ))}

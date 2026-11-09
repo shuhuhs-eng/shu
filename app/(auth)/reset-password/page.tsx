@@ -8,6 +8,7 @@ import { SubmitButton } from "@/components/auth/submit-button";
 import { PendingFieldset } from "@/components/auth/pending-fieldset";
 import { FormErrorBanner, FormSuccessBanner } from "@/components/auth/form-messages";
 import { TextField } from "@/components/auth/text-field";
+import { TurnstileWidget } from "@/components/security/turnstile-widget";
 
 export default function ResetPasswordPage() {
   const [state, formAction] = useActionState(requestPasswordResetAction, initialAuthActionState);
@@ -44,6 +45,7 @@ export default function ResetPasswordPage() {
             errors={state.fieldErrors?.email}
           />
         </PendingFieldset>
+        <TurnstileWidget resetKey={state} />
         <SubmitButton pendingText="送信中...">再設定メールを送る</SubmitButton>
       </form>
 

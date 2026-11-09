@@ -6,31 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 import { RECRUITING_PAUSED_MESSAGE, isRecruitingPausedError } from "@/lib/contracts/recruiting-access";
 import { logError } from "@/lib/security/log";
 
-const salonUserIdSchema = z.string().uuid();
-
-/** 送信・取消の権限検証はset_salon_interest() RPC内で行う。 */
-export async function setSalonInterestAction(
-  salonUserId: string,
-  interested: boolean,
-): Promise<void> {
-  const parsedSalonUserId = salonUserIdSchema.safeParse(salonUserId);
-  if (!parsedSalonUserId.success) return;
-
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("set_salon_interest", {
-    p_salon_user_id: parsedSalonUserId.data,
-    p_interested: interested,
-  });
-
-  if (error) {
-    logError("setSalonInterestAction", error);
-    return;
-  }
-
-  revalidatePath(`/stylist/salons/${parsedSalonUserId.data}`);
-  revalidatePath("/salon/mypage");
-}
-
 const storeIdSchema = z.string().uuid();
 
 /**

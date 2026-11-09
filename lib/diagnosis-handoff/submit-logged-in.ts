@@ -2,6 +2,7 @@
 
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { computeDiagnosis, isValidAnswers, type DiagnosisMode } from "@/lib/diagnosis";
 import { runAiGenerationJob } from "@/lib/diagnosis-handoff/claim";
 import { logError } from "@/lib/security/log";
@@ -76,7 +77,9 @@ export async function submitDiagnosisForLoggedInUser(
   // lib/diagnosis-handoff/claim.ts と全く同じ関数・同じ手順。
   const computed = computeDiagnosis(mode, answers);
 
-  const insertResult = await supabase
+  const insertResult = // ★0053: diagnosis_results への直接INSERTはクライアント（本人のJWT）には許可しない。
+  // 認証済みの本人（上のgetUser）のuser_idと、サーバーが回答から再計算した値だけをservice roleで保存する。
+  await createServiceClient()
     .from("diagnosis_results")
     .insert({
       user_id: user.id,

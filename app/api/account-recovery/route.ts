@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { accountRecoverySchema } from "@/lib/validation/account-recovery";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit/memory-rate-limiter";
+import { getClientIp } from "@/lib/rate-limit/memory-rate-limiter";
+import { checkSharedRateLimit } from "@/lib/rate-limit/shared-rate-limiter";
 import { sanitizeText } from "@/lib/security/sanitize-text";
 import { maskEmail } from "@/lib/security/mask-email";
 import { verifyBotProtection } from "@/lib/security/bot-protection";
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
 
   // --- 1. IP単位のレート制限 ---
   const ip = getClientIp(request);
-  const ipLimit = checkRateLimit(`ip:${ip}`, IP_LIMIT, IP_WINDOW_MS);
+  const ipLimit = await checkSharedRateLimit(`account-recovery:ip:${ip}`, IP_LIMIT, IP_WINDOW_MS);
   if (!ipLimit.allowed) {
     return NextResponse.json(
       { error: "rate_limited", retryAfterSeconds: ipLimit.retryAfterSeconds },
@@ -66,12 +67,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  // --- 3. bot対策（未設定の間はno-opで常に通る。後付け可能な拡張ポイント） ---
+  // --- 3. bot対策（Turnstile。サーバーで検証。本番はfail-closed） ---
   const turnstileToken =
     typeof body === "object" && body !== null && "turnstileToken" in body
       ? String((body as Record<string, unknown>).turnstileToken ?? "")
       : null;
-  const botOk = await verifyBotProtection(turnstileToken || null);
+  const botOk = await verifyBotProtection(turnstileToken || null, ip);
   if (!botOk) {
     return NextResponse.json({ error: "bot_check_failed" }, { status: 400 });
   }
@@ -105,7 +106,7 @@ export async function POST(request: Request) {
   const normalizedEmail = v.contactEmail.toLowerCase();
 
   // --- 5. 同一連絡先メールアドレス単位のレート制限 ---
-  const emailLimit = checkRateLimit(`email:${normalizedEmail}`, EMAIL_LIMIT, EMAIL_WINDOW_MS);
+  const emailLimit = await checkSharedRateLimit(`account-recovery:email:${normalizedEmail}`, EMAIL_LIMIT, EMAIL_WINDOW_MS);
   if (!emailLimit.allowed) {
     return NextResponse.json(
       { error: "rate_limited", retryAfterSeconds: emailLimit.retryAfterSeconds },

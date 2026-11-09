@@ -6,6 +6,7 @@ import { TextField } from "@/components/auth/text-field";
 import { SelectField } from "@/components/profile/select-field";
 import { TextareaField } from "@/components/profile/textarea-field";
 import { FormErrorBanner, FormSuccessBanner } from "@/components/auth/form-messages";
+import { TurnstileWidget } from "@/components/security/turnstile-widget";
 import { PREFECTURES } from "@/lib/validation/profile-options";
 
 const ACCOUNT_TYPE_OPTIONS = [
@@ -26,6 +27,8 @@ export default function AccountRecoveryPage() {
   const [error, setError] = useState<string | undefined>(undefined);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [success, setSuccess] = useState(false);
+  // Turnstileのトークンは使い切り。送信のたびに再発行する。
+  const [attempt, setAttempt] = useState(0);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -43,6 +46,7 @@ export default function AccountRecoveryPage() {
       approximatePeriod: formData.get("approximatePeriod"),
       contactEmail: formData.get("contactEmail"),
       notes: formData.get("notes"),
+      turnstileToken: formData.get("cf-turnstile-response"),
     };
 
     try {
@@ -58,9 +62,14 @@ export default function AccountRecoveryPage() {
           setFieldErrors(data.fieldErrors);
           setError("入力内容をご確認ください。");
         } else {
-          setError("送信に失敗しました。しばらくしてから再度お試しください。");
+          setError(
+            data.error === "bot_check_failed"
+              ? "確認（ロボットでないことの確認）が完了していません。表示を待ってから、もう一度お試しください。"
+              : "送信に失敗しました。しばらくしてから再度お試しください。",
+          );
         }
         setSubmitting(false);
+        setAttempt((n) => n + 1);
         return;
       }
 
@@ -68,6 +77,7 @@ export default function AccountRecoveryPage() {
     } catch {
       setError("送信に失敗しました。しばらくしてから再度お試しください。");
       setSubmitting(false);
+      setAttempt((n) => n + 1);
     }
   }
 
@@ -162,6 +172,8 @@ export default function AccountRecoveryPage() {
             errors={fieldErrors.notes}
           />
         </fieldset>
+
+        <TurnstileWidget resetKey={attempt} />
 
         <button
           type="submit"

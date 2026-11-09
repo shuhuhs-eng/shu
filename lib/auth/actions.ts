@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSiteUrl } from "@/lib/site-url";
 import { headers } from "next/headers";
-import { checkRateLimit, getClientIpFromHeaders } from "@/lib/rate-limit/memory-rate-limiter";
+import { getClientIpFromHeaders } from "@/lib/rate-limit/memory-rate-limiter";
+import { checkSharedRateLimit } from "@/lib/rate-limit/shared-rate-limiter";
+import { CAPTCHA_REQUIRED_MESSAGE, requireCaptchaToken } from "@/lib/security/bot-protection";
 import { safeInternalPath } from "@/lib/auth/safe-path";
 import { mapAuthError } from "@/lib/auth/errors";
 import { determinePostAuthPath, determineRoleEntryPath } from "@/lib/auth/post-auth-redirect";
@@ -41,14 +43,16 @@ async function performSignUp(
 
   const { displayName, email, password } = parsed.data;
 
-  // 大量アカウント作成の抑止（IP単位 1時間10件）。Supabase Auth 側の制限に加えた最低限の防御。
-  // ★インメモリ実装（複数インスタンスでは完全でない）。共有リミッタは販売開始後の改善項目。
-  const signupLimit = checkRateLimit(
-    `signup:${getClientIpFromHeaders(await headers())}`,
-    10,
-    60 * 60 * 1000,
-  );
-  if (!signupLimit.allowed) {
+  // Bot対策: 本番ではTurnstileのトークンが無い送信をSupabaseへ流さない。検証そのものはSupabase Auth
+  // （Dashboardで有効化したAuth CAPTCHA）が行う。無効なトークンはSupabase側で拒否される。
+  const captcha = requireCaptchaToken(formData);
+  if (!captcha.ok) return { error: CAPTCHA_REQUIRED_MESSAGE };
+
+  // 大量アカウント作成の抑止（IP単位 1時間10件 + メール単位 1時間3件）。共有（DBベース）のレート制限。
+  const ip = getClientIpFromHeaders(await headers());
+  const signupLimit = await checkSharedRateLimit(`signup:ip:${ip}`, 10, 60 * 60 * 1000);
+  const signupEmailLimit = await checkSharedRateLimit(`signup:email:${email.toLowerCase()}`, 3, 60 * 60 * 1000);
+  if (!signupLimit.allowed || !signupEmailLimit.allowed) {
     return { error: "短時間に登録操作が集中しています。しばらく待ってからお試しください。" };
   }
 
@@ -60,6 +64,7 @@ async function performSignUp(
     options: {
       emailRedirectTo: `${getSiteUrl()}/auth/callback`,
       data: { display_name: displayName, role },
+      captchaToken: captcha.captchaToken,
     },
   });
 
@@ -132,19 +137,25 @@ export async function signInAction(
 
   const { email, password } = parsed.data;
 
-  // パスワード総当たりの抑止（IP単位 10分30回）。共有NAT（サロンの店内回線）を考慮して緩めに設定。
-  const loginLimit = checkRateLimit(
-    `login:${getClientIpFromHeaders(await headers())}`,
-    30,
-    10 * 60 * 1000,
-  );
-  if (!loginLimit.allowed) {
+  const captcha = requireCaptchaToken(formData);
+  if (!captcha.ok) return { error: CAPTCHA_REQUIRED_MESSAGE };
+
+  // パスワード総当たりの抑止（IP単位 10分30回 + メール単位 10分10回）。共有（DBベース）のレート制限。
+  // 共有NAT（サロンの店内回線）を考慮してIP単位は緩めに設定。
+  const ip = getClientIpFromHeaders(await headers());
+  const loginLimit = await checkSharedRateLimit(`login:ip:${ip}`, 30, 10 * 60 * 1000);
+  const loginEmailLimit = await checkSharedRateLimit(`login:email:${email.toLowerCase()}`, 10, 10 * 60 * 1000);
+  if (!loginLimit.allowed || !loginEmailLimit.allowed) {
     return { error: "ログイン試行が多すぎます。しばらく待ってからお試しください。" };
   }
 
   const supabase = await createClient();
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+    options: { captchaToken: captcha.captchaToken },
+  });
   if (error) {
     return { error: mapAuthError(error.message) };
   }
@@ -198,19 +209,22 @@ export async function requestPasswordResetAction(
     };
   }
 
-  // メール送信の乱用抑止（IP単位 1時間5回）。超過時も存在有無を示唆しない同一メッセージを返す。
-  const resetLimit = checkRateLimit(
-    `password-reset:${getClientIpFromHeaders(await headers())}`,
-    5,
-    60 * 60 * 1000,
-  );
-  if (!resetLimit.allowed) {
+  const captcha = requireCaptchaToken(formData);
+  if (!captcha.ok) return { error: CAPTCHA_REQUIRED_MESSAGE };
+
+  // メール送信の乱用抑止（IP単位 1時間5回 + 宛先メール単位 1時間3回）。共有（DBベース）のレート制限。
+  // 超過時も存在有無を示唆しない同一メッセージを返す。
+  const ip = getClientIpFromHeaders(await headers());
+  const resetLimit = await checkSharedRateLimit(`password-reset:ip:${ip}`, 5, 60 * 60 * 1000);
+  const resetEmailLimit = await checkSharedRateLimit(`password-reset:email:${parsed.data.email.toLowerCase()}`, 3, 60 * 60 * 1000);
+  if (!resetLimit.allowed || !resetEmailLimit.allowed) {
     return { success: "再設定メールを送信しました。" };
   }
 
   const supabase = await createClient();
   await supabase.auth.resetPasswordForEmail(parsed.data.email, {
     redirectTo: `${getSiteUrl()}/auth/callback?next=/update-password`,
+    captchaToken: captcha.captchaToken,
   });
 
   // アカウント存在の有無を漏らさないため、成否によらず同じ成功メッセージを返す。
