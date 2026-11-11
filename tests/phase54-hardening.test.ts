@@ -298,9 +298,11 @@ test("classifyAuthMessage: 許可リストのラベルのみ返し、生のmessa
   assert.ok(!out.includes("a@b.com"));
 });
 
-test("美容師ログインの入口リンクは無料診断へ。サロン・共通ログインは従来どおり", () => {
+test("美容師ログイン画面には新規登録・診断の案内が無い。サロン・共通ログインは従来どおり", () => {
   const src = readFileSync(join(process.cwd(), "app/(auth)/login/login-form.tsx"), "utf8");
-  assert.match(src, /signupHref: "\/stylist\/diagnosis",\s*signupLabel: "初めての方は無料診断へ"/);
+  assert.match(src, /signupHref: null,\s*signupLabel: null/);
+  assert.ok(!src.includes("初めての方は無料診断へ"));
+  assert.match(src, /mode === "stylist" \? null/);
   assert.match(src, /signupHref: "\/signup\/salon",\s*signupLabel: "新規登録はこちら"/);
   assert.match(src, /copy\?\.signupHref \?\? "\/signup"/);
   assert.ok(readFileSync(join(process.cwd(), "app/(auth)/signup/page.tsx"), "utf8").includes("新規登録"));
