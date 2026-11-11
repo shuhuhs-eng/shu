@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { fullType, type TypeId, type ComputedDiagnosis } from "@/lib/diagnosis";
 import { calculateCoreType } from "@/lib/diagnosis/core-types";
 import { CORE_TYPE_CONTENT } from "@/lib/diagnosis/core-type-content";
@@ -44,6 +44,12 @@ type LoadState = "loading" | "none" | ComputedDiagnosis;
  * mode非依存の共通ページのまま、美容師診断の場合のみ新しい構成を表示し、
  * サロン診断は既存の表示（6才能グラフ・市場価値等）を維持する。
  */
+/** 遷移中（クリック直後〜次の画面が出るまで）は処理中と分かる表示にする。 */
+function PendingLabel({ children, pendingText }: { children: React.ReactNode; pendingText: string }) {
+  const { pending } = useLinkStatus();
+  return <>{pending ? pendingText : children}</>;
+}
+
 /** ログイン中の本人向け。登録・ログインの案内は出さず、保存結果の確認先（マイページ）だけを案内する。 */
 function MemberResultNotice({ saved, mypageHref, retakeHref }: { saved: boolean; mypageHref: string; retakeHref: string }) {
   return (
@@ -55,9 +61,18 @@ function MemberResultNotice({ saved, mypageHref, retakeHref }: { saved: boolean;
       </p>
       <Link
         href={mypageHref}
-        className="mt-4 flex w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface"
+        prefetch={false}
+        onClick={(e) => {
+          // 遷移中の連打を防ぐ（二重にナビゲーションを開始しない）。
+          if (e.currentTarget.getAttribute("aria-busy") === "true") {
+            e.preventDefault();
+            return;
+          }
+          e.currentTarget.setAttribute("aria-busy", "true");
+        }}
+        className="mt-4 flex w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface aria-busy:opacity-60"
       >
-        マイページで結果を見る
+        <PendingLabel pendingText="マイページを開いています...">マイページで結果を見る</PendingLabel>
       </Link>
       <Link href={retakeHref} className="mt-3 inline-block text-[13px] text-sub underline">
         診断を受け直す
@@ -72,25 +87,33 @@ export default function DiagnosisResultPage() {
   const [auth, setAuth] = useState<"checking" | "member" | "guest">("checking");
   const [saved, setSaved] = useState(false);
 
+  // 「保存済み」の印は、診断クイズがサーバー保存の成功を確認した後にだけ書く（保存前・失敗時は書かない）。
+  // 印がある場合は追加の通信なしで即座にログイン中の表示にする（以前は結果表示のたびに認証サーバーへの
+  // 往復を待っていた）。印が無い場合はゲスト表示のまま、ログイン中かどうかを裏で確認して切り替える。
   useEffect(() => {
     let cancelled = false;
-    Promise.resolve()
-      .then(async () => {
-        const { data } = await createClient().auth.getUser();
-        return !!data.user;
-      })
-      .catch(() => false)
-      .then((member) => {
-        if (cancelled) return;
-        let hasSaved = false;
-        try {
-          hasSaved = !!sessionStorage.getItem(DIAGNOSIS_SAVED_STORAGE_KEY);
-        } catch {
-          // sessionStorageが使えない場合は「保存済み」を表示しない。
-        }
-        setSaved(hasSaved);
-        setAuth(member ? "member" : "guest");
-      });
+    let hasSaved = false;
+    try {
+      hasSaved = !!sessionStorage.getItem(DIAGNOSIS_SAVED_STORAGE_KEY);
+    } catch {
+      // sessionStorageが使えない場合は「保存済み」を表示しない。
+    }
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      setSaved(hasSaved);
+      setAuth(hasSaved ? "member" : "guest");
+    });
+    if (!hasSaved) {
+      Promise.resolve()
+        .then(async () => {
+          const { data } = await createClient().auth.getUser();
+          return !!data.user;
+        })
+        .catch(() => false)
+        .then((member) => {
+          if (!cancelled && member) setAuth("member");
+        });
+    }
     return () => {
       cancelled = true;
     };

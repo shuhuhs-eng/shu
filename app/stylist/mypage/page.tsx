@@ -14,6 +14,7 @@ import { NotificationBell } from "@/components/notifications/notification-bell";
 import { getNotificationsForBell } from "@/lib/notifications/get-notifications";
 import { getMyHiringProcesses } from "@/lib/hiring/actions";
 import { isClosedStatus } from "@/lib/hiring/format";
+import { calculateCoreType, type CoreTypeCode } from "@/lib/diagnosis/core-types";
 
 type AiOutputRow = Database["public"]["Tables"]["diagnosis_ai_outputs"]["Row"];
 
@@ -37,86 +38,93 @@ export default async function StylistMyPage() {
     redirect("/login?next=/stylist/mypage");
   }
 
-  if (!(await hasCompletedRole(supabase, user.id, "stylist"))) {
-    redirect("/onboarding");
-  }
-
-  const { data: latest } = await supabase
-    .from("diagnosis_results")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("mode", "stylist")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const aiByType: Partial<Record<AiOutputType, unknown>> = {};
-  if (latest) {
-    const { data: aiOutputs } = await supabase
-      .from("diagnosis_ai_outputs")
+  // 以下の取得は互いに依存しないため、まとめて並列に実行する（以前は1件ずつ直列で、表示まで10回以上の
+  // DB往復を順番に待っていた）。取得する内容・認証/権限確認（getUser・role確認）は変えていない。
+  // role未完了の場合はこの直後にredirectするので、並列に取得した結果は使われず破棄される。
+  const [
+    hasStylistRole,
+    { data: latest },
+    { data: preferenceProfile },
+    { data: matchProfile },
+    scoutTotal,
+    scoutUnread,
+    offerTotal,
+    offerPending,
+    hiringProcesses,
+    { notifications, unreadCount },
+  ] = await Promise.all([
+    hasCompletedRole(supabase, user.id, "stylist"),
+    supabase
+      .from("diagnosis_results")
       .select("*")
-      .eq("diagnosis_result_id", latest.id)
-      .eq("is_current", true);
-
-    for (const row of (aiOutputs ?? []) as AiOutputRow[]) {
-      aiByType[row.output_type] = row.response;
-    }
-  }
-
-  // 8タイプ（front-facing称号）。取得できない場合（8タイプ導入前に診断した
-  // 既存ユーザー等）は従来のDiagnosisSummaryにフォールバックする。
-  const { data: coreType } = await supabase
-    .from("stylist_core_type_assignments")
-    .select("*")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  // 現在表示する8タイプは「最新の診断」の判定（履歴は診断のたびに1行追加される現在の傾向）。
-  // 履歴が無い場合（8タイプ判定の保存に失敗した等）だけ、初回確定のassignmentへフォールバックする。
-  const { data: latestCoreHistory } = latest
-    ? await supabase
-        .from("stylist_core_type_history")
-        .select("top_type_code")
-        .eq("diagnosis_result_id", latest.id)
-        .maybeSingle()
-    : { data: null };
-  const coreTypeCode = latestCoreHistory?.top_type_code ?? coreType?.core_type_code ?? null;
-
-  // ★「働きたいサロン環境」Preference診断（8問・8軸）。既存の30問診断とは
-  // 完全に別物（診断ロジック・8タイプ・市場価値・AIには一切影響しない、
-  // 単なる回答済み状態の確認のための新規クエリ）。
-  const { data: preferenceProfile } = await supabase
-    .from("stylist_preference_profiles")
-    .select("status")
-    .eq("stylist_user_id", user.id)
-    .maybeSingle();
-  const hasCompletedPreference = preferenceProfile?.status === "completed";
-
-  const { data: matchProfile } = await supabase
-    .from("stylist_match_profiles")
-    .select("status")
-    .eq("stylist_user_id", user.id)
-    .maybeSingle();
-  const hasMatchProfile = matchProfile?.status === "completed";
-
-  // ★届いたスカウト／オファーは専用画面（/stylist/scouts・/stylist/offers）へ
-  // 移した（店舗単位で表示）。ここでは件数だけを本人宛(stylist_user_id=自分)の
-  // 既存テーブルから数える（新しいRPCは使わない）。
-  const [scoutTotal, scoutUnread, offerTotal, offerPending] = await Promise.all([
+      .eq("user_id", user.id)
+      .eq("mode", "stylist")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    // ★「働きたいサロン環境」Preference診断（8問・8軸）。既存の30問診断とは完全に別物
+    // （診断ロジック・8タイプ・市場価値・AIには一切影響しない、回答済み状態の確認のみ）。
+    supabase.from("stylist_preference_profiles").select("status").eq("stylist_user_id", user.id).maybeSingle(),
+    supabase.from("stylist_match_profiles").select("status").eq("stylist_user_id", user.id).maybeSingle(),
+    // ★届いたスカウト／オファーは専用画面（/stylist/scouts・/stylist/offers）へ移した。
+    // ここでは件数だけを本人宛(stylist_user_id=自分)の既存テーブルから数える。
     supabase.from("scouts").select("id", { count: "exact", head: true }).eq("stylist_user_id", user.id),
     supabase.from("scouts").select("id", { count: "exact", head: true }).eq("stylist_user_id", user.id).eq("read_status", "unread"),
     supabase.from("salary_offers").select("id", { count: "exact", head: true }).eq("stylist_user_id", user.id),
     supabase.from("salary_offers").select("id", { count: "exact", head: true }).eq("stylist_user_id", user.id).eq("status", "pending"),
+    // 選考状況（Phase 8）。本人の進捗だけを返す get_my_hiring_processes から件数を数える。
+    getMyHiringProcesses(),
+    getNotificationsForBell(supabase, user.id),
   ]);
-  // 選考状況（Phase 8）。本人の進捗だけを返す get_my_hiring_processes から件数を数える。
-  const hiringProcesses = await getMyHiringProcesses();
+
+  if (!hasStylistRole) {
+    redirect("/onboarding");
+  }
+
+  // 最新の診断（latest）に紐づくAI解説と8タイプ判定の履歴は、latest.id が決まってから並列に取得する。
+  const aiByType: Partial<Record<AiOutputType, unknown>> = {};
+  let latestCoreTypeCode: string | null = null;
+  if (latest) {
+    const [{ data: aiOutputs }, { data: latestCoreHistory }] = await Promise.all([
+      supabase
+        .from("diagnosis_ai_outputs")
+        .select("*")
+        .eq("diagnosis_result_id", latest.id)
+        .eq("is_current", true),
+      // 8タイプは「最新の診断」の判定（履歴は診断のたびに1行追加される現在の傾向）。
+      supabase
+        .from("stylist_core_type_history")
+        .select("top_type_code")
+        .eq("diagnosis_result_id", latest.id)
+        .maybeSingle(),
+    ]);
+    for (const row of (aiOutputs ?? []) as AiOutputRow[]) {
+      aiByType[row.output_type] = row.response;
+    }
+    latestCoreTypeCode = latestCoreHistory?.top_type_code ?? null;
+  }
+  // 履歴が無い場合（8タイプ判定の保存に失敗した等）は、最新診断のスコアから同じ判定式（SQLと一致）で求める。
+  // 初回確定のassignment（過去の診断由来）は表示に使わない＝古いタイプが現在の結果として出ない。
+  const coreTypeCode: CoreTypeCode | null = latest
+    ? ((latestCoreTypeCode as CoreTypeCode | null) ??
+      calculateCoreType({
+        T: latest.craft_score,
+        S: latest.sense_score,
+        H: latest.hospitality_score,
+        B: latest.brand_score,
+        A: latest.drive_score,
+        M: latest.mentor_score,
+      }).topType)
+    : null;
+
+  const hasCompletedPreference = preferenceProfile?.status === "completed";
+  const hasMatchProfile = matchProfile?.status === "completed";
   const hiringTotalCount = hiringProcesses?.length ?? 0;
   const hiringActiveCount = (hiringProcesses ?? []).filter((p) => !isClosedStatus(p.status)).length;
   const scoutTotalCount = scoutTotal.count ?? 0;
   const scoutUnreadCount = scoutUnread.count ?? 0;
   const offerTotalCount = offerTotal.count ?? 0;
   const offerPendingCount = offerPending.count ?? 0;
-
-  const { notifications, unreadCount } = await getNotificationsForBell(supabase, user.id);
 
   const showNewStylistDesign = !!coreTypeCode && !!latest;
 

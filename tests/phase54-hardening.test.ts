@@ -331,3 +331,23 @@ test("再診断フロー: 結果画面のログイン中表示・引き継ぎの
   // 戻り先は既存の安全な内部パス検証を維持。
   assert.ok(read("lib/auth/actions.ts").includes('safeInternalPath(formData.get("next"))'));
 });
+
+test("再診断・表示速度: マイページは独立した取得を並列化し、8タイプは最新診断を使う。認証確認は省略しない", () => {
+  const read = (f: string) => readFileSync(join(process.cwd(), f), "utf8");
+  const mypage = read("app/stylist/mypage/page.tsx");
+  assert.match(mypage, /await Promise\.all\(\[\s*hasCompletedRole\(supabase, user\.id, "stylist"\)/);
+  assert.ok(mypage.includes("await supabase.auth.getUser()")); // 認証確認は残す
+  assert.ok(mypage.includes('redirect("/onboarding")')); // 役割確認は残す
+  assert.ok(!mypage.includes("stylist_core_type_assignments")); // 古い初回確定タイプを表示に使わない
+  assert.ok(mypage.includes("calculateCoreType("));
+  // ミドルウェア: 同意確認とrole確認を並列開始しつつ、判定の優先順（同意 → role）と認証必須は維持。
+  const mw = read("lib/supabase/middleware.ts");
+  assert.match(mw, /await Promise\.all\(\[\s*needsLegalCheck \? checkLegalAcceptance\(supabase\)/);
+  assert.ok(mw.indexOf("legalGateDecision(pathname, legalCheck)") < mw.indexOf("isStylistOnlyPath && oppositeRoleDone"));
+  assert.ok(mw.includes("if (requiresAuth && !user)"));
+  // 結果画面: 「保存済み」の印が無い限りログイン中の表示にしない。印はクイズが保存成功後にだけ書く。
+  const result = read("app/diagnosis/result/page.tsx");
+  assert.match(result, /setAuth\(hasSaved \? "member" : "guest"\)/);
+  assert.ok(result.includes("useLinkStatus"));
+  assert.ok(result.includes("マイページを開いています..."));
+});

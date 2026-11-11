@@ -130,8 +130,26 @@ export async function updateSession(request: NextRequest) {
   // 現在の版に未同意なら同意画面へ、確認できなければ「確認できません」画面へ誘導する。
   // 規約・ログイン・認証・同意画面・API・静的ファイルは対象外なのでループしない。
   // 公開された版が無い間は同意不要（既存ユーザーを止めない）。
-  if (user && isLegalGatedPath(pathname)) {
-    const decision = legalGateDecision(pathname, await checkLegalAcceptance(supabase));
+  // 同意状況の確認と、逆roleの確認（下のrole別ルート制御）は互いに依存しないので、並列に開始する
+  // （以前は直列で、ページ表示前にDB往復を順番に待っていた）。判定の優先順（同意 → role）は変えない。
+  const isStylistOnlyPath = STYLIST_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const isSalonOnlyPath = SALON_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const needsLegalCheck = !!user && isLegalGatedPath(pathname);
+  const [legalCheck, oppositeRoleDone] = await Promise.all([
+    needsLegalCheck ? checkLegalAcceptance(supabase) : Promise.resolve(null),
+    user && isStylistOnlyPath
+      ? hasCompletedRole(supabase, user.id, "salon")
+      : user && isSalonOnlyPath
+        ? hasCompletedRole(supabase, user.id, "stylist")
+        : Promise.resolve(false),
+  ]);
+
+  // ★規約・プライバシーポリシーへの同意（fail-closed）。ログイン済みユーザーがサービス本体へ入る際、
+  // 現在の版に未同意なら同意画面へ、確認できなければ「確認できません」画面へ誘導する。
+  // 規約・ログイン・認証・同意画面・API・静的ファイルは対象外なのでループしない。
+  // 公開された版が無い間は同意不要（既存ユーザーを止めない）。
+  if (user && legalCheck) {
+    const decision = legalGateDecision(pathname, legalCheck);
     if (decision !== "allow") {
       const url = request.nextUrl.clone();
       url.pathname = decision === "accept" ? "/legal/accept" : "/legal/unavailable";
@@ -145,31 +163,18 @@ export async function updateSession(request: NextRequest) {
   // この制御の対象外（/stylist/diagnosis・/diagnosis/salonの未ログイン
   // 診断プレビュー導線を壊さないため）。
   if (user) {
-    const isStylistOnlyPath = STYLIST_ONLY_PREFIXES.some(
-      (p) => pathname === p || pathname.startsWith(`${p}/`),
-    );
-    const isSalonOnlyPath = SALON_ONLY_PREFIXES.some(
-      (p) => pathname === p || pathname.startsWith(`${p}/`),
-    );
-
-    if (isStylistOnlyPath) {
-      const hasSalon = await hasCompletedRole(supabase, user.id, "salon");
-      if (hasSalon) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/salon/mypage";
-        url.search = "";
-        return NextResponse.redirect(url);
-      }
+    if (isStylistOnlyPath && oppositeRoleDone) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/salon/mypage";
+      url.search = "";
+      return NextResponse.redirect(url);
     }
 
-    if (isSalonOnlyPath) {
-      const hasStylist = await hasCompletedRole(supabase, user.id, "stylist");
-      if (hasStylist) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/stylist/mypage";
-        url.search = "";
-        return NextResponse.redirect(url);
-      }
+    if (isSalonOnlyPath && oppositeRoleDone) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/stylist/mypage";
+      url.search = "";
+      return NextResponse.redirect(url);
     }
   }
 
