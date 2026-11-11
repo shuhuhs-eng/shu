@@ -8,7 +8,7 @@ import { getClientIpFromHeaders } from "@/lib/rate-limit/memory-rate-limiter";
 import { checkSharedRateLimit } from "@/lib/rate-limit/shared-rate-limiter";
 import { CAPTCHA_REQUIRED_MESSAGE, requireCaptchaToken } from "@/lib/security/bot-protection";
 import { safeInternalPath } from "@/lib/auth/safe-path";
-import { mapAuthError } from "@/lib/auth/errors";
+import { describeAuthError } from "@/lib/auth/errors";
 import { determinePostAuthPath, determineRoleEntryPath } from "@/lib/auth/post-auth-redirect";
 import { claimPendingDiagnosisIfPresent } from "@/lib/diagnosis-handoff/claim";
 import {
@@ -69,7 +69,7 @@ async function performSignUp(
   });
 
   if (error) {
-    return { error: mapAuthError(error.message) };
+    return { error: describeAuthError("signup", error) };
   }
 
   // ★「1 auth user = 1 role」方針: 別roleを追加する経路を作らないことを
@@ -157,7 +157,7 @@ export async function signInAction(
     options: { captchaToken: captcha.captchaToken },
   });
   if (error) {
-    return { error: mapAuthError(error.message) };
+    return { error: describeAuthError("login", error) };
   }
 
   // 未ログイン時に受けた診断結果があれば、ここで本人アカウントへ紐づける。
@@ -266,7 +266,7 @@ export async function updatePasswordAction(
 
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
   if (error) {
-    return { error: mapAuthError(error.message) };
+    return { error: describeAuthError("update_password", error) };
   }
 
   // 更新後は明示的にサインアウトし、新しいパスワードで再ログインしてもらう。

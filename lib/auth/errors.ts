@@ -23,3 +23,25 @@ export function mapAuthError(message: string): string {
   const hit = MESSAGE_MAP.find(([needle]) => lower.includes(needle.toLowerCase()));
   return hit ? hit[1] : "エラーが発生しました。しばらくしてから再度お試しください。";
 }
+
+type AuthErrorLike = { message: string; code?: string; status?: number; name?: string };
+
+const CODE_MAP: Record<string, string> = {
+  captcha_failed: "ロボットでないことの確認に失敗しました。ページを再読み込みして、もう一度お試しください。",
+  over_email_send_rate_limit: "メール送信回数の上限に達しました。しばらくしてから再度お試しください。",
+  over_request_rate_limit: "しばらく時間をおいてから再度お試しください。",
+  user_already_exists: "このメールアドレスは既に登録されています。",
+  email_exists: "このメールアドレスは既に登録されています。",
+  weak_password: "パスワードは8文字以上で、英字と数字をそれぞれ1文字以上含めてください。",
+};
+
+/**
+ * Supabase Authのエラーを利用者向けメッセージへ変換する（codeを優先、無ければ文言で判定）。
+ * 運用調査のため、code / status / nameだけをサーバーログへ残す
+ * （message本文・メールアドレス・パスワード・トークンは出さない）。
+ */
+export function describeAuthError(action: string, error: AuthErrorLike): string {
+  console.error("[auth] request failed", { action, code: error.code ?? null, status: error.status ?? null, name: error.name ?? null });
+  if (error.code && CODE_MAP[error.code]) return CODE_MAP[error.code];
+  return mapAuthError(error.message);
+}

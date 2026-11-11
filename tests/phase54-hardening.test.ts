@@ -271,3 +271,17 @@ test("0053: 旧RPCのrevoke・diagnosis_results INSERT廃止・rate limit がmig
   // 関数定義そのものは削除しない / テーブルを削除しない / データを消さない
   assert.ok(!/drop function|drop table|truncate table|delete from public\.(?!rate_limit_counters)/i.test(sql));
 });
+
+import { describeAuthError } from "../lib/auth/errors";
+test("describeAuthError: codeで分類し、ログへmessage本文を出さない", () => {
+  const logs: unknown[][] = [];
+  const orig = console.error;
+  console.error = (...a: unknown[]) => { logs.push(a); };
+  try {
+    const msg = describeAuthError("signup", { message: "captcha verification process failed for a@b.com", code: "captcha_failed", status: 400, name: "AuthApiError" });
+    assert.match(msg, /確認に失敗/);
+    assert.equal(describeAuthError("signup", { message: "boom" }), "エラーが発生しました。しばらくしてから再度お試しください。");
+    assert.ok(!JSON.stringify(logs).includes("a@b.com"));
+    assert.ok(JSON.stringify(logs[0]).includes("captcha_failed"));
+  } finally { console.error = orig; }
+});
