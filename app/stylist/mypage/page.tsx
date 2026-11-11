@@ -14,6 +14,7 @@ import { NotificationBell } from "@/components/notifications/notification-bell";
 import { getNotificationsForBell } from "@/lib/notifications/get-notifications";
 import { getMyHiringProcesses } from "@/lib/hiring/actions";
 import { isClosedStatus } from "@/lib/hiring/format";
+import { nowMs } from "@/lib/perf/timer";
 import { calculateCoreType, type CoreTypeCode } from "@/lib/diagnosis/core-types";
 
 type AiOutputRow = Database["public"]["Tables"]["diagnosis_ai_outputs"]["Row"];
@@ -29,12 +30,12 @@ type AiOutputRow = Database["public"]["Tables"]["diagnosis_ai_outputs"]["Row"];
  * 決め打ちで飛ばすのではなく、美容師オンボーディングへ誘導する。
  */
 export default async function StylistMyPage() {
-  const perfStart = performance.now();
+  const perfStart = nowMs();
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const perfAuthDone = performance.now();
+  const perfAuthDone = nowMs();
 
   if (!user) {
     redirect("/login?next=/stylist/mypage");
@@ -79,7 +80,7 @@ export default async function StylistMyPage() {
     getNotificationsForBell(supabase, user.id),
   ]);
 
-  const perfFetchDone = performance.now();
+  const perfFetchDone = nowMs();
 
   if (!hasStylistRole) {
     redirect("/onboarding");
@@ -111,7 +112,7 @@ export default async function StylistMyPage() {
   console.info("[perf] mypage", {
     authMs: Math.round(perfAuthDone - perfStart),
     parallelFetchMs: Math.round(perfFetchDone - perfAuthDone),
-    dependentFetchMs: Math.round(performance.now() - perfFetchDone),
+    dependentFetchMs: Math.round(nowMs() - perfFetchDone),
     region: process.env.VERCEL_REGION ?? null,
   });
   // 履歴が無い場合（8タイプ判定の保存に失敗した等）は、最新診断のスコアから同じ判定式（SQLと一致）で求める。
