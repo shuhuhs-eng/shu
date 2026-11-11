@@ -351,3 +351,85 @@ test("再診断・表示速度: マイページは独立した取得を並列化
   assert.ok(result.includes("useLinkStatus"));
   assert.ok(result.includes("マイページを開いています..."));
 });
+
+import { checkSignupRateLimit, signupRateLimitMessage } from "../lib/auth/signup-rate-limit";
+import { SIGNUP_RATE_LIMITS } from "../lib/rate-limit/config";
+
+/** DBのcheck_rate_limit（固定ウィンドウ・1呼び出し=1カウント）と同じ動きをする検査用カウンター。 */
+function fakeLimiter() {
+  const counts = new Map<string, number>();
+  const calls: string[] = [];
+  const check = async (key: string, limit: number, windowMs: number) => {
+    calls.push(key);
+    const n = (counts.get(key) ?? 0) + 1;
+    counts.set(key, n);
+    return n <= limit ? { allowed: true, retryAfterSeconds: 0 } : { allowed: false, retryAfterSeconds: Math.ceil(windowMs / 1000 / 2) };
+  };
+  return { check, counts, calls };
+}
+
+test("新規登録の制限: 同一IPから異なるメールで30人（美容師・サロン混在）が止まらない", async () => {
+  const f = fakeLimiter();
+  for (let i = 0; i < 30; i++) {
+    const r = await checkSignupRateLimit({ ip: "203.0.113.7", email: `person${i}@example.test` }, { check: f.check });
+    assert.equal(r.allowed, true, `${i + 1}人目`);
+  }
+  assert.equal(f.counts.get("signup:ip:203.0.113.7"), 30);
+});
+
+test("新規登録の制限: 同一メールの過剰試行はメール単位で止まり、同じIPの他の人の枠を消費しない", async () => {
+  const f = fakeLimiter();
+  const L = SIGNUP_RATE_LIMITS;
+  for (let i = 0; i < L.perEmail; i++) {
+    assert.equal((await checkSignupRateLimit({ ip: "198.51.100.1", email: "same@example.test" }, { check: f.check })).allowed, true);
+  }
+  const blocked = await checkSignupRateLimit({ ip: "198.51.100.1", email: "SAME@example.test" }, { check: f.check });
+  assert.equal(blocked.allowed, false);
+  if (!blocked.allowed) assert.equal(blocked.scope, "email");
+  // 連打してもIP側のカウントは増えない（メール単位で止まった分は数えない）。
+  const ipBefore = f.counts.get("signup:ip:198.51.100.1");
+  for (let i = 0; i < 20; i++) await checkSignupRateLimit({ ip: "198.51.100.1", email: "same@example.test" }, { check: f.check });
+  assert.equal(f.counts.get("signup:ip:198.51.100.1"), ipBefore);
+  // 別の人は同じIPからそのまま登録できる。
+  assert.equal((await checkSignupRateLimit({ ip: "198.51.100.1", email: "other@example.test" }, { check: f.check })).allowed, true);
+});
+
+test("新規登録の制限: 短時間の大量試行（IP単位の安全弁）は止まる", async () => {
+  const f = fakeLimiter();
+  let blockedAt = -1;
+  for (let i = 0; i < SIGNUP_RATE_LIMITS.perIp + 5; i++) {
+    const r = await checkSignupRateLimit({ ip: "192.0.2.50", email: `bulk${i}@example.test` }, { check: f.check });
+    if (!r.allowed && blockedAt < 0) {
+      blockedAt = i + 1;
+      assert.equal(r.scope, "ip");
+      assert.ok(r.retryAfterSeconds > 0);
+    }
+  }
+  assert.equal(blockedAt, SIGNUP_RATE_LIMITS.perIp + 1);
+});
+
+test("新規登録の制限: IPが取れない利用者同士を、厳しい共通カウンターで互いにブロックしない", async () => {
+  const f = fakeLimiter();
+  for (let i = 0; i < 40; i++) {
+    const r = await checkSignupRateLimit({ ip: i % 2 ? "unknown" : "", email: `noip${i}@example.test` }, { check: f.check });
+    assert.equal(r.allowed, true);
+  }
+  assert.ok(f.calls.includes("signup:noip"));
+  assert.ok(!f.calls.some((k) => k === "signup:ip:unknown"));
+});
+
+test("新規登録の制限: 1回の操作で各キーを1回だけ数える／案内は集中と断定せず再試行目安を示す", async () => {
+  const f = fakeLimiter();
+  await checkSignupRateLimit({ ip: "203.0.113.9", email: "once@example.test" }, { check: f.check });
+  assert.deepEqual(f.calls, ["signup:email:once@example.test", "signup:ip:203.0.113.9"]);
+  const m1 = signupRateLimitMessage({ allowed: false, scope: "email", retryAfterSeconds: 1500 });
+  const m2 = signupRateLimitMessage({ allowed: false, scope: "ip", retryAfterSeconds: 30 });
+  assert.match(m1, /約25分後/);
+  assert.match(m2, /約1分後/);
+  assert.ok(!m1.includes("集中") && !m2.includes("集中"));
+  // Turnstile確認は制限より前（トークン無しは制限に到達しない）。美容師・サロンは同じ処理を使う。
+  const src = readFileSync(join(process.cwd(), "lib/auth/actions.ts"), "utf8");
+  const perform = src.slice(src.indexOf("async function performSignUp"), src.indexOf("export async function signUpAction"));
+  assert.ok(perform.indexOf("requireCaptchaToken") < perform.indexOf("checkSignupRateLimit"));
+  assert.ok(src.includes('performSignUp("salon"') && src.includes('performSignUp("stylist"'));
+});

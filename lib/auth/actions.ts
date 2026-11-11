@@ -8,6 +8,7 @@ import { getClientIpFromHeaders } from "@/lib/rate-limit/memory-rate-limiter";
 import { checkSharedRateLimit } from "@/lib/rate-limit/shared-rate-limiter";
 import { CAPTCHA_REQUIRED_MESSAGE, requireCaptchaToken } from "@/lib/security/bot-protection";
 import { safeInternalPath } from "@/lib/auth/safe-path";
+import { checkSignupRateLimit, signupRateLimitMessage } from "@/lib/auth/signup-rate-limit";
 import { describeAuthError } from "@/lib/auth/errors";
 import { determinePostAuthPath, determineRoleEntryPath } from "@/lib/auth/post-auth-redirect";
 import { claimPendingDiagnosisIfPresent } from "@/lib/diagnosis-handoff/claim";
@@ -48,12 +49,13 @@ async function performSignUp(
   const captcha = requireCaptchaToken(formData);
   if (!captcha.ok) return { error: CAPTCHA_REQUIRED_MESSAGE };
 
-  // 大量アカウント作成の抑止（IP単位 1時間10件 + メール単位 1時間3件）。共有（DBベース）のレート制限。
+  // 大量アカウント作成の抑止。メール単位を主、IP単位は大量の異常試行だけを抑える安全弁
+  // （同じ店舗・説明会など共有ネットワークの複数人が登録できる値。設定は lib/rate-limit/config.ts）。
+  // Turnstile確認（上）を通った後にだけ数える。
   const ip = getClientIpFromHeaders(await headers());
-  const signupLimit = await checkSharedRateLimit(`signup:ip:${ip}`, 10, 60 * 60 * 1000);
-  const signupEmailLimit = await checkSharedRateLimit(`signup:email:${email.toLowerCase()}`, 3, 60 * 60 * 1000);
-  if (!signupLimit.allowed || !signupEmailLimit.allowed) {
-    return { error: "短時間に登録操作が集中しています。しばらく待ってからお試しください。" };
+  const signupLimit = await checkSignupRateLimit({ ip, email });
+  if (!signupLimit.allowed) {
+    return { error: signupRateLimitMessage(signupLimit) };
   }
 
   const supabase = await createClient();
