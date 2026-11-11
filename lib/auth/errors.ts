@@ -49,8 +49,11 @@ export function describeAuthError(action: string, error: AuthErrorLike): string 
   // 既知の文言に当てはまらない場合だけ、原因調査用に非機密のエラーコード/ステータスを画面にも添える
   // （サポート時に利用者が読み上げられるようにするため。message本文は出さない）。
   if (mapped === GENERIC_MESSAGE) {
-    const parts = [error.code, error.status != null ? String(error.status) : null].filter(Boolean);
-    if (parts.length > 0) return `${GENERIC_MESSAGE}（エラーコード: ${parts.join(" / ")}）`;
+    const parts = [error.code, error.status != null ? String(error.status) : null, error.name].filter(Boolean);
+    // 表示されたデプロイを特定できるよう、コミットの短縮ID（非機密）も添える。
+    const build = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7);
+    const detail = [parts.length > 0 ? parts.join(" / ") : "unknown", build ? `build ${build}` : null].filter(Boolean).join(" · ");
+    return `${GENERIC_MESSAGE}（エラーコード: ${detail}）`;
   }
   return mapped;
 }

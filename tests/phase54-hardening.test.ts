@@ -280,7 +280,7 @@ test("describeAuthError: codeで分類し、ログへmessage本文を出さな�
   try {
     const msg = describeAuthError("signup", { message: "captcha verification process failed for a@b.com", code: "captcha_failed", status: 400, name: "AuthApiError" });
     assert.match(msg, /確認に失敗/);
-    assert.equal(describeAuthError("signup", { message: "boom" }), "エラーが発生しました。しばらくしてから再度お試しください。");
+    assert.match(describeAuthError("signup", { message: "boom" }), /^エラーが発生しました。しばらくしてから再度お試しください。（エラーコード: unknown/);
     assert.match(describeAuthError("signup", { message: "Error sending confirmation email", code: "unexpected_failure", status: 500 }), /エラーコード: unexpected_failure \/ 500/);
     assert.ok(!JSON.stringify(logs).includes("a@b.com"));
     assert.ok(JSON.stringify(logs[0]).includes("captcha_failed"));
