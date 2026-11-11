@@ -6,7 +6,8 @@ import { fullType, type TypeId, type ComputedDiagnosis } from "@/lib/diagnosis";
 import { calculateCoreType } from "@/lib/diagnosis/core-types";
 import { CORE_TYPE_CONTENT } from "@/lib/diagnosis/core-type-content";
 import { TraitScoreBars } from "@/components/diagnosis/trait-score-bars";
-import { DIAGNOSIS_RESULT_STORAGE_KEY } from "@/lib/diagnosis-handoff/constants";
+import { DIAGNOSIS_RESULT_STORAGE_KEY, DIAGNOSIS_SAVED_STORAGE_KEY } from "@/lib/diagnosis-handoff/constants";
+import { createClient } from "@/lib/supabase/client";
 
 type LoadState = "loading" | "none" | ComputedDiagnosis;
 
@@ -43,8 +44,57 @@ type LoadState = "loading" | "none" | ComputedDiagnosis;
  * mode非依存の共通ページのまま、美容師診断の場合のみ新しい構成を表示し、
  * サロン診断は既存の表示（6才能グラフ・市場価値等）を維持する。
  */
+/** ログイン中の本人向け。登録・ログインの案内は出さず、保存結果の確認先（マイページ）だけを案内する。 */
+function MemberResultNotice({ saved, mypageHref, retakeHref }: { saved: boolean; mypageHref: string; retakeHref: string }) {
+  return (
+    <div className="mt-8 rounded-2xl border border-line bg-surface2 p-6 text-center">
+      <p className="text-[13.5px] leading-relaxed text-charcoal">
+        {saved
+          ? "今回の診断結果をあなたのアカウントに保存しました。"
+          : "ログイン中です。マイページで最新の診断結果を確認できます。"}
+      </p>
+      <Link
+        href={mypageHref}
+        className="mt-4 flex w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface"
+      >
+        マイページで結果を見る
+      </Link>
+      <Link href={retakeHref} className="mt-3 inline-block text-[13px] text-sub underline">
+        診断を受け直す
+      </Link>
+    </div>
+  );
+}
+
 export default function DiagnosisResultPage() {
   const [state, setState] = useState<LoadState>("loading");
+  // ログイン状態（表示の出し分け専用。保存の可否はサーバー側が判断する）。
+  const [auth, setAuth] = useState<"checking" | "member" | "guest">("checking");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve()
+      .then(async () => {
+        const { data } = await createClient().auth.getUser();
+        return !!data.user;
+      })
+      .catch(() => false)
+      .then((member) => {
+        if (cancelled) return;
+        let hasSaved = false;
+        try {
+          hasSaved = !!sessionStorage.getItem(DIAGNOSIS_SAVED_STORAGE_KEY);
+        } catch {
+          // sessionStorageが使えない場合は「保存済み」を表示しない。
+        }
+        setSaved(hasSaved);
+        setAuth(member ? "member" : "guest");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const raw = sessionStorage.getItem(DIAGNOSIS_RESULT_STORAGE_KEY);
@@ -59,9 +109,10 @@ export default function DiagnosisResultPage() {
     }
   }, []);
 
-  if (state === "loading") {
+  if (state === "loading" || auth === "checking") {
     return null;
   }
+  const isMember = auth === "member";
 
   if (state === "none") {
     return (
@@ -206,6 +257,10 @@ export default function DiagnosisResultPage() {
         </p>
       </div>
 
+      {isMember ? (
+        <MemberResultNotice saved={saved} mypageHref="/stylist/mypage" retakeHref={retakeHref} />
+      ) : (
+        <>
       {/* ④登録したくなる「続き」。3つの問いで興味を強める
           （heroHeadline/hiddenTalentの文言自体は変更していない）。 */}
       <div className="mt-6 text-center">
@@ -257,9 +312,9 @@ export default function DiagnosisResultPage() {
 
       {/* ログイン導線 */}
       <p className="mt-3 text-center text-[13px] text-sub">
-        すでにアカウントをお持ちの方は{" "}
-        <Link href="/stylist/login" className="underline">
-          ログイン
+        すでに会員の方は{" "}
+        <Link href="/stylist/login?next=/stylist/mypage" className="underline">
+          ログインして今回の診断結果を保存・表示する
         </Link>
       </p>
       <p className="mt-3 text-center">
@@ -267,6 +322,8 @@ export default function DiagnosisResultPage() {
           診断を受け直す
         </Link>
       </p>
+        </>
+      )}
     </main>
   );
 }

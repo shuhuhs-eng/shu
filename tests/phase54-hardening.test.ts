@@ -309,3 +309,25 @@ test("美容師ログイン画面には新規登録・診断の案内が無い�
   const result = readFileSync(join(process.cwd(), "app/diagnosis/result/page.tsx"), "utf8");
   assert.match(result, /const signupHref = isSalon \? "\/signup\/salon" : "\/signup"/);
 });
+
+test("再診断フロー: 結果画面のログイン中表示・引き継ぎの時刻保持・保存成功時のみ保存済み表示", () => {
+  const read = (f: string) => readFileSync(join(process.cwd(), f), "utf8");
+  const result = read("app/diagnosis/result/page.tsx");
+  // ログイン中は登録・ログイン案内を出さずマイページへ案内する。ゲストは今回の結果を保存・表示する目的が分かるログイン案内。
+  assert.match(result, /isMember \? \(\s*<MemberResultNotice[^>]*mypageHref="\/stylist\/mypage"/);
+  assert.match(result, /\/stylist\/login\?next=\/stylist\/mypage/);
+  assert.ok(result.includes("ログインして今回の診断結果を保存・表示する"));
+  assert.ok(result.includes("無料登録して診断結果をすべて見る")); // ゲスト向けの登録導線は維持
+  // 保存成功後にだけ「保存済み」を書き、回答のたびに前回分を消す。
+  const quiz = read("components/diagnosis/diagnosis-quiz.tsx");
+  const savedWrite = quiz.indexOf("sessionStorage.setItem(DIAGNOSIS_SAVED_STORAGE_KEY");
+  assert.ok(savedWrite > quiz.indexOf("if (!result.success)"));
+  assert.ok(quiz.includes("sessionStorage.removeItem(DIAGNOSIS_SAVED_STORAGE_KEY)"));
+  assert.ok(quiz.includes("今回の回答でもう一度保存する"));
+  // 古い保留結果の引き継ぎが、後から受けた診断を巻き戻さない（診断を受けた時刻を使う）。
+  assert.match(read("lib/diagnosis-handoff/claim.ts"), /created_at: pending\.created_at/);
+  // マイページの8タイプは最新診断の判定（履歴）を優先する。
+  assert.match(read("app/stylist/mypage/page.tsx"), /stylist_core_type_history[\s\S]*eq\("diagnosis_result_id", latest\.id\)/);
+  // 戻り先は既存の安全な内部パス検証を維持。
+  assert.ok(read("lib/auth/actions.ts").includes('safeInternalPath(formData.get("next"))'));
+});

@@ -70,7 +70,16 @@ export default async function StylistMyPage() {
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
-  const coreTypeCode = coreType?.core_type_code ?? null;
+  // 現在表示する8タイプは「最新の診断」の判定（履歴は診断のたびに1行追加される現在の傾向）。
+  // 履歴が無い場合（8タイプ判定の保存に失敗した等）だけ、初回確定のassignmentへフォールバックする。
+  const { data: latestCoreHistory } = latest
+    ? await supabase
+        .from("stylist_core_type_history")
+        .select("top_type_code")
+        .eq("diagnosis_result_id", latest.id)
+        .maybeSingle()
+    : { data: null };
+  const coreTypeCode = latestCoreHistory?.top_type_code ?? coreType?.core_type_code ?? null;
 
   // ★「働きたいサロン環境」Preference診断（8問・8軸）。既存の30問診断とは
   // 完全に別物（診断ロジック・8タイプ・市場価値・AIには一切影響しない、

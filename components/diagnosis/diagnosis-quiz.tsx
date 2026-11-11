@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { bankFor, computeDiagnosis, type DiagnosisMode } from "@/lib/diagnosis";
-import { DIAGNOSIS_RESULT_STORAGE_KEY } from "@/lib/diagnosis-handoff/constants";
+import { DIAGNOSIS_RESULT_STORAGE_KEY, DIAGNOSIS_SAVED_STORAGE_KEY } from "@/lib/diagnosis-handoff/constants";
 import { submitDiagnosisForLoggedInUser } from "@/lib/diagnosis-handoff/submit-logged-in";
 
 const SECTION_SIZE = 5;
@@ -73,6 +73,13 @@ export function DiagnosisQuiz({ mode, isLoggedIn }: Props) {
   async function submit(finalAnswers: number[]) {
     setSubmitting(true);
     setError(null);
+    // 今回の回答で結果を作り直すため、前回の「保存済み」「プレビュー」を残さない。
+    try {
+      sessionStorage.removeItem(DIAGNOSIS_SAVED_STORAGE_KEY);
+      sessionStorage.removeItem(DIAGNOSIS_RESULT_STORAGE_KEY);
+    } catch {
+      // sessionStorageが使えない環境でも診断自体は続行する。
+    }
 
     // ★ログイン済みの場合のみ、新しい専用経路を使う（不具合修正）。
     // 未ログイン時は以降の分岐に入らず、既存の /api/diagnosis/guest
@@ -89,6 +96,8 @@ export function DiagnosisQuiz({ mode, isLoggedIn }: Props) {
         // 確定保存済み）。
         const preview = computeDiagnosis(mode, finalAnswers);
         sessionStorage.setItem(DIAGNOSIS_RESULT_STORAGE_KEY, JSON.stringify(preview));
+        // 保存に成功した場合だけ「保存済み」を結果画面へ伝える（失敗時は書かない）。
+        sessionStorage.setItem(DIAGNOSIS_SAVED_STORAGE_KEY, result.diagnosisResultId);
         router.push("/diagnosis/result");
       } catch {
         setError("結果の保存に失敗しました。もう一度お試しください。");
@@ -161,12 +170,23 @@ export function DiagnosisQuiz({ mode, isLoggedIn }: Props) {
       </div>
 
       {error && (
-        <p
+        <div
           role="alert"
           className="mt-4 rounded-xl border border-[#C24545]/30 bg-[#C24545]/10 px-4 py-3 text-[13px] text-[#8A2E2E]"
         >
-          {error}
-        </p>
+          <p>{error}</p>
+          {/* 回答はこの画面に残っている。最後まで答え終えていれば、回答し直さずに再送信できる。 */}
+          {answers.every((a) => a !== null) && (
+            <button
+              type="button"
+              onClick={() => submit(answers as number[])}
+              disabled={submitting}
+              className="mt-2 font-semibold underline disabled:opacity-60"
+            >
+              今回の回答でもう一度保存する
+            </button>
+          )}
+        </div>
       )}
 
       <div className="mt-8 flex min-h-[20px] items-center justify-between">

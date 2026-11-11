@@ -106,6 +106,9 @@ export async function claimPendingDiagnosisIfPresent(): Promise<ClaimResult> {
       market_value_score: computed.marketValueScore,
       salary_band: computed.salaryBand,
       source_pending_id: pending.id,
+      // 「最新の診断」は created_at で決まる。引き継ぎが後から行われても、診断を受けた時刻を使い、
+      // 後から受けた別の診断（ログイン中の再診断など）を古い保留結果で巻き戻さない。
+      created_at: pending.created_at,
     })
     .select("*")
     .single();

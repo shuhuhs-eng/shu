@@ -11,3 +11,10 @@ export const CLAIM_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
  * （真値はpending_diagnosesに保存済みで、claim後にサーバー側で再計算される）。
  */
 export const DIAGNOSIS_RESULT_STORAGE_KEY = "br_diagnosis_preview";
+
+/**
+ * ログイン済みユーザーの診断が「サーバーへ保存成功した」ことを結果画面へ伝えるsessionStorageキー
+ * （保存成功後にのみ診断クイズが書き込む。値は保存したdiagnosis_resultsのid）。
+ * 結果画面はこれが無い限り「保存済み」とは表示しない。
+ */
+export const DIAGNOSIS_SAVED_STORAGE_KEY = "br_diagnosis_saved_id";
