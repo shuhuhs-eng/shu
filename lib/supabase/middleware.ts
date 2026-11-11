@@ -87,6 +87,7 @@ const COMPANY_BILLING_PREFIXES = ["/salon/company/billing", "/salon/company/bill
  *      アクセス → 該当roleのマイページへ（やり直し・二重role取得の防止）。
  */
 export async function updateSession(request: NextRequest) {
+  const perfStart = performance.now();
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
@@ -113,6 +114,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const perfAuthDone = performance.now();
   const { pathname } = request.nextUrl;
 
   const requiresAuth = AUTH_REQUIRED_PREFIXES.some(
@@ -158,6 +160,8 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
   }
+
+  const perfChecksDone = performance.now();
 
   // ★role別ルート制御（1 auth user = 1 role方針）。未ログインユーザーは
   // この制御の対象外（/stylist/diagnosis・/diagnosis/salonの未ログイン
@@ -242,5 +246,14 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
+  // 処理時間の計測（個人情報・回答内容・トークンは含めない。経路名と所要ミリ秒、実行リージョンだけ）。
+  // ブラウザの開発者ツール（Network > 該当リクエスト > Timing）の Server-Timing にも出る。
+  const authMs = Math.round(perfAuthDone - perfStart);
+  const checksMs = Math.round(perfChecksDone - perfAuthDone);
+  const totalMs = Math.round(performance.now() - perfStart);
+  response.headers.set("Server-Timing", `auth;dur=${authMs}, checks;dur=${checksMs}, middleware;dur=${totalMs}`);
+  if (pathname === "/stylist/mypage" || pathname === "/diagnosis/result" || pathname === "/stylist/diagnosis") {
+    console.info("[perf] middleware", { path: pathname, authMs, checksMs, totalMs, region: process.env.VERCEL_REGION ?? null });
+  }
   return response;
 }

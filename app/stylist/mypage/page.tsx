@@ -29,10 +29,12 @@ type AiOutputRow = Database["public"]["Tables"]["diagnosis_ai_outputs"]["Row"];
  * 決め打ちで飛ばすのではなく、美容師オンボーディングへ誘導する。
  */
 export default async function StylistMyPage() {
+  const perfStart = performance.now();
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const perfAuthDone = performance.now();
 
   if (!user) {
     redirect("/login?next=/stylist/mypage");
@@ -77,6 +79,8 @@ export default async function StylistMyPage() {
     getNotificationsForBell(supabase, user.id),
   ]);
 
+  const perfFetchDone = performance.now();
+
   if (!hasStylistRole) {
     redirect("/onboarding");
   }
@@ -103,6 +107,13 @@ export default async function StylistMyPage() {
     }
     latestCoreTypeCode = latestCoreHistory?.top_type_code ?? null;
   }
+  // 処理時間の計測（個人情報・回答内容・トークンは含めない）。Vercel Logsで "[perf] mypage" を検索する。
+  console.info("[perf] mypage", {
+    authMs: Math.round(perfAuthDone - perfStart),
+    parallelFetchMs: Math.round(perfFetchDone - perfAuthDone),
+    dependentFetchMs: Math.round(performance.now() - perfFetchDone),
+    region: process.env.VERCEL_REGION ?? null,
+  });
   // 履歴が無い場合（8タイプ判定の保存に失敗した等）は、最新診断のスコアから同じ判定式（SQLと一致）で求める。
   // 初回確定のassignment（過去の診断由来）は表示に使わない＝古いタイプが現在の結果として出ない。
   const coreTypeCode: CoreTypeCode | null = latest
