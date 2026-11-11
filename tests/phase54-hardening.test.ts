@@ -280,9 +280,20 @@ test("describeAuthError: codeで分類し、ログへmessage本文を出さな�
   try {
     const msg = describeAuthError("signup", { message: "captcha verification process failed for a@b.com", code: "captcha_failed", status: 400, name: "AuthApiError" });
     assert.match(msg, /確認に失敗/);
-    assert.match(describeAuthError("signup", { message: "boom" }), /^エラーが発生しました。しばらくしてから再度お試しください。（エラーコード: unknown/);
+    assert.match(describeAuthError("signup", { message: "boom" }), /^エラーが発生しました。しばらくしてから再度お試しください。（エラーコード: reason=other/);
     assert.match(describeAuthError("signup", { message: "Error sending confirmation email", code: "unexpected_failure", status: 500 }), /エラーコード: unexpected_failure \/ 500/);
     assert.ok(!JSON.stringify(logs).includes("a@b.com"));
     assert.ok(JSON.stringify(logs[0]).includes("captcha_failed"));
   } finally { console.error = orig; }
+});
+
+import { classifyAuthMessage } from "../lib/auth/errors";
+test("classifyAuthMessage: 許可リストのラベルのみ返し、生のmessageは返さない", () => {
+  assert.equal(classifyAuthMessage("Database error saving new user"), "db_error_saving_new_user");
+  assert.equal(classifyAuthMessage("Error sending confirmation email"), "email_send_failed");
+  assert.equal(classifyAuthMessage("{}"), "empty_body");
+  assert.equal(classifyAuthMessage("something about a@b.com"), "other");
+  const out = describeAuthError("signup", { message: "Database error saving new user for a@b.com", status: 500, name: "AuthRetryableFetchError" });
+  assert.match(out, /reason=db_error_saving_new_user/);
+  assert.ok(!out.includes("a@b.com"));
 });
