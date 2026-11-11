@@ -297,3 +297,13 @@ test("classifyAuthMessage: 許可リストのラベルのみ返し、生のmessa
   assert.match(out, /reason=db_error_saving_new_user/);
   assert.ok(!out.includes("a@b.com"));
 });
+
+test("美容師ログインの入口リンクは無料診断へ。サロン・共通ログインは従来どおり", () => {
+  const src = readFileSync(join(process.cwd(), "app/(auth)/login/login-form.tsx"), "utf8");
+  assert.match(src, /signupHref: "\/stylist\/diagnosis",\s*signupLabel: "初めての方は無料診断へ"/);
+  assert.match(src, /signupHref: "\/signup\/salon",\s*signupLabel: "新規登録はこちら"/);
+  assert.match(src, /copy\?\.signupHref \?\? "\/signup"/);
+  assert.ok(readFileSync(join(process.cwd(), "app/(auth)/signup/page.tsx"), "utf8").includes("新規登録"));
+  const result = readFileSync(join(process.cwd(), "app/diagnosis/result/page.tsx"), "utf8");
+  assert.match(result, /const signupHref = isSalon \? "\/signup\/salon" : "\/signup"/);
+});

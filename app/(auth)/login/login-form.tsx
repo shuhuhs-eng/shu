@@ -27,7 +27,10 @@ const COPY = {
   stylist: {
     heading: "美容師としてログイン",
     subtext: "診断・プロフィール・スカウトを利用する",
-    signupHref: "/signup",
+    // 美容師の新規入口は「30問診断 → 結果 → 会員登録して保存」。診断の開始画面へ案内する
+    // （登録画面 /signup 自体は残る。診断結果画面の登録導線から到達する）。
+    signupHref: "/stylist/diagnosis",
+    signupLabel: "初めての方は無料診断へ",
     crossLinkHref: "/salon/login",
     crossLinkLabel: "サロンの方はこちら",
   },
@@ -35,6 +38,7 @@ const COPY = {
     heading: "サロンとしてログイン",
     subtext: "採用・サロンらしさ・マッチングを利用する",
     signupHref: "/signup/salon",
+    signupLabel: "新規登録はこちら",
     crossLinkHref: "/stylist/login",
     crossLinkLabel: "美容師の方はこちら",
   },
@@ -112,7 +116,7 @@ export function LoginForm({ mode }: Props) {
           パスワードをお忘れですか？
         </Link>
         <Link href={copy?.signupHref ?? "/signup"} className="underline">
-          新規登録はこちら
+          {copy?.signupLabel ?? "新規登録はこちら"}
         </Link>
       </div>
 
