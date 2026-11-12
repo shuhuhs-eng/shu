@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   checkTurnstileToken,
@@ -831,4 +831,20 @@ test("サロンマイページ: タイプ表示とAI紹介文は同じ salon_cul
   assert.match(comp, /cultureStatus === "completed"/);
   assert.match(comp, /まだ作成されていません/);
   assert.match(comp, /読み込めませんでした/);
+});
+
+test("サロンらしさ結果画面: 古いCOMING SOON枠を廃止し、既存の候補者一覧へ案内する（計算・権限は変更しない）", () => {
+  const legacy = readFileSync(join(process.cwd(), "components/salon-culture/culture-result.tsx"), "utf8");
+  const store = readFileSync(join(process.cwd(), "components/salon-culture/store-culture-result.tsx"), "utf8");
+  for (const src of [legacy, store]) {
+    assert.ok(!/coming soon/i.test(src.replace(/\/\*[\s\S]*?\*\//g, "")));
+    assert.ok(!src.includes("マッチング機能とともに表示される予定です"));
+    assert.ok(!src.includes("今後、美容師とのマッチングに活用される予定"));
+    assert.ok(src.includes("美容師との相性を確認できます"));
+  }
+  // 既存の導線: 本人（サロン）の /salon/stylists（店舗へ振り分け）と、対象店舗の /salon/stores/[storeId]/stylists。
+  assert.ok(legacy.includes('href="/salon/stylists"'));
+  assert.ok(store.includes("`/salon/stores/${storeId}/stylists`"));
+  assert.ok(existsSync(join(process.cwd(), "app/salon/stylists/page.tsx")));
+  assert.ok(existsSync(join(process.cwd(), "app/salon/stores/[storeId]/stylists/page.tsx")));
 });

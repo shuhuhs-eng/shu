@@ -94,18 +94,23 @@ export function StoreCultureResult({ storeId, profile }: Props) {
         </section>
       )}
 
-      <section className="rounded-2xl border border-dashed border-[var(--gold)]/50 bg-surface2 p-6 text-center">
-        <p className="eyebrow mb-2" style={{ color: "var(--gold)" }}>
-          Coming soon
-        </p>
-        <h2 className="font-serif text-lg font-bold text-ink">あなたらしさ × サロンらしさ</h2>
+      {/* 美容師との相性案内。相性は候補の美容師ごとに計算され、美容師の一覧（既存の「美容師を探す」）で確認できる。
+          この画面は自分のサロンらしさの結果なので、計算はここでは行わない。 */}
+      <section className="rounded-2xl border border-line bg-surface p-6 text-center">
+        <h2 className="font-serif text-lg font-bold text-ink">美容師との相性を確認できます</h2>
         <p className="mt-3 text-[13px] leading-relaxed text-charcoal">
-          あなたの才能・価値観・働き方と、
+          美容師を探す画面で、候補の美容師ごとに、
           <br />
-          このサロンのらしさを掛け合わせた相性診断は、
+          このサロンらしさとの相性（総合マッチ度と各軸）を確認できます。
           <br />
-          マッチング機能とともに表示される予定です。
+          相性は、美容師が「働きたいサロン環境」を回答している場合に表示されます。
         </p>
+        <Link
+          href={`/salon/stores/${storeId}/stylists`}
+          className="mt-4 inline-flex items-center justify-center rounded-full bg-ink px-6 py-3 text-[14px] font-semibold text-surface"
+        >
+          美容師を探す
+        </Link>
       </section>
 
       {profile.value_priorities && profile.value_priorities.length > 0 && (
@@ -139,7 +144,7 @@ export function StoreCultureResult({ storeId, profile }: Props) {
       )}
 
       <p className="text-center text-[12px] text-sub">
-        この結果は今後、美容師とのマッチングに活用される予定です。
+        この結果は、美容師との相性の計算に使われます。
       </p>
     </div>
   );
