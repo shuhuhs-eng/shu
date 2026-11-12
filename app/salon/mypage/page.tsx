@@ -59,14 +59,19 @@ export default async function SalonMyPage() {
     .maybeSingle();
 
   const salonAiByType: Partial<Record<AiOutputType, unknown>> = {};
+  let salonAiLoadFailed = false;
   if (cultureProfile) {
-    const { data: salonAiOutputs } = await supabase
+    const { data: salonAiOutputs, error: salonAiError } = await supabase
       .from("salon_culture_ai_outputs")
       .select("*")
       .eq("salon_culture_profile_id", cultureProfile.id)
       .eq("prompt_version", "salon-culture-v1")
       .eq("is_current", true);
 
+    if (salonAiError) {
+      logError("salonMypage.aiOutputs", salonAiError);
+      salonAiLoadFailed = true;
+    }
     for (const row of (salonAiOutputs ?? []) as SalonCultureAiOutputRow[]) {
       salonAiByType[row.output_type] = row.response;
     }
@@ -396,14 +401,15 @@ export default async function SalonMyPage() {
 
       {/* ★サロン専用AI解説。旧14問診断（DiagnosisSummary、下記）とは別の
           場所に配置し、「サロンらしさ」セクションの一部であることを
-          視覚的に明確にする。latestが無い（旧14問診断を一度も受けて
-          いない）場合、diagnosis_ai_outputsへの紐付け先が無いため
-          サロン専用AIは生成されない（lib/salon-culture/actions.ts参照）。
-          この場合は latest?.ai_status が無くnullになり、
-          SalonAiNarrative側で「サロンらしさを回答すると...」という
-          案内が表示される。 */}
+          視覚的に明確にする。表示は salon_culture_profiles（回答状態）と
+          salon_culture_ai_outputs（AI紹介文）だけに依存し、旧14問診断（latest）には依存しない
+          （0012）。未回答・回答済みで未作成・取得失敗を SalonAiNarrative が区別して表示する。 */}
       <div className="mt-4">
-        <SalonAiNarrative aiByType={salonAiByType} />
+        <SalonAiNarrative
+          aiByType={salonAiByType}
+          cultureStatus={cultureProfile?.status ?? null}
+          loadFailed={salonAiLoadFailed}
+        />
       </div>
 
       <p className="eyebrow mb-2 mt-8">サロン診断（6つの才能軸）</p>

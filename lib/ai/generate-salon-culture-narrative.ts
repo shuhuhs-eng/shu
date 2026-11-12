@@ -111,6 +111,8 @@ export async function generateSalonCultureNarrative(
         max_tokens: 1000,
         messages: [{ role: "user", content: prompt }],
       }),
+      // 応答が返らないまま処理が止まり続けないようにする（再生成の画面操作が固まらない）。
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!response.ok) {

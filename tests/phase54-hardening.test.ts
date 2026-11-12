@@ -722,3 +722,113 @@ test("サロン初回登録: 写真アップローダーは保存後（edit）�
   const sql = readFileSync(join(process.cwd(), "supabase/migrations/0014_salon_photos_hotpepper.sql"), "utf8");
   assert.match(sql, /caller is not a salon/);
 });
+
+// ---------------------------------------------------------------------------
+// サロンAI紹介文: 回答済みで未作成の再生成（重複実行・失敗を隠さない）
+// ---------------------------------------------------------------------------
+import { runSalonAiRetry, SALON_AI_OUTPUT_TYPES } from "../lib/salon-culture/ai-retry";
+import { runSalonCultureAiGenerationJob } from "../lib/salon-culture/run-culture-ai-job";
+
+function fakeLimiter() {
+  const counts = new Map<string, number>();
+  return async (key: string, limit: number) => {
+    const n = (counts.get(key) ?? 0) + 1;
+    counts.set(key, n);
+    return { allowed: n <= limit };
+  };
+}
+
+test("AI再生成: 未回答は生成しない／4種そろっていれば何もしない", async () => {
+  let ran = 0;
+  const base = { limiter: fakeLimiter(), userId: "u1", runJob: async () => (ran++, "ok" as const) };
+  assert.deepEqual(await runSalonAiRetry({ ...base, completed: false, existingCurrentTypes: [] }), { status: "not_completed" });
+  assert.deepEqual(await runSalonAiRetry({ ...base, completed: true, existingCurrentTypes: [...SALON_AI_OUTPUT_TYPES] }), { status: "exists" });
+  assert.equal(ran, 0);
+});
+
+test("AI再生成: 連打・同時実行でも生成は1回だけ。成功後は再実行されない", async () => {
+  let ran = 0;
+  let saved = false;
+  const limiter = fakeLimiter();
+  const call = () =>
+    runSalonAiRetry({
+      completed: true,
+      existingCurrentTypes: saved ? [...SALON_AI_OUTPUT_TYPES] : [],
+      limiter,
+      userId: "u1",
+      runJob: async () => {
+        ran++;
+        await new Promise((r) => setTimeout(r, 5));
+        saved = true;
+        return "ok";
+      },
+    });
+  const results = await Promise.all(Array.from({ length: 6 }, call));
+  assert.equal(ran, 1);
+  assert.equal(results.filter((r) => r.status === "generated").length, 1);
+  assert.equal(results.filter((r) => r.status === "busy").length, 5);
+  assert.equal((await call()).status, "exists");
+  assert.equal(ran, 1);
+});
+
+test("AI再生成: 生成失敗・一部保存失敗は『失敗』として返す（成功に見せない）。別ユーザーの枠とは独立", async () => {
+  const limiter = fakeLimiter();
+  const mk = (userId: string, job: "generation_failed" | "partial") =>
+    runSalonAiRetry({ completed: true, existingCurrentTypes: ["essence"], limiter, userId, runJob: async () => job });
+  const a = await mk("u1", "generation_failed");
+  const b = await mk("u2", "partial");
+  assert.equal(a.status, "failed");
+  assert.equal(b.status, "failed");
+  assert.match((a as { error: string }).error, /失敗/);
+  assert.match((b as { error: string }).error, /一部/);
+  assert.equal((await mk("u1", "generation_failed")).status, "busy"); // 2分以内の再実行は抑止
+});
+
+test("AI生成ジョブ: 生成失敗は generation_failed、保存の一部失敗は partial、全件成功は ok（4種×作成+現行化）", async () => {
+  const profile = { id: "p1", culture_axes: {}, value_priorities: null, comment: null } as never;
+  const narrative = { essence: "e", explanation: "x", advice: ["a"], growth: "g" };
+  const gen = async () => ({ narrative, model: "m", promptVersion: "salon-culture-v1" });
+  const mkRpc = (failCreateFor?: string) => {
+    const calls: string[] = [];
+    return {
+      calls,
+      supabase: {
+        rpc: async (fn: string, args: Record<string, unknown>) => {
+          calls.push(fn);
+          if (fn === "create_salon_culture_ai_output") {
+            if (args.p_output_type === failCreateFor) return { data: null, error: { message: "x" } };
+            return { data: { id: `id-${args.p_output_type}` }, error: null };
+          }
+          return { data: null, error: null };
+        },
+      } as never,
+    };
+  };
+  const errs = console.error;
+  console.error = () => {};
+  try {
+    assert.equal(await runSalonCultureAiGenerationJob(profile, "t", { generate: (async () => null) as never, supabase: mkRpc().supabase }), "generation_failed");
+    const ok = mkRpc();
+    assert.equal(await runSalonCultureAiGenerationJob(profile, "t", { generate: gen as never, supabase: ok.supabase }), "ok");
+    assert.equal(ok.calls.length, 8);
+    const part = mkRpc("growth");
+    assert.equal(await runSalonCultureAiGenerationJob(profile, "t", { generate: gen as never, supabase: part.supabase }), "partial");
+  } finally {
+    console.error = errs;
+  }
+});
+
+test("サロンマイページ: タイプ表示とAI紹介文は同じ salon_culture_profiles／salon_culture_ai_outputs を参照し、未回答と回答済み未作成を区別する", () => {
+  const page = readFileSync(join(process.cwd(), "app/salon/mypage/page.tsx"), "utf8");
+  assert.match(page, /cultureProfile\?\.status === "completed" \? deriveSalonTypes/);
+  assert.match(page, /\.from\("salon_culture_ai_outputs"\)/);
+  assert.match(page, /cultureStatus=\{cultureProfile\?\.status \?\? null\}/);
+  assert.match(page, /loadFailed=\{salonAiLoadFailed\}/);
+  assert.match(page, /href="\/salon\/culture\/result"/); // 「詳しい結果を見る」は本人の保存済み結果
+  const resultPage = readFileSync(join(process.cwd(), "app/salon/culture/result/page.tsx"), "utf8");
+  assert.match(resultPage, /\.eq\("salon_user_id", user\.id\)/);
+  const comp = readFileSync(join(process.cwd(), "components/salon-culture/salon-ai-narrative.tsx"), "utf8");
+  assert.match(comp, /cultureStatus === "completed"/);
+  assert.match(comp, /まだ作成されていません/);
+  assert.match(comp, /読み込めませんでした/);
+});

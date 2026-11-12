@@ -33,17 +33,31 @@ type SalonCultureProfileRow = Database["public"]["Tables"]["salon_culture_profil
  * save_salon_culture_profile RPC）を一切ブロックしない設計
  * （美容師側と同じ「AI解説はあれば良い付加情報」という方針）。
  */
+export type SalonAiJobResult = "ok" | "generation_failed" | "partial";
+
+export type SalonAiJobDeps = {
+  supabase?: Pick<ReturnType<typeof createTokenClient>, "rpc">;
+  generate?: typeof generateSalonCultureNarrative;
+};
+
+/**
+ * 戻り値: "ok"=4種すべて保存・現行化、"generation_failed"=AIの生成自体が失敗（API・キー・応答形式）、
+ * "partial"=生成は成功したが保存・現行化の一部が失敗。保存時の after() からは戻り値を使わない（従来どおり）。
+ * 再生成（generateSalonCultureAiAction）は、この結果をそのまま画面へ伝える（失敗を隠さない）。
+ */
 export async function runSalonCultureAiGenerationJob(
   cultureProfile: SalonCultureProfileRow,
   accessToken: string,
-): Promise<void> {
+  deps: SalonAiJobDeps = {},
+): Promise<SalonAiJobResult> {
 
-  const supabase = createTokenClient(accessToken);
+  const supabase = deps.supabase ?? createTokenClient(accessToken);
+  const generate = deps.generate ?? generateSalonCultureNarrative;
 
   const axes: SalonCultureAxes = cultureProfile.culture_axes ?? {};
   const classification = deriveSalonTypes(axes);
 
-  const result = await generateSalonCultureNarrative({
+  const result = await generate({
     cultureAxes: axes,
     valuePriorities: cultureProfile.value_priorities,
     comment: cultureProfile.comment,
@@ -52,7 +66,8 @@ export async function runSalonCultureAiGenerationJob(
   });
 
   if (!result) {
-    return;
+    console.error("[salonAiJob] generation failed (no narrative returned)");
+    return "generation_failed";
   }
 
   const { narrative, model, promptVersion } = result;
@@ -66,6 +81,7 @@ export async function runSalonCultureAiGenerationJob(
     { type: "growth", response: narrative.growth },
   ];
 
+  let allSaved = true;
   for (const entry of entries) {
     const { data: created, error: createError } = await supabase.rpc("create_salon_culture_ai_output", {
       p_salon_culture_profile_id: cultureProfile.id,
@@ -78,6 +94,7 @@ export async function runSalonCultureAiGenerationJob(
 
     if (createError || !created) {
       logError(`salonAiJob.create.${entry.type}`, createError);
+      allSaved = false;
       continue;
     }
 
@@ -86,7 +103,9 @@ export async function runSalonCultureAiGenerationJob(
     });
     if (activateError) {
       logError(`salonAiJob.activate.${entry.type}`, activateError);
+      allSaved = false;
     }
   }
 
+  return allSaved ? "ok" : "partial";
 }

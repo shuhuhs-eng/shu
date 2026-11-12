@@ -1,7 +1,12 @@
 import type { AiOutputType } from "@/types/database";
+import { SalonAiGenerateButton } from "@/components/salon-culture/salon-ai-generate-button";
 
 type Props = {
   aiByType: Partial<Record<AiOutputType, unknown>>;
+  /** salon_culture_profiles.status（行が無ければ null）。 */
+  cultureStatus: "draft" | "completed" | null;
+  /** AI紹介文の取得そのものに失敗したか（未作成と区別して表示する）。 */
+  loadFailed?: boolean;
 };
 
 /**
@@ -17,12 +22,11 @@ type Props = {
  * 渡す前提。美容師向けAI・旧サロン向け誤生成AI（別テーブルdiagnosis_ai_outputs）
  * は、テーブル自体が異なるため一切混ざらない。
  *
- * ★salon_culture_profilesにはdiagnosis_results.ai_statusに相当する
- * 生成中/完了/失敗のステータス列が存在しないため、「生成中です」という
- * 表示は行わない（該当データが無ければ単純に「回答すると表示されます」
- * という案内にとどめる）。
+ * ★salon_culture_profilesにはdiagnosis_results.ai_statusに相当する生成状態の列が無い。そのため
+ * 「回答済みで紹介文が無い」場合は、生成待ち・生成失敗・過去に生成されなかったのいずれかを区別できない。
+ * 未回答と同じ案内にはせず、回答済みであることと「作成する」操作を示す。
  */
-export function SalonAiNarrative({ aiByType }: Props) {
+export function SalonAiNarrative({ aiByType, cultureStatus, loadFailed = false }: Props) {
   const essence = typeof aiByType.essence === "string" ? aiByType.essence : null;
   const explanation = typeof aiByType.explanation === "string" ? aiByType.explanation : null;
   const advice = Array.isArray(aiByType.advice) ? (aiByType.advice as string[]) : null;
@@ -30,6 +34,28 @@ export function SalonAiNarrative({ aiByType }: Props) {
   const hasContent = essence || explanation || (advice && advice.length > 0) || growth;
 
   if (!hasContent) {
+    if (loadFailed) {
+      return (
+        <section className="rounded-2xl border border-line bg-surface p-6 text-center">
+          <p className="text-[13.5px] leading-relaxed text-charcoal">
+            AI紹介文を読み込めませんでした。画面を更新してもう一度お試しください。
+          </p>
+        </section>
+      );
+    }
+    if (cultureStatus === "completed") {
+      return (
+        <section className="rounded-2xl border border-line bg-surface p-6 text-center">
+          <p className="text-[13.5px] leading-relaxed text-charcoal">
+            サロンらしさは回答済みです。AIによるサロン紹介文は、まだ作成されていません。
+          </p>
+          <p className="mt-1 text-[12px] leading-relaxed text-sub">作成中の場合や、作成に失敗した場合があります。</p>
+          <div className="flex justify-center">
+            <SalonAiGenerateButton />
+          </div>
+        </section>
+      );
+    }
     return (
       <section className="rounded-2xl border border-line bg-surface p-6 text-center">
         <p className="text-[13.5px] leading-relaxed text-charcoal">
