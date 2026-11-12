@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { CultureRadarSection } from "@/components/salon-culture/culture-radar";
 import { SalonAiNarrative } from "@/components/salon-culture/salon-ai-narrative";
+import { TypeBasis } from "@/components/salon-culture/type-basis";
+import { ANALYSIS_VERSION } from "@/lib/salon-culture/analysis/v1";
 import { deriveSalonTypes, SALON_TYPE_CONTENT } from "@/lib/salon-culture/salon-culture-types";
 import type { AiOutputType, Database } from "@/types/database";
 import { JOB_CHANGE_INTENT_LABELS } from "@/lib/validation/profile-options";
@@ -49,6 +51,15 @@ export default async function SalonMyPage() {
     .maybeSingle();
   // 取得エラーを「未回答」と表示しない（読み込み失敗として別に表示する）。
   if (cultureError) logError("salonMypage.cultureProfile", cultureError);
+
+  // 本人の追加回答（salon-analysis-v1）。店舗の回答とは混ぜない。
+  const { data: analysisRow, error: analysisError } = await supabase
+    .from("salon_culture_analysis_answers")
+    .select("answers, base_snapshot")
+    .eq("salon_user_id", user.id)
+    .eq("analysis_version", ANALYSIS_VERSION)
+    .maybeSingle();
+  if (analysisError) logError("salonMypage.cultureAnalysis", analysisError);
 
   const salonAiByType: Partial<Record<AiOutputType, unknown>> = {};
   let salonAiLoadFailed = false;
@@ -370,6 +381,8 @@ export default async function SalonMyPage() {
             </p>
           </div>
 
+          <TypeBasis axes={cultureProfile?.culture_axes} />
+
           <Link
             href="/salon/culture/result"
             className="mt-5 flex w-full items-center justify-center rounded-full bg-ink px-6 py-3 text-[14px] font-semibold text-surface"
@@ -382,9 +395,13 @@ export default async function SalonMyPage() {
       <div className="mt-4">
         <CultureRadarSection
           status={cultureProfile?.status ?? null}
-          axes={cultureProfile?.culture_axes}
+          baseAnswers={cultureProfile?.answers}
+          supplement={analysisError ? null : (analysisRow ?? null)}
           loadFailed={!!cultureError}
           answerPath="/salon/culture"
+          analysisPath="/salon/culture/analysis"
+          targetName={salon?.salon_name ?? null}
+          targetKind="personal"
         />
       </div>
 

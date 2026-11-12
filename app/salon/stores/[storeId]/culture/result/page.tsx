@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/security/log";
 import { CultureResultLoadError } from "@/components/salon-culture/culture-result-load-error";
 import { StoreCultureResult } from "@/components/salon-culture/store-culture-result";
+import { ANALYSIS_VERSION } from "@/lib/salon-culture/analysis/v1";
 import { hasAllTwelveAxes } from "@/lib/salon-culture/salon-culture-types";
 
 type Props = {
@@ -35,6 +36,18 @@ export default async function SalonStoreCultureResultPage({ params }: Props) {
     redirect(`/salon/stores/${storeId}/culture`);
   }
 
+  const { data: supplement, error: supplementError } = await supabase
+    .from("salon_culture_analysis_answers")
+    .select("answers, base_snapshot")
+    .eq("store_id", storeId)
+    .eq("analysis_version", ANALYSIS_VERSION)
+    .maybeSingle();
+  if (supplementError) logError("salonStoreCultureResult.analysis", supplementError);
+
+  const { data: store } = await supabase.from("salon_stores").select("store_name").eq("id", storeId).maybeSingle();
+  const { data: canEditData, error: canEditError } = await supabase.rpc("can_edit_store_culture_analysis", { p_store_id: storeId });
+  if (canEditError) logError("salonStoreCultureResult.canEdit", canEditError);
+
   const hasNewAxes = hasAllTwelveAxes(cultureProfile.culture_axes ?? {});
 
   return (
@@ -44,7 +57,13 @@ export default async function SalonStoreCultureResultPage({ params }: Props) {
         <hr className="h-px flex-1 border-0 bg-line" />
       </div>
 
-      <StoreCultureResult storeId={storeId} profile={cultureProfile} />
+      <StoreCultureResult
+        storeId={storeId}
+        profile={cultureProfile}
+        supplement={supplement ?? null}
+        storeName={store?.store_name ?? null}
+        canEdit={canEditData === true}
+      />
 
       <div className="mt-8 flex flex-col items-center gap-3">
         {hasNewAxes && (

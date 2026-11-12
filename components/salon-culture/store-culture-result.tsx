@@ -7,11 +7,18 @@ import {
   SALON_TYPE_CONTENT,
 } from "@/lib/salon-culture/salon-culture-types";
 import { CultureRadarSection } from "@/components/salon-culture/culture-radar";
+import { TypeBasis } from "@/components/salon-culture/type-basis";
+import type { SupplementRow } from "@/lib/salon-culture/analysis/v1";
 import type { Database } from "@/types/database";
 
 type Props = {
   storeId: string;
   profile: Database["public"]["Tables"]["salon_store_culture_profiles"]["Row"];
+  /** この店舗の追加回答（無ければ null）。個人の回答・他店舗の回答は使わない。 */
+  supplement: SupplementRow;
+  storeName: string | null;
+  /** 追加回答を保存できるか（閲覧のみなら false）。 */
+  canEdit: boolean;
 };
 
 /**
@@ -24,7 +31,7 @@ type Props = {
  * /salon/stores/[storeId]/culture系であることのみ。既存culture-result.tsx
  * 自体は一切変更していない。
  */
-export function StoreCultureResult({ storeId, profile }: Props) {
+export function StoreCultureResult({ storeId, profile, supplement, storeName, canEdit }: Props) {
   const axes = profile.culture_axes ?? {};
   const classification = deriveSalonTypes(axes);
   const characteristics = deriveTopCharacteristics(axes);
@@ -57,6 +64,8 @@ export function StoreCultureResult({ storeId, profile }: Props) {
               {SALON_TYPE_CONTENT[classification.subType].name}
             </p>
           </div>
+
+          <TypeBasis axes={axes} />
 
           {characteristics && characteristics.length > 0 && (
             <div className="mt-6 border-t border-line pt-5 text-left">
@@ -96,7 +105,16 @@ export function StoreCultureResult({ storeId, profile }: Props) {
       )}
 
       {/* 5軸バランス（表示専用）。この画面の対象（本人／店舗）と同じ行の culture_axes だけを使う。 */}
-      <CultureRadarSection status={profile.status} axes={profile.culture_axes} answerPath={`/salon/stores/${storeId}/culture`} />
+      <CultureRadarSection
+        status={profile.status}
+        baseAnswers={profile.answers}
+        supplement={supplement}
+        answerPath={`/salon/stores/${storeId}/culture`}
+        analysisPath={`/salon/stores/${storeId}/culture/analysis`}
+        targetName={storeName}
+        targetKind="store"
+        canEdit={canEdit}
+      />
 
       {/* 美容師との相性案内。相性は候補の美容師ごとに計算され、美容師の一覧（既存の「美容師を探す」）で確認できる。
           この画面は自分のサロンらしさの結果なので、計算はここでは行わない。 */}

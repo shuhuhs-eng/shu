@@ -7,10 +7,16 @@ import {
   SALON_TYPE_CONTENT,
 } from "@/lib/salon-culture/salon-culture-types";
 import { CultureRadarSection } from "@/components/salon-culture/culture-radar";
+import { TypeBasis } from "@/components/salon-culture/type-basis";
+import type { SupplementRow } from "@/lib/salon-culture/analysis/v1";
 import type { Database } from "@/types/database";
 
 type Props = {
   profile: Database["public"]["Tables"]["salon_culture_profiles"]["Row"];
+  /** 本人の追加回答（無ければ null）。店舗の回答は使わない。 */
+  supplement: SupplementRow;
+  /** 回答対象のサロン名。 */
+  targetName: string | null;
 };
 
 /**
@@ -29,7 +35,7 @@ type Props = {
  * value_priorities・comment・「美容師との相性」案内（候補者ごとの相性は既存の「美容師を探す」で確認する）の各
  * セクションは既存のまま維持している（削除していない）。
  */
-export function CultureResult({ profile }: Props) {
+export function CultureResult({ profile, supplement, targetName }: Props) {
   const axes = profile.culture_axes ?? {};
   const classification = deriveSalonTypes(axes);
   const characteristics = deriveTopCharacteristics(axes);
@@ -62,6 +68,8 @@ export function CultureResult({ profile }: Props) {
               {SALON_TYPE_CONTENT[classification.subType].name}
             </p>
           </div>
+
+          <TypeBasis axes={axes} />
 
           {characteristics && characteristics.length > 0 && (
             <div className="mt-6 border-t border-line pt-5 text-left">
@@ -101,7 +109,15 @@ export function CultureResult({ profile }: Props) {
       )}
 
       {/* 5軸バランス（表示専用）。この画面の対象（本人／店舗）と同じ行の culture_axes だけを使う。 */}
-      <CultureRadarSection status={profile.status} axes={profile.culture_axes} answerPath={"/salon/culture"} />
+      <CultureRadarSection
+        status={profile.status}
+        baseAnswers={profile.answers}
+        supplement={supplement}
+        answerPath="/salon/culture"
+        analysisPath="/salon/culture/analysis"
+        targetName={targetName}
+        targetKind="personal"
+      />
 
       {/* 美容師との相性案内。相性は候補の美容師ごとに計算され、美容師の一覧（既存の「美容師を探す」）で確認できる。
           この画面は自分のサロンらしさの結果なので、計算はここでは行わない。 */}

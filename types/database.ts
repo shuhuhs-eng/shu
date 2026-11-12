@@ -627,6 +627,18 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      salon_culture_analysis_answers: {
+        // 0056（未適用・レビュー中）で追加。サロンらしさ追加分析（salon-analysis-v1）の追加5問の回答。
+        // 本人（salon_user_id）か店舗（store_id）のどちらか一方の行。SELECTのみ。
+        // 書き込みは save_salon_culture_analysis_answers / save_salon_store_culture_analysis_answers のみ。
+        Row: {
+          id: string; analysis_version: string; salon_user_id: string | null; store_id: string | null;
+          answers: Json; base_snapshot: Json; respondent_user_id: string | null;
+        } & Timestamps;
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -1541,6 +1553,19 @@ export type Database = {
           p_hotpepper_url?: string | null;
         };
         Returns: Database["public"]["Tables"]["salon_store_profiles"]["Row"];
+      };
+      // ----- 0056（未適用・レビュー中）サロンらしさ追加分析 -----
+      can_edit_store_culture_analysis: {
+        Args: { p_store_id: string };
+        Returns: boolean;
+      };
+      save_salon_culture_analysis_answers: {
+        Args: { p_version: string; p_answers: Json; p_expected_base: Json };
+        Returns: Database["public"]["Tables"]["salon_culture_analysis_answers"]["Row"];
+      };
+      save_salon_store_culture_analysis_answers: {
+        Args: { p_store_id: string; p_version: string; p_answers: Json; p_expected_base: Json };
+        Returns: Database["public"]["Tables"]["salon_culture_analysis_answers"]["Row"];
       };
       save_salon_store_culture_profile: {
         // 0030で追加。法人・複数店舗対応Phase 3B。店舗単位「サロンらしさ」
