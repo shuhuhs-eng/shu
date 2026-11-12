@@ -60,6 +60,8 @@ async function performSignUp(
 
   const supabase = await createClient();
 
+  // signUpが例外で終わった場合（通信切断など）は結果が分からないため、予約はそのまま残す
+  // （期限で自動的に枠から外れる。未確認の要求を「消費した」とも「消費していない」とも断定しない）。
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -69,6 +71,10 @@ async function performSignUp(
       captchaToken: captcha.captchaToken,
     },
   });
+
+  // Supabase Authの応答が分かった。CAPTCHA検証に失敗した要求（偽・期限切れ・使用済みトークン）は、
+  // メール単位の枠を消費しない（release）。それ以外は枠を消費する（confirm）。IP単位の消費は戻さない。
+  await signupLimit.settle(error?.code === "captcha_failed" ? "release" : "confirm");
 
   if (error) {
     return { error: describeAuthError("signup", error) };

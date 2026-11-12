@@ -352,86 +352,355 @@ test("再診断・表示速度: マイページは独立した取得を並列化
   assert.ok(result.includes("マイページを開いています..."));
 });
 
-import { checkSignupRateLimit, signupRateLimitMessage } from "../lib/auth/signup-rate-limit";
+import { checkSignupRateLimit, signupRateLimitMessage, type SignupLimitResult } from "../lib/auth/signup-rate-limit";
 import { SIGNUP_RATE_LIMITS } from "../lib/rate-limit/config";
+import { reserveSlot, type SlotDeps } from "../lib/rate-limit/shared-rate-limiter";
+import { reserveMemorySlot } from "../lib/rate-limit/memory-rate-limiter";
 
-/** DBのcheck_rate_limit（固定ウィンドウ・1呼び出し=1カウント）と同じ動きをする検査用カウンター。 */
-function fakeLimiter() {
+/**
+ * 0055（予約ID方式）と同じ規則の検査用DB。1要求=1行、状態は pending → confirmed / released の一方向、
+ * 使用数は行の状態から数える。判定と挿入は同期的（DB側のアドバイザリロックによる直列化に相当）。
+ * ★これはモックであり、実DBの検証ではない（実DBはローカルPostgresで別に検証）。
+ */
+function fakeSlotDb(clock: { t: number }) {
+  type Row = { id: string; key: string; windowStart: number; state: "pending" | "confirmed" | "released"; expiresAt: number };
+  const rows: Row[] = [];
+  let seq = 0;
+  const failures = { settle: 0, reserve: false };
+  const log: string[] = [];
+  const rpc: NonNullable<SlotDeps["rpc"]> = async (fn, a) => {
+    if (fn === "reserve_rate_limit_slot") {
+      if (failures.reserve) return { data: null, error: { message: "function reserve_rate_limit_slot does not exist" } };
+      const winMs = (a.p_window_seconds as number) * 1000;
+      const ws = Math.floor(clock.t / winMs) * winMs;
+      const key = a.p_key_hash as string;
+      const mine = rows.filter((r) => r.key === key && r.windowStart === ws);
+      const confirmed = mine.filter((r) => r.state === "confirmed").length;
+      const pending = mine.filter((r) => r.state === "pending" && r.expiresAt > clock.t).length;
+      if (confirmed >= (a.p_confirmed_limit as number))
+        return { data: [{ allowed: false, reservation_id: null, reason: "limit", retry_after_seconds: Math.ceil((ws + winMs - clock.t) / 1000) }], error: null };
+      if (pending >= (a.p_inflight_limit as number))
+        return { data: [{ allowed: false, reservation_id: null, reason: "busy", retry_after_seconds: 5 }], error: null };
+      const id = `r${++seq}`;
+      rows.push({ id, key, windowStart: ws, state: "pending", expiresAt: clock.t + (a.p_pending_ttl_seconds as number) * 1000 });
+      return { data: [{ allowed: true, reservation_id: id, reason: "ok", retry_after_seconds: 0 }], error: null };
+    }
+    log.push(`${a.p_outcome}:${a.p_reservation_id}`);
+    if (failures.settle > 0) {
+      failures.settle--;
+      return { data: null, error: { message: "network" } };
+    }
+    const row = rows.find((r) => r.id === a.p_reservation_id);
+    if (!row || row.state !== "pending") return { data: "noop", error: null };
+    row.state = a.p_outcome === "confirm" ? "confirmed" : "released";
+    return { data: row.state, error: null };
+  };
+  const count = (key: string, state: Row["state"]) => rows.filter((r) => r.key.includes(key) && r.state === state).length;
+  return { rows, rpc, failures, log, count, keys: () => rows.map((r) => r.key) };
+}
+
+/** IP単位は既存の check_rate_limit と同じ（+1して上限超で拒否・固定ウィンドウ）。 */
+function fakeIpCounter() {
   const counts = new Map<string, number>();
   const calls: string[] = [];
-  const check = async (key: string, limit: number, windowMs: number) => {
+  const checkIp = async (key: string, limit: number, windowMs: number) => {
     calls.push(key);
     const n = (counts.get(key) ?? 0) + 1;
     counts.set(key, n);
-    return n <= limit ? { allowed: true, retryAfterSeconds: 0 } : { allowed: false, retryAfterSeconds: Math.ceil(windowMs / 1000 / 2) };
+    return { allowed: n <= limit, retryAfterSeconds: n <= limit ? 0 : Math.ceil(windowMs / 2000) };
   };
-  return { check, counts, calls };
+  return { checkIp, counts, calls };
+}
+
+function harness() {
+  const clock = { t: Date.UTC(2026, 10, 12, 1, 10, 0) };
+  const db = fakeSlotDb(clock);
+  const ip = fakeIpCounter();
+  const check = (input: { ip: string; email: string }) =>
+    checkSignupRateLimit(input, {
+      checkIp: ip.checkIp,
+      reserve: (key, limits) => reserveSlot(key, limits, { rpc: db.rpc, now: () => clock.t }),
+    });
+  return { clock, db, ip, check };
+}
+const okOf = (r: SignupLimitResult) => {
+  assert.equal(r.allowed, true);
+  return r as Extract<SignupLimitResult, { allowed: true }>;
+};
+/** performSignUp と同じ手順（制限 → 偽のAuth応答 → 結果に応じて settle）。モック検証。 */
+async function attempt(h: ReturnType<typeof harness>, ip: string, email: string, token: "valid" | "fake") {
+  const r = await h.check({ ip, email });
+  if (!r.allowed) return r.scope === "email_busy" ? "busy" : "limited";
+  await r.settle(token === "valid" ? "confirm" : "release");
+  return token === "valid" ? "ok" : "captcha_failed";
 }
 
 test("新規登録の制限: 同一IPから異なるメールで30人（美容師・サロン混在）が止まらない", async () => {
-  const f = fakeLimiter();
-  for (let i = 0; i < 30; i++) {
-    const r = await checkSignupRateLimit({ ip: "203.0.113.7", email: `person${i}@example.test` }, { check: f.check });
-    assert.equal(r.allowed, true, `${i + 1}人目`);
-  }
-  assert.equal(f.counts.get("signup:ip:203.0.113.7"), 30);
+  const h = harness();
+  for (let i = 0; i < 30; i++) assert.equal(await attempt(h, "203.0.113.7", `person${i}@example.test`, "valid"), "ok", `${i + 1}人目`);
+  assert.equal(h.ip.counts.get("signup:ip:203.0.113.7"), 30);
 });
 
-test("新規登録の制限: 同一メールの過剰試行はメール単位で止まり、同じIPの他の人の枠を消費しない", async () => {
-  const f = fakeLimiter();
-  const L = SIGNUP_RATE_LIMITS;
-  for (let i = 0; i < L.perEmail; i++) {
-    assert.equal((await checkSignupRateLimit({ ip: "198.51.100.1", email: "same@example.test" }, { check: f.check })).allowed, true);
+test("新規登録の制限: 同一メールの確認メール送信は上限で止まり、同じIPの他の人は止まらない", async () => {
+  const h = harness();
+  for (let i = 0; i < SIGNUP_RATE_LIMITS.perEmail; i++) assert.equal(await attempt(h, "198.51.100.1", "same@example.test", "valid"), "ok");
+  for (let i = 0; i < 10; i++) {
+    const r = await h.check({ ip: "198.51.100.1", email: "SAME@example.test" });
+    assert.equal(r.allowed, false);
+    if (!r.allowed) assert.equal(r.scope, "email");
   }
-  const blocked = await checkSignupRateLimit({ ip: "198.51.100.1", email: "SAME@example.test" }, { check: f.check });
-  assert.equal(blocked.allowed, false);
-  if (!blocked.allowed) assert.equal(blocked.scope, "email");
-  // 連打してもIP側のカウントは増えない（メール単位で止まった分は数えない）。
-  const ipBefore = f.counts.get("signup:ip:198.51.100.1");
-  for (let i = 0; i < 20; i++) await checkSignupRateLimit({ ip: "198.51.100.1", email: "same@example.test" }, { check: f.check });
-  assert.equal(f.counts.get("signup:ip:198.51.100.1"), ipBefore);
-  // 別の人は同じIPからそのまま登録できる。
-  assert.equal((await checkSignupRateLimit({ ip: "198.51.100.1", email: "other@example.test" }, { check: f.check })).allowed, true);
+  assert.equal(h.db.count("", "confirmed"), SIGNUP_RATE_LIMITS.perEmail);
+  assert.equal(h.db.rows.length, SIGNUP_RATE_LIMITS.perEmail); // 拒否された要求は行を作らない
+  assert.equal(await attempt(h, "198.51.100.1", "other@example.test", "valid"), "ok");
 });
 
-test("新規登録の制限: 短時間の大量試行（IP単位の安全弁）は止まる", async () => {
-  const f = fakeLimiter();
+test("新規登録の制限: IP単位の安全弁（短時間の大量要求）は維持され、IP制限で止まった要求はメール枠へ届かない", async () => {
+  const h = harness();
   let blockedAt = -1;
   for (let i = 0; i < SIGNUP_RATE_LIMITS.perIp + 5; i++) {
-    const r = await checkSignupRateLimit({ ip: "192.0.2.50", email: `bulk${i}@example.test` }, { check: f.check });
-    if (!r.allowed && blockedAt < 0) {
-      blockedAt = i + 1;
-      assert.equal(r.scope, "ip");
-      assert.ok(r.retryAfterSeconds > 0);
-    }
+    const r = await attempt(h, "192.0.2.50", `bulk${i}@example.test`, "fake");
+    if (r === "limited" && blockedAt < 0) blockedAt = i + 1;
   }
   assert.equal(blockedAt, SIGNUP_RATE_LIMITS.perIp + 1);
+  assert.equal(h.db.rows.length, SIGNUP_RATE_LIMITS.perIp); // 超過分はメール枠の行を作っていない
 });
 
 test("新規登録の制限: IPが取れない利用者同士を、厳しい共通カウンターで互いにブロックしない", async () => {
-  const f = fakeLimiter();
-  for (let i = 0; i < 40; i++) {
-    const r = await checkSignupRateLimit({ ip: i % 2 ? "unknown" : "", email: `noip${i}@example.test` }, { check: f.check });
-    assert.equal(r.allowed, true);
-  }
-  assert.ok(f.calls.includes("signup:noip"));
-  assert.ok(!f.calls.some((k) => k === "signup:ip:unknown"));
+  const h = harness();
+  for (let i = 0; i < 40; i++) assert.equal(await attempt(h, i % 2 ? "unknown" : "", `noip${i}@example.test`, "valid"), "ok");
+  assert.ok(h.ip.calls.includes("signup:noip"));
+  assert.ok(!h.ip.calls.includes("signup:ip:unknown"));
 });
 
-test("新規登録の制限: 1回の操作で各キーを1回だけ数える／案内は集中と断定せず再試行目安を示す", async () => {
-  const f = fakeLimiter();
-  await checkSignupRateLimit({ ip: "203.0.113.9", email: "once@example.test" }, { check: f.check });
-  assert.deepEqual(f.calls, ["signup:email:once@example.test", "signup:ip:203.0.113.9"]);
+test("新規登録の制限: IP→メールの順に1回ずつ。案内は集中と断定せず、再試行の目安を示す", async () => {
+  const h = harness();
+  okOf(await h.check({ ip: "203.0.113.9", email: "once@example.test" }));
+  assert.deepEqual(h.ip.calls, ["signup:ip:203.0.113.9"]);
+  assert.equal(h.db.rows.length, 1);
   const m1 = signupRateLimitMessage({ allowed: false, scope: "email", retryAfterSeconds: 1500 });
   const m2 = signupRateLimitMessage({ allowed: false, scope: "ip", retryAfterSeconds: 30 });
+  const m3 = signupRateLimitMessage({ allowed: false, scope: "email_busy", retryAfterSeconds: 5 });
   assert.match(m1, /約25分後/);
   assert.match(m2, /約1分後/);
-  assert.ok(!m1.includes("集中") && !m2.includes("集中"));
-  // Turnstile確認は制限より前（トークン無しは制限に到達しない）。美容師・サロンは同じ処理を使う。
+  assert.match(m3, /数秒後/);
+  assert.ok(![m1, m2, m3].some((m) => m.includes("集中")));
+});
+
+test("performSignUp の順序: CAPTCHA有無の確認 → 制限（予約）→ signUp → 結果で確定/返却。予約は例外時に残し期限で回収", () => {
   const src = readFileSync(join(process.cwd(), "lib/auth/actions.ts"), "utf8");
   const perform = src.slice(src.indexOf("async function performSignUp"), src.indexOf("export async function signUpAction"));
-  assert.ok(perform.indexOf("requireCaptchaToken") < perform.indexOf("checkSignupRateLimit"));
+  const i = (s: string) => perform.indexOf(s);
+  assert.ok(i("requireCaptchaToken") < i("checkSignupRateLimit"));
+  assert.ok(i("checkSignupRateLimit") < i("auth.signUp"));
+  assert.ok(i("auth.signUp") < i("signupLimit.settle"));
+  assert.match(perform, /settle\(error\?\.code === "captcha_failed" \? "release" : "confirm"\)/);
+  assert.equal((perform.match(/auth\.signUp/g) ?? []).length, 1); // 二重検証なし（signUpは1回）
   assert.ok(src.includes('performSignUp("salon"') && src.includes('performSignUp("stylist"'));
+});
+
+test("CAPTCHA失敗の要求は他人のメール枠を消費しない: 偽トークンを繰り返した後も、本人は有効なCAPTCHAで登録できる（モック）", async () => {
+  const h = harness();
+  const L = SIGNUP_RATE_LIMITS;
+  for (let i = 0; i < L.perEmail * 10; i++) assert.equal(await attempt(h, "203.0.113.66", "victim@example.test", "fake"), "captcha_failed");
+  assert.equal(h.db.count("", "confirmed"), 0);
+  assert.equal(await attempt(h, "198.51.100.20", "victim@example.test", "valid"), "ok");
+  for (let i = 1; i < L.perEmail; i++) assert.equal(await attempt(h, "198.51.100.20", "victim@example.test", "valid"), "ok");
+  assert.equal(await attempt(h, "198.51.100.20", "victim@example.test", "valid"), "limited"); // 過剰な確認メール送信は抑制
+  // 偽トークンの大量送信は、IP単位で止まる（Supabase Authへの大量要求を抑える仕組みは維持）。
+  const g = harness();
+  let limitedAt = -1;
+  for (let i = 0; i < L.perIp + 3; i++) if ((await attempt(g, "203.0.113.66", `v${i}@example.test`, "fake")) === "limited" && limitedAt < 0) limitedAt = i + 1;
+  assert.equal(limitedAt, L.perIp + 1);
+});
+
+test("同じ予約の返却を2回以上実行しても、他の要求の枠は減らない（予約ID・冪等）", async () => {
+  const h = harness();
+  const deps = { checkIp: h.ip.checkIp, limits: { ...SIGNUP_RATE_LIMITS, perEmailInflight: 2 } };
+  const mk = () =>
+    checkSignupRateLimit({ ip: "10.0.0.1", email: "dup@example.test" }, { ...deps, reserve: (k, l) => reserveSlot(k, l, { rpc: h.db.rpc, now: () => h.clock.t }) });
+  const a = okOf(await mk());
+  const b = okOf(await mk());
+  assert.equal((await mk()).allowed, false); // 検証中2件で満杯
+  await a.settle("release");
+  await a.settle("release");
+  await a.settle("release");
+  assert.equal(h.db.log.filter((x) => x.startsWith("release")).length, 1); // アプリ側は1回だけ送る
+  // DBへ同じ返却を直接再送しても何も起きない。
+  await h.db.rpc("settle_rate_limit_slot", { p_reservation_id: h.db.rows[0]!.id, p_outcome: "release" });
+  await h.db.rpc("settle_rate_limit_slot", { p_reservation_id: h.db.rows[0]!.id, p_outcome: "release" });
+  const c = okOf(await mk()); // aの枠が1つだけ空く
+  assert.equal((await mk()).allowed, false); // b と c が検証中。bの枠は減っていない
+  await b.settle("confirm");
+  await c.settle("release");
+  assert.equal(h.db.count("", "pending"), 0);
+});
+
+test("確定後の返却・返却後の確定は何も変えない／期限切れ後の遅延返却・遅延確定は自分の行にだけ効く", async () => {
+  const h = harness();
+  const reserve = (email: string) => reserveSlot(`k:${email}`, { confirmedLimit: 2, inflightLimit: 1, windowMs: 3600_000, pendingTtlMs: 60_000 }, { rpc: h.db.rpc, now: () => h.clock.t });
+  const asOk = (r: Awaited<ReturnType<typeof reserve>>) => {
+    assert.equal(r.allowed, true);
+    return r as Extract<typeof r, { allowed: true }>;
+  };
+  // 確定後の返却
+  const a = asOk(await reserve("x"));
+  await a.settle("confirm");
+  await h.db.rpc("settle_rate_limit_slot", { p_reservation_id: h.db.rows[0]!.id, p_outcome: "release" });
+  assert.equal(h.db.count("", "confirmed"), 1);
+  // 返却後の確定（別の予約）
+  const b = asOk(await reserve("x"));
+  await b.settle("release");
+  await h.db.rpc("settle_rate_limit_slot", { p_reservation_id: h.db.rows[1]!.id, p_outcome: "confirm" });
+  assert.equal(h.db.count("", "confirmed"), 1);
+  // 期限切れ: 結果を通知できなかった予約cは、期限後に枠から外れ、別の要求dが入れる。
+  const c = asOk(await reserve("x"));
+  assert.equal((await reserve("x")).allowed, false); // 検証中（busy）
+  h.clock.t += 61_000;
+  const d = asOk(await reserve("x"));
+  await c.settle("release"); // 遅延返却: cの行だけ released。dには影響しない
+  assert.equal(h.db.rows[2]!.state, "released");
+  assert.equal(h.db.rows[3]!.state, "pending");
+  assert.equal((await reserve("x")).allowed, false); // dが検証中
+  await d.settle("confirm");
+  // 遅延確定: 期限後でも、実際に通った要求の行は確定として数える（confirmed=2で上限）。
+  assert.equal(h.db.count("", "confirmed"), 2);
+  const r = await reserve("x");
+  assert.equal(r.allowed, false);
+  if (!r.allowed) assert.equal(r.reason, "limit");
+});
+
+test("回復: 返却RPCの失敗は1回再試行／再試行も失敗しても、通信切断・処理中断でも、期限で枠が自動的に戻る", async () => {
+  const h = harness();
+  // 返却が1回失敗 → 再試行で成功
+  h.db.failures.settle = 1;
+  const a = okOf(await h.check({ ip: "10.9.0.1", email: "rec@example.test" }));
+  await a.settle("release");
+  assert.equal(h.db.count("", "released"), 1);
+  // 返却が2回とも失敗 → pendingのまま。期限後に枠から外れる。
+  const errs: unknown[] = [];
+  const orig = console.error;
+  console.error = (...x: unknown[]) => void errs.push(x);
+  try {
+    h.db.failures.settle = 2;
+    const b = okOf(await h.check({ ip: "10.9.0.1", email: "rec@example.test" }));
+    await b.settle("release");
+  } finally {
+    console.error = orig;
+  }
+  assert.ok(errs.length >= 1);
+  assert.ok(!JSON.stringify(errs).includes("rec@example.test")); // メールをログに出さない
+  // 処理中断（settleを呼ばない）を、同じメールで3件重ねる → 検証中3件で満杯（一時的に拒否）。
+  okOf(await h.check({ ip: "10.9.0.2", email: "rec@example.test" }));
+  okOf(await h.check({ ip: "10.9.0.3", email: "rec@example.test" }));
+  const busy = await h.check({ ip: "10.9.0.4", email: "rec@example.test" });
+  assert.equal(busy.allowed, false);
+  if (!busy.allowed) assert.equal(busy.scope, "email_busy");
+  h.clock.t += SIGNUP_RATE_LIMITS.pendingTtlMs + 1000;
+  assert.equal(await attempt(h, "10.9.0.5", "rec@example.test", "valid"), "ok"); // 回復
+  assert.equal(h.db.count("", "confirmed"), 1); // 中断した要求は消費として数えられていない
+});
+
+test("偽トークンの並行要求と本人の正常要求が重なる: 検証中の枠が埋まる間だけ本人は一時的に拒否され、応答後に通る", async () => {
+  const h = harness();
+  const L = SIGNUP_RATE_LIMITS;
+  // 偽トークン L.perEmailInflight 件が、Supabaseの応答待ち（未settle）で同時に進行中。
+  const fakes = [] as Array<Extract<SignupLimitResult, { allowed: true }>>;
+  for (let i = 0; i < L.perEmailInflight; i++) fakes.push(okOf(await h.check({ ip: `203.0.113.${i}`, email: "victim@example.test" })));
+  const during = await h.check({ ip: "198.51.100.20", email: "victim@example.test" });
+  assert.equal(during.allowed, false); // ★一時的な拒否（残る制約）
+  if (!during.allowed) {
+    assert.equal(during.scope, "email_busy");
+    assert.ok(during.retryAfterSeconds <= 5);
+  }
+  assert.equal(h.db.count("", "confirmed"), 0); // 確定枠は消費されていない
+  for (const f of fakes) await f.settle("release"); // captcha_failed の応答
+  assert.equal(await attempt(h, "198.51.100.20", "victim@example.test", "valid"), "ok");
+  assert.equal(h.db.count("", "confirmed"), 1);
+});
+
+test("同時要求（Promise.all）: 検証中の上限で一時的に拒否されるが、確定は上限を大きく超えず、取りこぼし・二重計上がない", async () => {
+  const h = harness();
+  const L = SIGNUP_RATE_LIMITS;
+  const results = await Promise.all(Array.from({ length: 30 }, (_, i) => attempt(h, `10.0.0.${i}`, "burst@example.test", "valid")));
+  const ok = results.filter((r) => r === "ok").length;
+  assert.ok(ok >= 1 && ok <= L.perEmail + L.perEmailInflight - 1, `ok=${ok}`);
+  assert.equal(results.length, ok + results.filter((r) => r === "busy" || r === "limited").length);
+  assert.equal(h.db.count("", "confirmed"), ok);
+  assert.equal(h.db.count("", "pending"), 0);
+  assert.equal(h.db.rows.length, ok); // 拒否された要求は行を作らない
+  // 「busy」だった人は数秒後に再試行できる。繰り返しても確定は上限で止まる。
+  for (let i = 0; i < 20; i++) await attempt(h, `10.1.0.${i}`, "burst@example.test", "valid");
+  assert.equal(h.db.count("", "confirmed"), L.perEmail);
+  assert.equal(await attempt(h, "10.1.9.9", "burst@example.test", "valid"), "limited");
+});
+
+test("ウィンドウ境界: 前のウィンドウで予約した要求を後で確定しても、新しいウィンドウの枠は消費しない", async () => {
+  const h = harness();
+  const L = SIGNUP_RATE_LIMITS;
+  h.clock.t = Math.ceil(h.clock.t / L.windowMs) * L.windowMs - 5_000; // ウィンドウ終了の5秒前
+  const a = okOf(await h.check({ ip: "10.2.0.1", email: "edge@example.test" }));
+  h.clock.t += 10_000; // 次のウィンドウへ
+  await a.settle("confirm");
+  assert.equal(h.db.rows[0]!.state, "confirmed");
+  for (let i = 0; i < L.perEmail; i++) assert.equal(await attempt(h, `10.2.1.${i}`, "edge@example.test", "valid"), "ok"); // 新ウィンドウは満枠で始まる
+  assert.equal(await attempt(h, "10.2.1.99", "edge@example.test", "valid"), "limited");
+  assert.equal(new Set(h.db.rows.map((r) => r.windowStart)).size, 2);
+});
+
+test("DB障害・0055未適用時: メモリの枠へ縮退し、確定・返却・期限・ウィンドウが同じ規則で動く", async () => {
+  const h = harness();
+  h.db.failures.reserve = true; // 0055未適用（関数が無い）/ DB障害
+  const errs: unknown[] = [];
+  const orig = console.error;
+  console.error = (...x: unknown[]) => void errs.push(x);
+  try {
+    const L = SIGNUP_RATE_LIMITS;
+    // 偽トークンの繰り返しでは枠を消費せず、本人は登録できる。
+    for (let i = 0; i < 20; i++) assert.equal(await attempt(h, "10.3.0.1", "mem@example.test", "fake"), "captcha_failed");
+    assert.equal(await attempt(h, "10.3.0.2", "mem@example.test", "valid"), "ok");
+    for (let i = 1; i < L.perEmail; i++) assert.equal(await attempt(h, "10.3.0.2", "mem@example.test", "valid"), "ok");
+    assert.equal(await attempt(h, "10.3.0.2", "mem@example.test", "valid"), "limited");
+    // 二重返却・確定後の返却は何も変えない（メモリ実装）。
+    const lim = { confirmedLimit: 2, inflightLimit: 1, windowMs: 3600_000, pendingTtlMs: 60_000 };
+    const t0 = Date.UTC(2026, 10, 12, 0, 0, 0);
+    const a = reserveMemorySlot("m:1", lim, t0);
+    assert.equal(a.allowed, true);
+    if (a.allowed) {
+      assert.equal(a.settle("confirm"), true);
+      assert.equal(a.settle("release"), false);
+      assert.equal(a.settle("confirm"), false);
+    }
+    const b = reserveMemorySlot("m:1", lim, t0 + 1);
+    assert.equal(b.allowed, true);
+    assert.equal(reserveMemorySlot("m:1", lim, t0 + 2).allowed, false); // busy
+    assert.equal(reserveMemorySlot("m:1", lim, t0 + 61_000).allowed, true); // bの期限切れ
+    if (b.allowed) assert.equal(b.settle("release"), true); // 遅延返却は自分の件だけ
+    // ウィンドウ境界: 次のウィンドウでは確定数が0から始まる。
+    const next = t0 + 3600_000 + 1;
+    assert.equal(reserveMemorySlot("m:1", lim, next).allowed, true);
+  } finally {
+    console.error = orig;
+  }
+  assert.ok(errs.length >= 1);
+});
+
+test("reserveSlot: キーはSHA-256で送り、予約IDは推測不能な値をDBが返す／settleは予約IDと結果だけを送る", async () => {
+  const calls: Array<[string, Record<string, unknown>]> = [];
+  const rpc: NonNullable<SlotDeps["rpc"]> = async (fn, a) => {
+    calls.push([fn, a]);
+    return fn === "reserve_rate_limit_slot"
+      ? { data: [{ allowed: true, reservation_id: "11111111-2222-3333-4444-555555555555", reason: "ok", retry_after_seconds: 0 }], error: null }
+      : { data: "confirmed", error: null };
+  };
+  const r = await reserveSlot("signup:email2:a@example.test", { confirmedLimit: 5, inflightLimit: 3, windowMs: 3600_000, pendingTtlMs: 60_000 }, { rpc });
+  assert.equal(r.allowed, true);
+  if (r.allowed) await r.settle("confirm");
+  assert.deepEqual(calls.map((c) => c[0]), ["reserve_rate_limit_slot", "settle_rate_limit_slot"]);
+  assert.match(String(calls[0]![1].p_key_hash), /^[0-9a-f]{64}$/);
+  assert.ok(!JSON.stringify(calls).includes("a@example.test"));
+  assert.deepEqual(calls[1]![1], { p_reservation_id: "11111111-2222-3333-4444-555555555555", p_outcome: "confirm" });
+  assert.equal(calls[0]![1].p_inflight_limit, 3);
+  assert.equal(calls[0]![1].p_pending_ttl_seconds, 60);
 });
 
 test("新規登録の成功案内: 別の種類（美容師/サロン）には別メールが必要と一般的に案内し、他人のロールは開示しない", () => {
