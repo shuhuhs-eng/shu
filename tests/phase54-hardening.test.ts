@@ -785,7 +785,7 @@ test("AI再生成: 生成失敗・一部保存失敗は『失敗』として返�
   const b = await mk("u2", "partial");
   assert.equal(a.status, "failed");
   assert.equal(b.status, "failed");
-  assert.match((a as { error: string }).error, /失敗.*原因コード: api_http_401/);
+  assert.match((a as { error: string }).error, /設定に問題.*原因コード: api_http_401/); // 401は恒久的な設定問題として案内
   assert.match((b as { error: string }).error, /一部.*原因コード: save_create:not_salon/);
   assert.equal((await mk("u1", "generation_failed")).status, "busy"); // 2分以内の再実行は抑止
 });
