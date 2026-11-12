@@ -38,7 +38,7 @@ export default async function SalonMyPage() {
     redirect("/onboarding/salon");
   }
 
-  const { data: latest } = await supabase
+  const { data: latest, error: latestError } = await supabase
     .from("diagnosis_results")
     .select("*")
     .eq("user_id", user.id)
@@ -46,6 +46,9 @@ export default async function SalonMyPage() {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // 取得エラーを「結果なし」と表示しない（読み込み失敗として別に表示する）。
+  if (latestError) logError("salonMypage.latestDiagnosis", latestError);
 
   // ★サロン専用AI（salon_culture_ai_outputs、0012_salon_culture_ai_outputs.sql）
   // を取得する。diagnosis_ai_outputs（美容師向けAI・旧サロン向け誤生成AI）
@@ -436,14 +439,24 @@ export default async function SalonMyPage() {
             propを追加しただけで、美容師マイページ側はこのpropを指定
             していないため一切影響を受けない）。サロン専用のAI解説は
             上記のSalonAiNarrativeで別途表示する。 */}
-        <DiagnosisSummary latest={latest} aiByType={{}} showTypeHeader={false} showAiSection={false} />
+        <DiagnosisSummary
+          latest={latest}
+          aiByType={{}}
+          showTypeHeader={false}
+          showAiSection={false}
+          loadFailed={!!latestError}
+        />
       </div>
 
+      {/* ★「サロン診断（6つの才能軸）」ブロックの操作は、14問診断（/diagnosis/salon）へつなぐ。
+          以前はここが「サロンらしさ」の回答（/salon/culture?edit=1）へつながっており、
+          回答を完了しても diagnosis_results(mode=salon) が作られず、「まだ診断結果がありません」のままだった。
+          サロンらしさの回答・更新は、上の「サロンらしさ」ブロックの導線で行う。 */}
       <Link
-        href="/salon/culture?edit=1"
+        href="/diagnosis/salon"
         className="mt-4 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-4 text-[15px] font-semibold text-ink"
       >
-        {latest ? "診断を受け直す" : "診断を受ける"}
+        {latest ? "サロン診断を受け直す" : "サロン診断を受ける"}
       </Link>
     </main>
   );

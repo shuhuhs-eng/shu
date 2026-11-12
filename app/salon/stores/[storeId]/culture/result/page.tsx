@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/security/log";
+import { CultureResultLoadError } from "@/components/salon-culture/culture-result-load-error";
 import { StoreCultureResult } from "@/components/salon-culture/store-culture-result";
 import { hasAllTwelveAxes } from "@/lib/salon-culture/salon-culture-types";
 
@@ -16,11 +18,18 @@ export default async function SalonStoreCultureResultPage({ params }: Props) {
   const { storeId } = await params;
   const supabase = await createClient();
 
-  const { data: cultureProfile } = await supabase
+  const { data: cultureProfile, error: cultureError } = await supabase
     .from("salon_store_culture_profiles")
     .select("*")
     .eq("store_id", storeId)
     .maybeSingle();
+
+  if (cultureError) {
+    logError("salonStoreCultureResult", cultureError);
+    return (
+      <CultureResultLoadError retryHref={`/salon/stores/${storeId}/culture/result`} backHref={`/salon/stores/${storeId}`} />
+    );
+  }
 
   if (!cultureProfile || cultureProfile.status !== "completed") {
     redirect(`/salon/stores/${storeId}/culture`);

@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/security/log";
+import { CultureResultLoadError } from "@/components/salon-culture/culture-result-load-error";
 import { CultureResult } from "@/components/salon-culture/culture-result";
 import { hasAllTwelveAxes } from "@/lib/salon-culture/salon-culture-types";
 
@@ -20,11 +22,17 @@ export default async function SalonCultureResultPage() {
     redirect("/stylist/mypage");
   }
 
-  const { data: cultureProfile } = await supabase
+  const { data: cultureProfile, error: cultureError } = await supabase
     .from("salon_culture_profiles")
     .select("*")
     .eq("salon_user_id", user.id)
     .maybeSingle();
+
+  // 取得に失敗した場合は、未回答として入力画面へ飛ばさず、読み込み失敗を表示する（保存済みの回答を隠さない）。
+  if (cultureError) {
+    logError("salonCultureResult", cultureError);
+    return <CultureResultLoadError retryHref="/salon/culture/result" backHref="/salon/mypage" />;
+  }
 
   // まだ回答が完了していない場合は、結果ではなく入力画面へ誘導する。
   if (!cultureProfile || cultureProfile.status !== "completed") {

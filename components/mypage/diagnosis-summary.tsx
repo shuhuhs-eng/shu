@@ -25,6 +25,8 @@ type Props = {
    * 非表示にする。
    */
   showAiSection?: boolean;
+  /** 診断結果の取得に失敗した場合 true。「まだ診断結果がありません」とは区別して表示する（既定false＝従来どおり）。 */
+  loadFailed?: boolean;
 };
 
 /**
@@ -33,7 +35,14 @@ type Props = {
  * modeに関わらず同じ見た目で表示する（app/mypage/page.tsxから
  * stylist/salon両方のマイページで共用する）。
  */
-export function DiagnosisSummary({ latest, aiByType, showTypeHeader = true, showAiSection = true }: Props) {
+export function DiagnosisSummary({ latest, aiByType, showTypeHeader = true, showAiSection = true, loadFailed = false }: Props) {
+  if (!latest && loadFailed) {
+    return (
+      <div className="rounded-2xl border border-line bg-surface p-6 text-center">
+        <p className="text-[14px] text-charcoal">診断結果を読み込めませんでした。画面を更新してもう一度お試しください。</p>
+      </div>
+    );
+  }
   if (!latest) {
     return (
       <div className="rounded-2xl border border-line bg-surface p-6 text-center">

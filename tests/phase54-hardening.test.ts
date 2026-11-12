@@ -930,3 +930,44 @@ test("AI生成の設定: サロン・美容師とも同一のエンドポイン�
   }
   assert.equal(salon.match(/const MODEL = "([^"]+)"/)?.[1], stylist.match(/const MODEL = "([^"]+)"/)?.[1]);
 });
+
+test("サロンマイページ: 14問診断ブロックの操作は /diagnosis/salon へ（サロンらしさ入力へ飛ばさない）／取得失敗は『結果なし』と区別する", () => {
+  const page = readFileSync(join(process.cwd(), "app/salon/mypage/page.tsx"), "utf8");
+  const tail = page.slice(page.indexOf("<DiagnosisSummary"));
+  assert.ok(tail.includes('href="/diagnosis/salon"'));
+  assert.ok(!tail.includes('href="/salon/culture?edit=1"')); // 診断ブロック末尾のボタンが別機能へ飛ばない
+  assert.match(page, /latestError/);
+  assert.match(page, /loadFailed=\{!!latestError\}/);
+  // サロンらしさの入力・更新は「サロンらしさ」ブロック側の導線に残る。
+  assert.ok(page.includes('href="/salon/culture"'));
+  const summary = readFileSync(join(process.cwd(), "components/mypage/diagnosis-summary.tsx"), "utf8");
+  assert.match(summary, /loadFailed = false/); // 既定false＝美容師マイページの表示は変わらない
+  assert.match(summary, /読み込めませんでした/);
+});
+
+test("サロンらしさの保存RPCは diagnosis_results を書かない（回答完了だけでは14問診断の結果は作られない）", () => {
+  for (const f of ["0005_salon_culture.sql", "0009_salon_culture_12_axes.sql", "0030_store_profile_culture_save_rpcs.sql"]) {
+    const sql = readFileSync(join(process.cwd(), "supabase/migrations", f), "utf8");
+    const body = sql.slice(sql.search(/function public\.save_salon_(store_)?culture_profile/));
+    assert.ok(!/diagnosis_results/.test(body), f);
+  }
+});
+
+test("サロン診断結果画面: ログイン中の本人にはゲスト向けの新規登録案内を出さず、サロンマイページへ案内する", () => {
+  const src = readFileSync(join(process.cwd(), "app/diagnosis/result/page.tsx"), "utf8");
+  const salon = src.slice(src.indexOf("サロン診断結果"), src.indexOf("ここから美容師診断"));
+  assert.match(salon, /isMember \?/);
+  assert.ok(salon.includes('mypageHref="/salon/mypage"'));
+});
+
+test("サロンらしさの結果画面（本人・店舗）: 取得エラーを未回答として入力画面へ飛ばさない。店舗は storeId で取得", () => {
+  const legacy = readFileSync(join(process.cwd(), "app/salon/culture/result/page.tsx"), "utf8");
+  const store = readFileSync(join(process.cwd(), "app/salon/stores/[storeId]/culture/result/page.tsx"), "utf8");
+  for (const src of [legacy, store]) {
+    assert.match(src, /cultureError/);
+    assert.ok(src.indexOf("if (cultureError)") < src.indexOf("!cultureProfile ||")); // 取得エラーの分岐が、未回答の分岐より先
+    assert.ok(src.includes("CultureResultLoadError"));
+  }
+  assert.ok(legacy.includes('.eq("salon_user_id", user.id)'));
+  assert.ok(store.includes('.eq("store_id", storeId)'));
+});

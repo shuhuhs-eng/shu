@@ -185,26 +185,30 @@ export default function DiagnosisResultPage() {
           </section>
         )}
 
-        <div className="mt-8 rounded-2xl border border-line bg-surface2 p-6 text-center">
-          <p className="text-[13.5px] leading-relaxed text-charcoal">
-            この結果を保存し、美容師とのマッチング精度を高めるには、サロンとしての会員登録が必要です。
-          </p>
-          <Link
-            href={signupHref}
-            className="mt-4 flex w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface"
-          >
-            結果を保存する（サロン新規登録）
-          </Link>
-          <p className="mt-3 text-[13px] text-sub">
-            すでにアカウントをお持ちの方は{" "}
-            <Link href="/salon/login" className="underline">
-              ログイン
+        {isMember ? (
+          <MemberResultNotice saved={saved} mypageHref="/salon/mypage" retakeHref={retakeHref} />
+        ) : (
+          <div className="mt-8 rounded-2xl border border-line bg-surface2 p-6 text-center">
+            <p className="text-[13.5px] leading-relaxed text-charcoal">
+              この結果を保存し、美容師とのマッチング精度を高めるには、サロンとしての会員登録が必要です。
+            </p>
+            <Link
+              href={signupHref}
+              className="mt-4 flex w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface"
+            >
+              結果を保存する（サロン新規登録）
             </Link>
-          </p>
-          <Link href={retakeHref} className="mt-3 inline-block text-[13px] text-sub underline">
-            診断を受け直す
-          </Link>
-        </div>
+            <p className="mt-3 text-[13px] text-sub">
+              すでにアカウントをお持ちの方は{" "}
+              <Link href="/salon/login" className="underline">
+                ログイン
+              </Link>
+            </p>
+            <Link href={retakeHref} className="mt-3 inline-block text-[13px] text-sub underline">
+              診断を受け直す
+            </Link>
+          </div>
+        )}
       </main>
     );
   }
