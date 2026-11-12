@@ -91,6 +91,14 @@ export default async function SalonMyPage() {
     .eq("user_id", user.id)
     .maybeSingle();
 
+  // 「美容師からの見え方を確認」の対象店舗。既存RLS（is_store_accessible）で見える店舗だけが返る。
+  // 取得失敗は「店舗なし」とは別に扱う。
+  const { data: previewStores, error: previewStoresError } = await supabase
+    .from("salon_stores")
+    .select("id, store_name")
+    .order("store_name", { ascending: true });
+  if (previewStoresError) logError("salonMypage.previewStores", previewStoresError);
+
   let employeeSizeLabel: string | null = null;
   if (salon?.employee_size_code) {
     const { data: sizeRow } = await supabase
@@ -160,6 +168,28 @@ export default async function SalonMyPage() {
           <Link href="/salon/profile" className="text-[13px] font-semibold underline shrink-0">
             サロンプロフィールを編集
           </Link>
+        </div>
+
+        {/* 美容師からの見え方（プレビュー）への入口。店舗ごとに別のページで、別店舗の内容は混ぜない。 */}
+        <div className="mt-4 border-t border-line pt-4">
+          {previewStoresError ? (
+            <p className="text-[12.5px] leading-relaxed text-sub">
+              店舗情報を読み込めませんでした。画面を更新してもう一度お試しください。
+            </p>
+          ) : (previewStores ?? []).length === 0 ? null : (
+            <div className="space-y-2">
+              {(previewStores ?? []).map((st) => (
+                <Link
+                  key={st.id}
+                  href={`/salon/stores/${st.id}/preview`}
+                  className="flex w-full items-center justify-center rounded-full border border-line bg-surface2 px-5 py-3 text-[13.5px] font-semibold text-ink"
+                >
+                  美容師からの見え方を確認
+                  {(previewStores ?? []).length > 1 && <span className="ml-1 font-normal text-sub">（{st.store_name}）</span>}
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
