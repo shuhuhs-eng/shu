@@ -893,3 +893,40 @@ test("サロンらしさ結果画面: 古いCOMING SOON枠を廃止し、既存�
   assert.ok(existsSync(join(process.cwd(), "app/salon/stylists/page.tsx")));
   assert.ok(existsSync(join(process.cwd(), "app/salon/stores/[storeId]/stylists/page.tsx")));
 });
+
+test("AI再生成: 401/403/400/404・キー未設定は「時間をおいても解消しない」案内、429・5xx・タイムアウトは再試行の案内", async () => {
+  const run = async (reason: string) =>
+    runSalonAiRetry({
+      completed: true,
+      existingCurrentTypes: [],
+      limiter: fakeLimiter(),
+      userId: `u-${reason}`,
+      runJob: async () => ({ status: "generation_failed" as const, reason }),
+    });
+  for (const reason of ["api_http_401", "api_http_403", "api_http_400", "api_http_404", "api_key_missing"]) {
+    const r = await run(reason);
+    assert.equal(r.status, "failed");
+    const e = (r as { error: string }).error;
+    assert.match(e, /設定に問題/);
+    assert.match(e, /解消しない/);
+    assert.ok(e.includes(`原因コード: ${reason}`));
+  }
+  for (const reason of ["api_http_429", "api_http_500", "api_http_529", "api_timeout", "api_network", "bad_format"]) {
+    const e = ((await run(reason)) as { error: string }).error;
+    assert.match(e, /時間をおいて、もう一度/);
+    assert.ok(!e.includes("設定に問題"));
+  }
+});
+
+test("AI生成の設定: サロン・美容師とも同一のエンドポイント・環境変数・認証ヘッダー（x-api-key + anthropic-version）", () => {
+  const salon = readFileSync(join(process.cwd(), "lib/ai/generate-salon-culture-narrative.ts"), "utf8");
+  const stylist = readFileSync(join(process.cwd(), "lib/ai/generate-diagnosis-narrative.ts"), "utf8");
+  for (const src of [salon, stylist]) {
+    assert.ok(src.includes('process.env.ANTHROPIC_API_KEY'));
+    assert.ok(src.includes('"https://api.anthropic.com/v1/messages"'));
+    assert.ok(src.includes('"x-api-key": apiKey'));
+    assert.ok(src.includes('"anthropic-version": "2023-06-01"'));
+    assert.ok(!/Authorization/.test(src)); // Bearerではなく x-api-key を使う
+  }
+  assert.equal(salon.match(/const MODEL = "([^"]+)"/)?.[1], stylist.match(/const MODEL = "([^"]+)"/)?.[1]);
+});

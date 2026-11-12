@@ -21,6 +21,16 @@ export type SalonAiRetryInput = {
   runJob: () => Promise<SalonAiJobResult>;
 };
 
+/**
+ * 時間をおいても解消しない失敗（設定・認証・リクエストの問題）。401/403は認証、400/404はリクエスト・モデルの問題。
+ * 429・5xx・タイムアウト・通信失敗・形式不正は、時間をおいた再試行で解消し得る。
+ */
+export function isPersistentAiFailure(reason: string): boolean {
+  if (reason === "api_key_missing") return true;
+  const m = /^api_http_(\d{3})$/.exec(reason);
+  return !!m && [400, 401, 403, 404].includes(Number(m[1]));
+}
+
 export const SALON_AI_RETRY_DEDUPE_MS = 2 * 60 * 1000;
 export const SALON_AI_RETRY_HOURLY_LIMIT = 5;
 
@@ -50,6 +60,12 @@ export async function runSalonAiRetry(input: SalonAiRetryInput): Promise<SalonAi
   if (result.status === "ok") return { status: "generated" };
   // 原因コード（固定の短い値のみ。キー・本文・個人情報は含まない）を添える。失敗を隠さず、原因の切り分けに使う。
   const code = `（原因コード: ${result.reason}）`;
+  if (result.status === "generation_failed" && isPersistentAiFailure(result.reason)) {
+    return {
+      status: "failed",
+      error: `AI紹介文の作成機能の設定に問題があるため、現在は作成できません。時間をおいても解消しない場合があります。運営へお問い合わせください。${code}`,
+    };
+  }
   return {
     status: "failed",
     error:
