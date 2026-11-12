@@ -337,24 +337,15 @@ export default async function SalonMyPage() {
       </section>
 
       {/* 「サロンらしさ」ブロック（1つに整理）。
-          ・見出し「サロンらしさ」＋5軸レーダー＋回答/更新ボタン（CultureRadarSection）
           ・サロンタイプ（既存の12軸から表示時に算出。タイプが出せる場合のみ）
+          ・見出し「サロンらしさ」＋5軸レーダー＋回答/更新ボタン（CultureRadarSection）
           ・AI紹介文（SalonAiNarrative）
           旧「サロン診断（6つの才能軸）」（14問診断・/diagnosis/salon）の表示と受診ボタンは、
           数値が能力の点数に見えるため外した（14問の保存データ・計算・DBは残している）。
           回答・更新ボタンは、表示している対象と同じ「サロンらしさ」（/salon/culture）へつなぐ。
           表示は salon_culture_profiles（本人の行）だけに依存し、店舗単位の結果とは混ぜない。 */}
-      <div className="mt-6">
-        <CultureRadarSection
-          status={cultureProfile?.status ?? null}
-          axes={cultureProfile?.culture_axes}
-          loadFailed={!!cultureError}
-          answerPath="/salon/culture"
-        />
-      </div>
-
       {salonTypeClassification && (
-        <section className="mt-4 rounded-2xl border border-line bg-surface p-6 text-center">
+        <section className="mt-6 rounded-2xl border border-line bg-surface p-6 text-center">
           <p className="eyebrow mb-2">あなたのサロンタイプ</p>
           <div className="mx-auto h-48 w-full max-w-[240px] overflow-hidden rounded-[30px]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -387,6 +378,15 @@ export default async function SalonMyPage() {
           </Link>
         </section>
       )}
+
+      <div className="mt-4">
+        <CultureRadarSection
+          status={cultureProfile?.status ?? null}
+          axes={cultureProfile?.culture_axes}
+          loadFailed={!!cultureError}
+          answerPath="/salon/culture"
+        />
+      </div>
 
       {/* サロン専用AI解説。表示は salon_culture_profiles（回答状態）と
           salon_culture_ai_outputs（AI紹介文）だけに依存する（0012）。

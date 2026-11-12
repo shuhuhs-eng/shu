@@ -148,3 +148,11 @@ test("美容師診断・14問の計算/保存は変更されていない（フ�
   const q = readFileSync("lib/diagnosis/questions.ts", "utf8");
   assert.match(q, /export const QS/);
 });
+
+test("サロンマイページの表示順: サロンタイプ → サロンらしさ5軸 → AI紹介文", () => {
+  const src = readFileSync("app/salon/mypage/page.tsx", "utf8");
+  const type = src.indexOf("{salonTypeClassification && (");
+  const radar = src.indexOf("<CultureRadarSection");
+  const ai = src.indexOf("<SalonAiNarrative");
+  assert.ok(type > 0 && type < radar && radar < ai);
+});
