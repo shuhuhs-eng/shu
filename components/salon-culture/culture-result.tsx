@@ -6,6 +6,7 @@ import {
   deriveTopCharacteristics,
   SALON_TYPE_CONTENT,
 } from "@/lib/salon-culture/salon-culture-types";
+import { CultureRadarSection } from "@/components/salon-culture/culture-radar";
 import type { Database } from "@/types/database";
 
 type Props = {
@@ -98,6 +99,9 @@ export function CultureResult({ profile }: Props) {
           </div>
         </section>
       )}
+
+      {/* 5軸バランス（表示専用）。この画面の対象（本人／店舗）と同じ行の culture_axes だけを使う。 */}
+      <CultureRadarSection status={profile.status} axes={profile.culture_axes} answerPath={"/salon/culture"} />
 
       {/* 美容師との相性案内。相性は候補の美容師ごとに計算され、美容師の一覧（既存の「美容師を探す」）で確認できる。
           この画面は自分のサロンらしさの結果なので、計算はここでは行わない。 */}

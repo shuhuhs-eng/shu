@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link, { useLinkStatus } from "next/link";
-import { fullType, type TypeId, type ComputedDiagnosis } from "@/lib/diagnosis";
+import type { ComputedDiagnosis } from "@/lib/diagnosis";
 import { calculateCoreType } from "@/lib/diagnosis/core-types";
 import { CORE_TYPE_CONTENT } from "@/lib/diagnosis/core-type-content";
-import { TraitScoreBars } from "@/components/diagnosis/trait-score-bars";
 import { DIAGNOSIS_RESULT_STORAGE_KEY, DIAGNOSIS_SAVED_STORAGE_KEY } from "@/lib/diagnosis-handoff/constants";
 import { createClient } from "@/lib/supabase/client";
 
@@ -153,12 +152,13 @@ export default function DiagnosisResultPage() {
 
   const result = state;
   const isSalon = result.mode === "salon";
-  const retakeHref = isSalon ? "/diagnosis/salon" : "/stylist/diagnosis";
+  const retakeHref = "/stylist/diagnosis";
   const signupHref = isSalon ? "/signup/salon" : "/signup";
 
-  // ★サロン診断は今回の対象外。既存の表示をそのまま維持する（変更していない）。
+  // ★サロン診断（mode==="salon"）: 14問の6軸スコア・美容師向け12タイプ名・説明は表示しない。
+  // （数値が能力の点数に見えるため、また美容師向けの名称がサロンに合わないため。回答・保存・計算は変更していない。）
+  // サロンの方針・環境は、既存の「サロンらしさ」診断（/salon/culture）の5軸で確認する。
   if (isSalon) {
-    const type = fullType(result.typeId as TypeId);
     return (
       <main className="mx-auto max-w-[520px] px-5 py-12">
         <div className="mb-7 flex items-center gap-2.5">
@@ -166,37 +166,38 @@ export default function DiagnosisResultPage() {
           <hr className="h-px flex-1 border-0 bg-line" />
         </div>
 
-        <p className="eyebrow mb-2">サロン診断結果</p>
-        <h1 className="font-serif text-2xl font-bold text-ink">{result.typeName}</h1>
-        {type && <p className="mt-2 text-[14px] leading-relaxed text-charcoal">{type.line}</p>}
-
-        <section className="mt-7 rounded-2xl border border-line bg-surface p-6">
-          <p className="eyebrow mb-3">6才能スコア</p>
-          <TraitScoreBars scores={result.scores} />
-        </section>
-
-        {result.marketValueScore != null && (
-          <section className="mt-6 rounded-2xl border border-line bg-surface p-6">
-            <p className="eyebrow mb-1">市場価値（参考値）</p>
-            <p className="font-data text-2xl font-bold text-ink">{result.marketValueScore}</p>
-            {result.salaryBand && (
-              <p className="mt-1 text-[13px] text-sub">想定年収帯: {result.salaryBand}</p>
-            )}
-          </section>
-        )}
+        <p className="eyebrow mb-2">サロン診断</p>
+        <h1 className="font-serif text-2xl font-bold text-ink">サロンの方針・環境は「サロンらしさ」で確認できます</h1>
+        <p className="mt-3 text-[14px] leading-relaxed text-charcoal">
+          「サロンらしさ」に回答すると、育て方・新しい挑戦・発信・チーム・働き方の5つについて、サロンの方針・環境が5段階のバランスで分かります。優劣を示すものではありません。
+        </p>
 
         {isMember ? (
-          <MemberResultNotice saved={saved} mypageHref="/salon/mypage" retakeHref={retakeHref} />
+          <div className="mt-8 rounded-2xl border border-line bg-surface2 p-6 text-center">
+            <p className="text-[13.5px] leading-relaxed text-charcoal">
+              {saved ? "今回の診断の回答をあなたのアカウントに保存しました。" : "ログイン中です。"}
+            </p>
+            <Link
+              href="/salon/mypage"
+              prefetch={false}
+              className="mt-4 flex w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface"
+            >
+              マイページで「サロンらしさ」を見る
+            </Link>
+            <Link href="/salon/culture" className="mt-3 inline-block text-[13px] text-sub underline">
+              サロンらしさを回答する・更新する
+            </Link>
+          </div>
         ) : (
           <div className="mt-8 rounded-2xl border border-line bg-surface2 p-6 text-center">
             <p className="text-[13.5px] leading-relaxed text-charcoal">
-              この結果を保存し、美容師とのマッチング精度を高めるには、サロンとしての会員登録が必要です。
+              サロンとして会員登録すると、「サロンらしさ」に回答して、美容師とのマッチングに活用できます。
             </p>
             <Link
               href={signupHref}
               className="mt-4 flex w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface"
             >
-              結果を保存する（サロン新規登録）
+              サロン新規登録
             </Link>
             <p className="mt-3 text-[13px] text-sub">
               すでにアカウントをお持ちの方は{" "}
@@ -204,9 +205,6 @@ export default function DiagnosisResultPage() {
                 ログイン
               </Link>
             </p>
-            <Link href={retakeHref} className="mt-3 inline-block text-[13px] text-sub underline">
-              診断を受け直す
-            </Link>
           </div>
         )}
       </main>

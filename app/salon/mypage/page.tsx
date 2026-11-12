@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
-import { DiagnosisSummary } from "@/components/mypage/diagnosis-summary";
+import { CultureRadarSection } from "@/components/salon-culture/culture-radar";
 import { SalonAiNarrative } from "@/components/salon-culture/salon-ai-narrative";
 import { deriveSalonTypes, SALON_TYPE_CONTENT } from "@/lib/salon-culture/salon-culture-types";
 import type { AiOutputType, Database } from "@/types/database";
@@ -38,28 +38,17 @@ export default async function SalonMyPage() {
     redirect("/onboarding/salon");
   }
 
-  const { data: latest, error: latestError } = await supabase
-    .from("diagnosis_results")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("mode", "salon")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  // 取得エラーを「結果なし」と表示しない（読み込み失敗として別に表示する）。
-  if (latestError) logError("salonMypage.latestDiagnosis", latestError);
-
   // ★サロン専用AI（salon_culture_ai_outputs、0012_salon_culture_ai_outputs.sql）
   // を取得する。diagnosis_ai_outputs（美容師向けAI・旧サロン向け誤生成AI）
-  // からは一切探さない。旧14問診断（上記latest）の受診有無には一切
-  // 依存しない：salon_culture_profilesが存在しさえすれば取得できる
-  // （14問診断が未受診でlatestがnullでも、このブロックは正常に動作する）。
-  const { data: cultureProfile } = await supabase
+  // からは一切探さない。このページは14問診断（diagnosis_results）を読まない
+  // （サロンらしさ salon_culture_profiles だけに依存する）。
+  const { data: cultureProfile, error: cultureError } = await supabase
     .from("salon_culture_profiles")
     .select("*")
     .eq("salon_user_id", user.id)
     .maybeSingle();
+  // 取得エラーを「未回答」と表示しない（読み込み失敗として別に表示する）。
+  if (cultureError) logError("salonMypage.cultureProfile", cultureError);
 
   const salonAiByType: Partial<Record<AiOutputType, unknown>> = {};
   let salonAiLoadFailed = false;
@@ -347,17 +336,25 @@ export default async function SalonMyPage() {
         )}
       </section>
 
-      {/* ★導線混同の修正: 「サロンらしさ」と「14問サロン診断」は別機能
-          （サロンらしさ=12軸・/salon/culture、14問診断=6才能軸・
-          /diagnosis/salon）。以前は見出しが無く、この2ブロックが視覚的に
-          地続きになっていたため、「サロンらしさを見る」の直後にある
-          14問診断の「診断を受け直す」ボタンを、サロンらしさの続きだと
-          誤認しやすい構造だった。hrefは元々どちらも正しいURLを指しており
-          変更していない（誤りはリンク先ではなく見出しの欠如）。明確な
-          見出しを追加し、区別できるようにする。 */}
-      <p className="eyebrow mb-2 mt-6">サロンらしさ</p>
-      {salonTypeClassification ? (
-        <section className="rounded-2xl border border-line bg-surface p-6 text-center">
+      {/* 「サロンらしさ」ブロック（1つに整理）。
+          ・見出し「サロンらしさ」＋5軸レーダー＋回答/更新ボタン（CultureRadarSection）
+          ・サロンタイプ（既存の12軸から表示時に算出。タイプが出せる場合のみ）
+          ・AI紹介文（SalonAiNarrative）
+          旧「サロン診断（6つの才能軸）」（14問診断・/diagnosis/salon）の表示と受診ボタンは、
+          数値が能力の点数に見えるため外した（14問の保存データ・計算・DBは残している）。
+          回答・更新ボタンは、表示している対象と同じ「サロンらしさ」（/salon/culture）へつなぐ。
+          表示は salon_culture_profiles（本人の行）だけに依存し、店舗単位の結果とは混ぜない。 */}
+      <div className="mt-6">
+        <CultureRadarSection
+          status={cultureProfile?.status ?? null}
+          axes={cultureProfile?.culture_axes}
+          loadFailed={!!cultureError}
+          answerPath="/salon/culture"
+        />
+      </div>
+
+      {salonTypeClassification && (
+        <section className="mt-4 rounded-2xl border border-line bg-surface p-6 text-center">
           <p className="eyebrow mb-2">あなたのサロンタイプ</p>
           <div className="mx-auto h-48 w-full max-w-[240px] overflow-hidden rounded-[30px]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -389,24 +386,11 @@ export default async function SalonMyPage() {
             詳しい結果を見る
           </Link>
         </section>
-      ) : (
-        <Link
-          href="/salon/culture"
-          className="flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-4 text-[15px] font-semibold text-ink"
-        >
-          {!cultureProfile
-            ? "サロンらしさ診断を受ける"
-            : cultureProfile.status === "draft"
-              ? "回答を続ける"
-              : "サロンらしさを更新する"}
-        </Link>
       )}
 
-      {/* ★サロン専用AI解説。旧14問診断（DiagnosisSummary、下記）とは別の
-          場所に配置し、「サロンらしさ」セクションの一部であることを
-          視覚的に明確にする。表示は salon_culture_profiles（回答状態）と
-          salon_culture_ai_outputs（AI紹介文）だけに依存し、旧14問診断（latest）には依存しない
-          （0012）。未回答・回答済みで未作成・取得失敗を SalonAiNarrative が区別して表示する。 */}
+      {/* サロン専用AI解説。表示は salon_culture_profiles（回答状態）と
+          salon_culture_ai_outputs（AI紹介文）だけに依存する（0012）。
+          未回答・回答済みで未作成・取得失敗を SalonAiNarrative が区別して表示する。 */}
       <div className="mt-4">
         <SalonAiNarrative
           aiByType={salonAiByType}
@@ -414,50 +398,6 @@ export default async function SalonMyPage() {
           loadFailed={salonAiLoadFailed}
         />
       </div>
-
-      <p className="eyebrow mb-2 mt-8">サロン診断（6つの才能軸）</p>
-      <div>
-        {/* ★「1 auth user = 1 role」方針・サロン側から美容師向け表示を排除する
-            対応: showTypeHeader={false} により、美容師個人向け12タイプ名
-            （type_name）・その説明文を非表示にする（DiagnosisSummary自体は
-            変更していない。既存のshowTypeHeader propを呼び出し側から指定
-            するだけ）。
-            美容師の市場価値・想定年収（market_value_score/salary_band）は、
-            computeDiagnosis()がmode==="salon"の場合に元々null を返す設計
-            （lib/diagnosis/index.ts、変更していない）のため、サロン診断結果
-            では自然に非表示になる。美容師キャラクター表示（CoreTypeHeader）
-            はこのページに元々importされていない。
-            調査の結果、サロン診断（14問）が測定する6軸トレイトと、既存の
-            「サロンらしさ」（教育支援・挑戦開放性・個人ブランド支援・
-            親密重視/距離感重視・経営スタイル）は役割が重複していると判断
-            したため、新しいサロン専用12タイプは作らず、この最小修正
-            （12タイプ名を隠すだけ）にとどめている。
-            ★今回の変更: showAiSection={false} を追加し、美容師本人向け
-            プロンプトで誤生成されていたAI解説（prompt_version="1.0.0"）を
-            このブロックから非表示にした（DiagnosisSummary自体・その
-            AI解説ロジックは変更していない。表示のON/OFFを切り替える
-            propを追加しただけで、美容師マイページ側はこのpropを指定
-            していないため一切影響を受けない）。サロン専用のAI解説は
-            上記のSalonAiNarrativeで別途表示する。 */}
-        <DiagnosisSummary
-          latest={latest}
-          aiByType={{}}
-          showTypeHeader={false}
-          showAiSection={false}
-          loadFailed={!!latestError}
-        />
-      </div>
-
-      {/* ★「サロン診断（6つの才能軸）」ブロックの操作は、14問診断（/diagnosis/salon）へつなぐ。
-          以前はここが「サロンらしさ」の回答（/salon/culture?edit=1）へつながっており、
-          回答を完了しても diagnosis_results(mode=salon) が作られず、「まだ診断結果がありません」のままだった。
-          サロンらしさの回答・更新は、上の「サロンらしさ」ブロックの導線で行う。 */}
-      <Link
-        href="/diagnosis/salon"
-        className="mt-4 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-4 text-[15px] font-semibold text-ink"
-      >
-        {latest ? "サロン診断を受け直す" : "サロン診断を受ける"}
-      </Link>
     </main>
   );
 }

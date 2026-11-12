@@ -931,17 +931,17 @@ test("AI生成の設定: サロン・美容師とも同一のエンドポイン�
   assert.equal(salon.match(/const MODEL = "([^"]+)"/)?.[1], stylist.match(/const MODEL = "([^"]+)"/)?.[1]);
 });
 
-test("サロンマイページ: 14問診断ブロックの操作は /diagnosis/salon へ（サロンらしさ入力へ飛ばさない）／取得失敗は『結果なし』と区別する", () => {
+test("サロンマイページ: 「サロンらしさ」5軸ブロックに整理（14問診断の表示・受診ボタンは外す）／取得失敗は『未回答』と区別する", () => {
   const page = readFileSync(join(process.cwd(), "app/salon/mypage/page.tsx"), "utf8");
-  const tail = page.slice(page.indexOf("<DiagnosisSummary"));
-  assert.ok(tail.includes('href="/diagnosis/salon"'));
-  assert.ok(!tail.includes('href="/salon/culture?edit=1"')); // 診断ブロック末尾のボタンが別機能へ飛ばない
-  assert.match(page, /latestError/);
-  assert.match(page, /loadFailed=\{!!latestError\}/);
-  // サロンらしさの入力・更新は「サロンらしさ」ブロック側の導線に残る。
-  assert.ok(page.includes('href="/salon/culture"'));
+  assert.ok(!page.includes('href="/diagnosis/salon"')); // 14問診断へのボタンは無い
+  assert.ok(!page.includes("<DiagnosisSummary"));
+  assert.match(page, /cultureError/);
+  assert.match(page, /loadFailed=\{!!cultureError\}/);
+  // 回答・更新ボタンは、表示している対象と同じ「サロンらしさ」（/salon/culture）へ。
+  assert.match(page, /answerPath="\/salon\/culture"/);
+  // 美容師マイページの共用コンポーネントは変更しない（loadFailed 既定false）。
   const summary = readFileSync(join(process.cwd(), "components/mypage/diagnosis-summary.tsx"), "utf8");
-  assert.match(summary, /loadFailed = false/); // 既定false＝美容師マイページの表示は変わらない
+  assert.match(summary, /loadFailed = false/);
   assert.match(summary, /読み込めませんでした/);
 });
 
@@ -953,11 +953,12 @@ test("サロンらしさの保存RPCは diagnosis_results を書かない（回�
   }
 });
 
-test("サロン診断結果画面: ログイン中の本人にはゲスト向けの新規登録案内を出さず、サロンマイページへ案内する", () => {
+test("サロン診断結果画面: ログイン中の本人にはゲスト向けの新規登録案内を出さず、サロンマイページ／サロンらしさへ案内する", () => {
   const src = readFileSync(join(process.cwd(), "app/diagnosis/result/page.tsx"), "utf8");
-  const salon = src.slice(src.indexOf("サロン診断結果"), src.indexOf("ここから美容師診断"));
+  const salon = src.slice(src.indexOf("if (isSalon) {"), src.indexOf("ここから美容師診断"));
   assert.match(salon, /isMember \?/);
-  assert.ok(salon.includes('mypageHref="/salon/mypage"'));
+  assert.ok(salon.includes('href="/salon/mypage"'));
+  assert.ok(salon.includes('href="/salon/culture"'));
 });
 
 test("サロンらしさの結果画面（本人・店舗）: 取得エラーを未回答として入力画面へ飛ばさない。店舗は storeId で取得", () => {
