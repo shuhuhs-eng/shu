@@ -1,5 +1,5 @@
 import { createTokenClient } from "@/lib/supabase/token-client";
-import { generateSalonCultureNarrative } from "@/lib/ai/generate-salon-culture-narrative";
+import { generateSalonCultureNarrativeResult } from "@/lib/ai/generate-salon-culture-narrative";
 import { deriveSalonTypes, SALON_TYPE_CONTENT } from "@/lib/salon-culture/salon-culture-types";
 import type { Database, SalonCultureAxes } from "@/types/database";
 import { logError } from "@/lib/security/log";
@@ -33,11 +33,25 @@ type SalonCultureProfileRow = Database["public"]["Tables"]["salon_culture_profil
  * save_salon_culture_profile RPC）を一切ブロックしない設計
  * （美容師側と同じ「AI解説はあれば良い付加情報」という方針）。
  */
-export type SalonAiJobResult = "ok" | "generation_failed" | "partial";
+export type SalonAiJobResult =
+  | { status: "ok" }
+  | { status: "generation_failed"; reason: string }
+  | { status: "partial"; reason: string };
+
+/** DBエラーを、固定の短いコードへ丸める（エラー本文・値は出さない）。 */
+export function classifySalonAiDbError(error: { code?: string | null; message?: string | null } | null | undefined): string {
+  const m = error?.message ?? "";
+  if (m.includes("caller is not a salon")) return "not_salon";
+  if (m.includes("not found or not owned")) return "not_owner";
+  if (m.includes("not authenticated")) return "not_authenticated";
+  if (m.includes("ai_output not found")) return "output_not_found";
+  const c = error?.code ?? "";
+  return /^[0-9A-Z]{5}$|^PGRST\d{3}$/.test(c) ? `db_${c}` : "db_other";
+}
 
 export type SalonAiJobDeps = {
   supabase?: Pick<ReturnType<typeof createTokenClient>, "rpc">;
-  generate?: typeof generateSalonCultureNarrative;
+  generate?: typeof generateSalonCultureNarrativeResult;
 };
 
 /**
@@ -52,7 +66,7 @@ export async function runSalonCultureAiGenerationJob(
 ): Promise<SalonAiJobResult> {
 
   const supabase = deps.supabase ?? createTokenClient(accessToken);
-  const generate = deps.generate ?? generateSalonCultureNarrative;
+  const generate = deps.generate ?? generateSalonCultureNarrativeResult;
 
   const axes: SalonCultureAxes = cultureProfile.culture_axes ?? {};
   const classification = deriveSalonTypes(axes);
@@ -65,9 +79,9 @@ export async function runSalonCultureAiGenerationJob(
     subTypeName: classification ? SALON_TYPE_CONTENT[classification.subType].name : null,
   });
 
-  if (!result) {
-    console.error("[salonAiJob] generation failed (no narrative returned)");
-    return "generation_failed";
+  if (!result.ok) {
+    console.error("[salonAiJob] generation failed", { reason: result.reason });
+    return { status: "generation_failed", reason: result.reason };
   }
 
   const { narrative, model, promptVersion } = result;
@@ -81,7 +95,7 @@ export async function runSalonCultureAiGenerationJob(
     { type: "growth", response: narrative.growth },
   ];
 
-  let allSaved = true;
+  let saveFailure: string | null = null;
   for (const entry of entries) {
     const { data: created, error: createError } = await supabase.rpc("create_salon_culture_ai_output", {
       p_salon_culture_profile_id: cultureProfile.id,
@@ -94,7 +108,7 @@ export async function runSalonCultureAiGenerationJob(
 
     if (createError || !created) {
       logError(`salonAiJob.create.${entry.type}`, createError);
-      allSaved = false;
+      saveFailure ??= `save_create:${classifySalonAiDbError(createError)}`;
       continue;
     }
 
@@ -103,9 +117,13 @@ export async function runSalonCultureAiGenerationJob(
     });
     if (activateError) {
       logError(`salonAiJob.activate.${entry.type}`, activateError);
-      allSaved = false;
+      saveFailure ??= `save_activate:${classifySalonAiDbError(activateError)}`;
     }
   }
 
-  return allSaved ? "ok" : "partial";
+  if (saveFailure) {
+    console.error("[salonAiJob] save failed", { reason: saveFailure });
+    return { status: "partial", reason: saveFailure };
+  }
+  return { status: "ok" };
 }

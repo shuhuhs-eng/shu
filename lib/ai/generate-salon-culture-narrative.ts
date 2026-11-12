@@ -87,13 +87,23 @@ const NEW_TWELVE_AXIS_KEYS: (keyof SalonCultureAxes)[] = [
  * ブロックしてはならないため、呼び出し元は失敗をエラーとして扱わずスキップしてよい
  * （美容師側と同じ方針）。
  */
-export async function generateSalonCultureNarrative(
-  input: GenerateInput,
-): Promise<{ narrative: SalonCultureNarrative; model: string; promptVersion: string } | null> {
+/** 生成に失敗した理由（画面・ログに出してよい、固定の短いコードだけ。キー・本文・個人情報は含めない）。 */
+export type SalonAiGenerateFailReason =
+  | "api_key_missing"
+  | `api_http_${number}`
+  | "api_timeout"
+  | "api_network"
+  | "bad_format";
+
+export type SalonAiGenerateResult =
+  | { ok: true; narrative: SalonCultureNarrative; model: string; promptVersion: string }
+  | { ok: false; reason: SalonAiGenerateFailReason };
+
+export async function generateSalonCultureNarrativeResult(input: GenerateInput): Promise<SalonAiGenerateResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     console.error("generateSalonCultureNarrative: ANTHROPIC_API_KEY is not set");
-    return null;
+    return { ok: false, reason: "api_key_missing" };
   }
 
   const prompt = buildPrompt(input);
@@ -117,7 +127,7 @@ export async function generateSalonCultureNarrative(
 
     if (!response.ok) {
       console.error("generateSalonCultureNarrative: API error", response.status);
-      return null;
+      return { ok: false, reason: `api_http_${response.status}` };
     }
 
     const data = await response.json();
@@ -126,13 +136,25 @@ export async function generateSalonCultureNarrative(
       .join("");
 
     const narrative = parseNarrative(text);
-    if (!narrative) return null;
+    if (!narrative) {
+      // 本文は出さない（長さと終了理由だけ）。
+      console.error("generateSalonCultureNarrative: bad format", { length: text.length, stop: data.stop_reason ?? null });
+      return { ok: false, reason: "bad_format" };
+    }
 
-    return { narrative, model: MODEL, promptVersion: PROMPT_VERSION };
+    return { ok: true, narrative, model: MODEL, promptVersion: PROMPT_VERSION };
   } catch (err) {
     logError("generateSalonCultureNarrative", err);
-    return null;
+    const name = err instanceof Error ? err.name : "";
+    return { ok: false, reason: name === "TimeoutError" || name === "AbortError" ? "api_timeout" : "api_network" };
   }
+}
+
+export async function generateSalonCultureNarrative(
+  input: GenerateInput,
+): Promise<{ narrative: SalonCultureNarrative; model: string; promptVersion: string } | null> {
+  const r = await generateSalonCultureNarrativeResult(input);
+  return r.ok ? { narrative: r.narrative, model: r.model, promptVersion: r.promptVersion } : null;
 }
 
 function buildPrompt(input: GenerateInput): string {

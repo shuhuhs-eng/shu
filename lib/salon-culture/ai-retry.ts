@@ -47,12 +47,14 @@ export async function runSalonAiRetry(input: SalonAiRetryInput): Promise<SalonAi
   }
 
   const result = await input.runJob();
-  if (result === "ok") return { status: "generated" };
+  if (result.status === "ok") return { status: "generated" };
+  // 原因コード（固定の短い値のみ。キー・本文・個人情報は含まない）を添える。失敗を隠さず、原因の切り分けに使う。
+  const code = `（原因コード: ${result.reason}）`;
   return {
     status: "failed",
     error:
-      result === "partial"
-        ? "AI紹介文の一部しか保存できませんでした。時間をおいて、もう一度お試しください。"
-        : "AI紹介文の作成に失敗しました。時間をおいて、もう一度お試しください。",
+      result.status === "partial"
+        ? `AI紹介文の一部しか保存できませんでした。時間をおいて、もう一度お試しください。${code}`
+        : `AI紹介文の作成に失敗しました。時間をおいて、もう一度お試しください。${code}`,
   };
 }

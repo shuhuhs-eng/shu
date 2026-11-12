@@ -740,7 +740,7 @@ function fakeLimiter() {
 
 test("AI再生成: 未回答は生成しない／4種そろっていれば何もしない", async () => {
   let ran = 0;
-  const base = { limiter: fakeLimiter(), userId: "u1", runJob: async () => (ran++, "ok" as const) };
+  const base = { limiter: fakeLimiter(), userId: "u1", runJob: async () => (ran++, { status: "ok" as const }) };
   assert.deepEqual(await runSalonAiRetry({ ...base, completed: false, existingCurrentTypes: [] }), { status: "not_completed" });
   assert.deepEqual(await runSalonAiRetry({ ...base, completed: true, existingCurrentTypes: [...SALON_AI_OUTPUT_TYPES] }), { status: "exists" });
   assert.equal(ran, 0);
@@ -760,7 +760,7 @@ test("AI再生成: 連打・同時実行でも生成は1回だけ。成功後は
         ran++;
         await new Promise((r) => setTimeout(r, 5));
         saved = true;
-        return "ok";
+        return { status: "ok" as const };
       },
     });
   const results = await Promise.all(Array.from({ length: 6 }, call));
@@ -774,21 +774,27 @@ test("AI再生成: 連打・同時実行でも生成は1回だけ。成功後は
 test("AI再生成: 生成失敗・一部保存失敗は『失敗』として返す（成功に見せない）。別ユーザーの枠とは独立", async () => {
   const limiter = fakeLimiter();
   const mk = (userId: string, job: "generation_failed" | "partial") =>
-    runSalonAiRetry({ completed: true, existingCurrentTypes: ["essence"], limiter, userId, runJob: async () => job });
+    runSalonAiRetry({
+      completed: true,
+      existingCurrentTypes: ["essence"],
+      limiter,
+      userId,
+      runJob: async () => (job === "partial" ? { status: "partial" as const, reason: "save_create:not_salon" } : { status: "generation_failed" as const, reason: "api_http_401" }),
+    });
   const a = await mk("u1", "generation_failed");
   const b = await mk("u2", "partial");
   assert.equal(a.status, "failed");
   assert.equal(b.status, "failed");
-  assert.match((a as { error: string }).error, /失敗/);
-  assert.match((b as { error: string }).error, /一部/);
+  assert.match((a as { error: string }).error, /失敗.*原因コード: api_http_401/);
+  assert.match((b as { error: string }).error, /一部.*原因コード: save_create:not_salon/);
   assert.equal((await mk("u1", "generation_failed")).status, "busy"); // 2分以内の再実行は抑止
 });
 
-test("AI生成ジョブ: 生成失敗は generation_failed、保存の一部失敗は partial、全件成功は ok（4種×作成+現行化）", async () => {
+test("AI生成ジョブ: 失敗理由を固定コードで返す（生成失敗・保存失敗）。全件成功は ok（4種×作成+現行化）", async () => {
   const profile = { id: "p1", culture_axes: {}, value_priorities: null, comment: null } as never;
   const narrative = { essence: "e", explanation: "x", advice: ["a"], growth: "g" };
-  const gen = async () => ({ narrative, model: "m", promptVersion: "salon-culture-v1" });
-  const mkRpc = (failCreateFor?: string) => {
+  const gen = async () => ({ ok: true as const, narrative, model: "m", promptVersion: "salon-culture-v1" });
+  const mkRpc = (failCreateFor?: string, message = "x", code = "P0001") => {
     const calls: string[] = [];
     return {
       calls,
@@ -796,7 +802,7 @@ test("AI生成ジョブ: 生成失敗は generation_failed、保存の一部失�
         rpc: async (fn: string, args: Record<string, unknown>) => {
           calls.push(fn);
           if (fn === "create_salon_culture_ai_output") {
-            if (args.p_output_type === failCreateFor) return { data: null, error: { message: "x" } };
+            if (args.p_output_type === failCreateFor) return { data: null, error: { message, code } };
             return { data: { id: `id-${args.p_output_type}` }, error: null };
           }
           return { data: null, error: null };
@@ -807,15 +813,54 @@ test("AI生成ジョブ: 生成失敗は generation_failed、保存の一部失�
   const errs = console.error;
   console.error = () => {};
   try {
-    assert.equal(await runSalonCultureAiGenerationJob(profile, "t", { generate: (async () => null) as never, supabase: mkRpc().supabase }), "generation_failed");
+    for (const reason of ["api_key_missing", "api_http_401", "api_timeout", "bad_format"] as const) {
+      const r = await runSalonCultureAiGenerationJob(profile, "t", { generate: (async () => ({ ok: false, reason })) as never, supabase: mkRpc().supabase });
+      assert.deepEqual(r, { status: "generation_failed", reason });
+    }
     const ok = mkRpc();
-    assert.equal(await runSalonCultureAiGenerationJob(profile, "t", { generate: gen as never, supabase: ok.supabase }), "ok");
+    assert.deepEqual(await runSalonCultureAiGenerationJob(profile, "t", { generate: gen as never, supabase: ok.supabase }), { status: "ok" });
     assert.equal(ok.calls.length, 8);
-    const part = mkRpc("growth");
-    assert.equal(await runSalonCultureAiGenerationJob(profile, "t", { generate: gen as never, supabase: part.supabase }), "partial");
+    const notSalon = mkRpc("growth", "caller is not a salon");
+    assert.deepEqual(await runSalonCultureAiGenerationJob(profile, "t", { generate: gen as never, supabase: notSalon.supabase }), { status: "partial", reason: "save_create:not_salon" });
+    const other = mkRpc("essence", "secret detail value", "42501");
+    assert.deepEqual(await runSalonCultureAiGenerationJob(profile, "t", { generate: gen as never, supabase: other.supabase }), { status: "partial", reason: "save_create:db_42501" });
   } finally {
     console.error = errs;
   }
+});
+
+test("AI生成: APIの失敗理由コード（キー未設定・HTTP・タイムアウト・形式不正）を返し、キーや本文を含めない", async () => {
+  const { generateSalonCultureNarrativeResult } = await import("../lib/ai/generate-salon-culture-narrative");
+  const input = { cultureAxes: {}, valuePriorities: null, comment: "秘密のコメント", mainTypeName: null, subTypeName: null } as never;
+  const env = process.env.ANTHROPIC_API_KEY;
+  const realFetch = globalThis.fetch;
+  const errs = console.error;
+  const logged: unknown[] = [];
+  console.error = (...a: unknown[]) => void logged.push(a);
+  try {
+    delete process.env.ANTHROPIC_API_KEY;
+    assert.deepEqual(await generateSalonCultureNarrativeResult(input), { ok: false, reason: "api_key_missing" });
+    process.env.ANTHROPIC_API_KEY = "sk-test-SECRET-KEY";
+    globalThis.fetch = (async () => new Response("{}", { status: 401 })) as never;
+    assert.deepEqual(await generateSalonCultureNarrativeResult(input), { ok: false, reason: "api_http_401" });
+    globalThis.fetch = (async () => new Response(JSON.stringify({ content: [{ type: "text", text: "not json" }] }), { status: 200 })) as never;
+    assert.deepEqual(await generateSalonCultureNarrativeResult(input), { ok: false, reason: "bad_format" });
+    globalThis.fetch = (async () => { throw new DOMException("t", "TimeoutError"); }) as never;
+    assert.deepEqual(await generateSalonCultureNarrativeResult(input), { ok: false, reason: "api_timeout" });
+    globalThis.fetch = (async () => { throw new TypeError("fetch failed"); }) as never;
+    assert.deepEqual(await generateSalonCultureNarrativeResult(input), { ok: false, reason: "api_network" });
+    const ok = { content: [{ type: "text", text: JSON.stringify({ essence: "e", explanation: "x", advice: ["a"], growth: "g" }) }] };
+    globalThis.fetch = (async () => new Response(JSON.stringify(ok), { status: 200 })) as never;
+    const r = await generateSalonCultureNarrativeResult(input);
+    assert.equal(r.ok, true);
+  } finally {
+    globalThis.fetch = realFetch;
+    console.error = errs;
+    if (env === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = env;
+  }
+  assert.ok(!JSON.stringify(logged).includes("SECRET-KEY"));
+  assert.ok(!JSON.stringify(logged).includes("秘密のコメント"));
 });
 
 test("サロンマイページ: タイプ表示とAI紹介文は同じ salon_culture_profiles／salon_culture_ai_outputs を参照し、未回答と回答済み未作成を区別する", () => {
