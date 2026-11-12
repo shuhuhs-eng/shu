@@ -433,3 +433,12 @@ test("新規登録の制限: 1回の操作で各キーを1回だけ数える／�
   assert.ok(perform.indexOf("requireCaptchaToken") < perform.indexOf("checkSignupRateLimit"));
   assert.ok(src.includes('performSignUp("salon"') && src.includes('performSignUp("stylist"'));
 });
+
+test("新規登録の成功案内: 別の種類（美容師/サロン）には別メールが必要と一般的に案内し、他人のロールは開示しない", () => {
+  const src = readFileSync(join(process.cwd(), "lib/auth/actions.ts"), "utf8");
+  assert.ok(src.includes("美容師とサロンは別々のアカウントです。もう一方の種類で登録する場合は、別のメールアドレスをご用意ください。"));
+  // Turnstileは、この段階ではトークンの存在確認のみ（検証はSupabase Authの signUp が行う。二重検証しない）。
+  const perform = src.slice(src.indexOf("async function performSignUp"), src.indexOf("export async function signUpAction"));
+  assert.ok(!perform.includes("verifyBotProtection") && !perform.includes("checkTurnstileToken"));
+  assert.ok(perform.includes("captchaToken: captcha.captchaToken"));
+});
