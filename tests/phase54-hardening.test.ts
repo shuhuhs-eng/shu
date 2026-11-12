@@ -711,3 +711,14 @@ test("新規登録の成功案内: 別の種類（美容師/サロン）には�
   assert.ok(!perform.includes("verifyBotProtection") && !perform.includes("checkTurnstileToken"));
   assert.ok(perform.includes("captchaToken: captcha.captchaToken"));
 });
+
+test("サロン初回登録: 写真アップローダーは保存後（edit）だけ表示する（保存前はadd_salon_photoが権限不足で必ず失敗するため）", () => {
+  const src = readFileSync(join(process.cwd(), "components/salon-profile/salon-profile-form.tsx"), "utf8");
+  const section = src.slice(src.indexOf('<h2 className="eyebrow">サロン写真</h2>'), src.indexOf('<h2 className="eyebrow">外部リンク</h2>'));
+  assert.match(section, /mode === "create" \?/);
+  assert.ok(section.indexOf('mode === "create"') < section.indexOf("<SalonPhotoUploader"));
+  assert.equal((section.match(/<SalonPhotoUploader/g) ?? []).length, 2); // 編集画面では内装・雰囲気の2枠とも残す
+  // RPCの前提（user_rolesのsalon）は、プロフィール保存RPCが記録する。
+  const sql = readFileSync(join(process.cwd(), "supabase/migrations/0014_salon_photos_hotpepper.sql"), "utf8");
+  assert.match(sql, /caller is not a salon/);
+});

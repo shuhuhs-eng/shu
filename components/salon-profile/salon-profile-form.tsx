@@ -167,18 +167,29 @@ export function SalonProfileForm({ mode, userId, initialValues, employeeSizeOpti
 
           <section className="space-y-5">
             <h2 className="eyebrow">サロン写真</h2>
-            <SalonPhotoUploader
-              userId={userId}
-              category="interior"
-              label="内装写真"
-              initialPhotos={initialValues.interiorPhotos}
-            />
-            <SalonPhotoUploader
-              userId={userId}
-              category="atmosphere"
-              label="スタッフ・サロンの雰囲気"
-              initialPhotos={initialValues.atmospherePhotos}
-            />
+            {mode === "create" ? (
+              // ★初回登録中は写真を追加できない（add_salon_photo()は、プロフィール保存で記録される
+              // user_roles(salon)を必須とするため、保存前のアップロードは必ず失敗していた）。
+              // 保存後にサロンマイページの「サロンプロフィールを編集」から追加できる。
+              <p className="rounded-xl border border-line bg-surface2 px-4 py-3 text-[12.5px] leading-relaxed text-sub">
+                内装・スタッフの写真は、プロフィールを保存した後に、マイページの「サロンプロフィールを編集」から追加できます。
+              </p>
+            ) : (
+              <>
+                <SalonPhotoUploader
+                  userId={userId}
+                  category="interior"
+                  label="内装写真"
+                  initialPhotos={initialValues.interiorPhotos}
+                />
+                <SalonPhotoUploader
+                  userId={userId}
+                  category="atmosphere"
+                  label="スタッフ・サロンの雰囲気"
+                  initialPhotos={initialValues.atmospherePhotos}
+                />
+              </>
+            )}
           </section>
 
           <section className="space-y-4">
