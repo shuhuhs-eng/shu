@@ -170,3 +170,43 @@ test("サロンマイページ: プロフィール概要に入口を置き、店
   const preview = raw.indexOf("美容師からの見え方を確認", edit);
   assert.ok(edit > 0 && preview > edit && preview < raw.indexOf('id="interests"'));
 });
+
+test("マイページ: 店舗ごとに『見え方を確認』『店舗プロフィールを編集』を並べ、保存先の違いを案内する", () => {
+  const raw = readFileSync("app/salon/mypage/page.tsx", "utf8");
+  assert.match(raw, /\/salon\/stores\/\$\{st\.id\}\/profile/);
+  assert.match(raw, /店舗プロフィールを編集/);
+  assert.match(raw, /保存先が別/);
+  // 店舗が複数のときは店舗名を添える（別店舗と取り違えない）
+  assert.match(raw, /many && <span[^>]*>（\{st\.store_name\}）/);
+  // 既存の「サロンプロフィールを編集」（/salon/profile）は残している
+  assert.match(raw, /href="\/salon\/profile"/);
+});
+
+test("プレビュー: 編集対象の店舗名と保存先の違いを案内し、店舗プロフィール未保存はその旨を出す", () => {
+  const c = readFileSync("components/store-preview/preview-body.tsx", "utf8");
+  assert.match(c, /編集するのは、この店舗（\{storeName\}）の店舗プロフィールです/);
+  assert.match(c, /保存先が別/);
+  assert.match(c, /店舗プロフィールは作成・更新されません/);
+});
+
+test("店舗プロフィール編集画面: 対象店舗を明示し、プレビューへの導線がある", () => {
+  const c = readFileSync("app/salon/stores/[storeId]/profile/page.tsx", "utf8");
+  assert.match(c, /対象店舗：\{store\.store_name\}/);
+  assert.match(c, /\/salon\/stores\/\$\{storeId\}\/preview/);
+});
+
+test("美容師向け詳細: 操作ボタン→共用部品の順と、相性の各状態の文言が従来どおり", () => {
+  const raw = readFileSync("app/stylist/salons/[storeId]/page.tsx", "utf8");
+  assert.ok(raw.indexOf("<StoreInterestButton") > 0 && raw.indexOf("<StoreInterestButton") < raw.indexOf("<StoreDetailView"));
+  for (const t of ["相性を確認できませんでした", "働きたいサロン環境を回答すると相性が分かります", "相性診断準備中", "総合マッチ度", "MATCH_AXIS_LABELS", "isInterested"]) {
+    assert.ok(raw.includes(t), t);
+  }
+  assert.match(raw, /notFound\(\)/);
+});
+
+test("写真: プレビューは他店舗・他人の写真を取得・表示しない（写真は店舗単位ではなくサロン本人単位のため、今回は表示対象にしない）", () => {
+  for (const f of ["app/salon/stores/[storeId]/preview/page.tsx", "components/store-preview/preview-body.tsx", "lib/store-preview/load.ts", "components/stylist-salons/store-detail-view.tsx"]) {
+    const c = strip(f);
+    assert.ok(!/salon_photos|salon-photos|getPublicSalonPhotos|createSignedUrl/.test(c), f);
+  }
+});

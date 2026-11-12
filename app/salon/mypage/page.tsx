@@ -178,16 +178,30 @@ export default async function SalonMyPage() {
             </p>
           ) : (previewStores ?? []).length === 0 ? null : (
             <div className="space-y-2">
-              {(previewStores ?? []).map((st) => (
-                <Link
-                  key={st.id}
-                  href={`/salon/stores/${st.id}/preview`}
-                  className="flex w-full items-center justify-center rounded-full border border-line bg-surface2 px-5 py-3 text-[13.5px] font-semibold text-ink"
-                >
-                  美容師からの見え方を確認
-                  {(previewStores ?? []).length > 1 && <span className="ml-1 font-normal text-sub">（{st.store_name}）</span>}
-                </Link>
-              ))}
+              {(previewStores ?? []).map((st) => {
+                const many = (previewStores ?? []).length > 1;
+                return (
+                  <div key={st.id} className="space-y-2">
+                    <Link
+                      href={`/salon/stores/${st.id}/preview`}
+                      className="flex w-full items-center justify-center rounded-full border border-line bg-surface2 px-5 py-3 text-[13.5px] font-semibold text-ink"
+                    >
+                      美容師からの見え方を確認
+                      {many && <span className="ml-1 font-normal text-sub">（{st.store_name}）</span>}
+                    </Link>
+                    <Link
+                      href={`/salon/stores/${st.id}/profile`}
+                      className="flex w-full items-center justify-center rounded-full border border-line bg-surface px-5 py-3 text-[13.5px] font-semibold text-ink"
+                    >
+                      店舗プロフィールを編集
+                      {many && <span className="ml-1 font-normal text-sub">（{st.store_name}）</span>}
+                    </Link>
+                  </div>
+                );
+              })}
+              <p className="text-[11.5px] leading-relaxed text-sub">
+                美容師に表示される内容は、店舗ごとの「店舗プロフィール」の保存内容です。上の「サロンプロフィールを編集」（この概要欄の表示元）とは保存先が別のため、美容師からの見え方は上のボタンで確認し、内容を直すときは「店舗プロフィールを編集」から行ってください。
+              </p>
             </div>
           )}
         </div>

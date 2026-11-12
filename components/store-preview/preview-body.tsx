@@ -36,6 +36,9 @@ export function StorePreviewBody({ storeId, result }: Props) {
               この店舗は現在、美容師には公開されていません（公開設定が「公開」ではありません）。公開すると、以下の内容で表示されます。
             </p>
           ))}
+        <p className="mt-1.5 text-[12px] leading-relaxed text-sub">
+          編集するのは、この店舗（{storeName}）の店舗プロフィールです。マイページの「サロン概要」（旧プロフィール）とは保存先が別のため、表示内容が異なる場合があります。
+        </p>
         <div className="mt-4 flex flex-col gap-2.5 sm:flex-row">
           <Link
             href={editHref}
@@ -55,7 +58,8 @@ export function StorePreviewBody({ storeId, result }: Props) {
       {result.status === "no_profile" ? (
         <section className="mt-5 rounded-2xl border border-line bg-surface p-6 text-center">
           <p className="text-[13.5px] leading-relaxed text-charcoal">
-            この店舗のプロフィールは、まだ保存されていません。保存すると、美容師からの見え方を確認できます。
+            この店舗の店舗プロフィールは、まだ保存されていません。「プロフィールを編集する」から保存すると、美容師からの見え方を確認できます。
+            （マイページの「サロンプロフィールを編集」では、店舗プロフィールは作成・更新されません。）
           </p>
         </section>
       ) : (

@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/security/log";
 import { getSalonStoreProfileFormInitialValues } from "@/lib/salon/store-get-initial-values";
 import { SalonStoreProfileForm } from "@/components/salon-profile/salon-store-profile-form";
 
@@ -25,6 +27,14 @@ export default async function SalonStoreProfilePage({ params }: Props) {
     storeId,
   );
 
+  // 編集の対象店舗を明示する（取得できなくても編集自体は続けられる。失敗はログに残す）。
+  const { data: store, error: storeError } = await supabase
+    .from("salon_stores")
+    .select("store_name")
+    .eq("id", storeId)
+    .maybeSingle();
+  if (storeError) logError("salonStoreProfilePage.store", storeError);
+
   return (
     <main className="mx-auto max-w-[560px] px-5 py-12">
       <div className="mb-7 flex items-center gap-2.5">
@@ -33,8 +43,18 @@ export default async function SalonStoreProfilePage({ params }: Props) {
       </div>
 
       <h1 className="font-serif text-2xl font-bold text-ink">店舗プロフィール編集</h1>
+      {store?.store_name && (
+        <p className="mt-2 text-[13px] font-semibold text-ink">対象店舗：{store.store_name}</p>
+      )}
       <p className="mt-3 text-[14px] leading-relaxed text-charcoal">
         登録内容はいつでも変更できます。
+      </p>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-sub">
+        保存したあと、
+        <Link href={`/salon/stores/${storeId}/preview`} className="font-semibold underline">
+          美容師からの見え方（プレビュー）
+        </Link>
+        で確認できます。
       </p>
 
       <div className="mt-6">
