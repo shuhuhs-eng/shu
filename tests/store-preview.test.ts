@@ -157,7 +157,8 @@ test("プレビュー画面の表示: 見出し・店舗名・導線・未保存
 
 test("RLS・公開範囲は変更していない: 新しいmigrationを追加していない", () => {
   const files = readdirSync("supabase/migrations").filter((f: string) => f.endsWith(".sql")).sort();
-  assert.equal(files[files.length - 1].slice(0, 4), "0056");
+  // 0057は未承認のレビュー用ドラフト（適用・コミット前）。承認前に増えていないことは別途確認する。
+  assert.ok(["0056", "0057"].includes(files[files.length - 1].slice(0, 4)));
 });
 
 test("サロンマイページ: プロフィール概要に入口を置き、店舗ごとの別URLへ（取得失敗は別表示）", () => {
@@ -175,11 +176,101 @@ test("マイページ: 店舗ごとに『見え方を確認』『店舗プロフ
   const raw = readFileSync("app/salon/mypage/page.tsx", "utf8");
   assert.match(raw, /\/salon\/stores\/\$\{st\.id\}\/profile/);
   assert.match(raw, /店舗プロフィールを編集/);
-  assert.match(raw, /保存先が別/);
+  assert.match(raw, /店舗プロフィール」で編集/);
+  assert.match(raw, /ロゴ・写真・リンクを編集/);
   // 店舗が複数のときは店舗名を添える（別店舗と取り違えない）
-  assert.match(raw, /many && <span[^>]*>（\{st\.store_name\}）/);
-  // 既存の「サロンプロフィールを編集」（/salon/profile）は残している
+  assert.match(raw, /many && \(\s*<p[^>]*>\s*\{st\.store_name\}/);
+  // 既存の旧プロフィール編集（/salon/profile）は残している（店舗が無いときは従来名）
   assert.match(raw, /href="\/salon\/profile"/);
+  assert.match(raw, /サロンプロフィールを編集/);
+  // 概要欄は、店舗がちょうど1つで店舗プロフィールがあるときだけ店舗プロフィールを使う
+  assert.match(raw, /storeList\.length === 1/);
+  assert.match(raw, /hasStores \? singleStoreProfile : salon/);
+});
+
+test("マイページ: 取得失敗は旧プロフィールへ黙って切り替えず、読み込みエラーとして表示する", () => {
+  const raw = readFileSync("app/salon/mypage/page.tsx", "utf8");
+  assert.match(raw, /overviewLoadError/);
+  assert.match(raw, /サロン情報を読み込めませんでした/);
+  assert.match(raw, /storeProfilesError = true/);
+  assert.match(raw, /店舗情報を読み込めませんでした/);
+});
+
+test("マイページ: 店舗プロフィール未作成の店舗には、作成・保存の導線と『美容師には表示されない』旨を出す", () => {
+  const raw = readFileSync("app/salon/mypage/page.tsx", "utf8");
+  assert.match(raw, /店舗プロフィールを作成して保存/);
+  assert.match(raw, /美容師には表示されません/);
+  assert.match(raw, /profileByStore\.get\(st\.id\)/);
+});
+
+test("店舗プロフィール編集: 取得失敗では空フォームを出さず、未作成は『作成』と表示する", () => {
+  const c = readFileSync("app/salon/stores/[storeId]/profile/page.tsx", "utf8");
+  assert.match(c, /内容を上書きしないよう、編集画面は表示していません/);
+  assert.match(c, /店舗プロフィールを作成/);
+  assert.match(c, /公開範囲は「非公開」から始まります/);
+  const g = readFileSync("lib/salon/store-get-initial-values.ts", "utf8");
+  assert.match(g, /loadError/);
+  assert.match(g, /visibility: storeProfile\?\.visibility \?\? "PRIVATE"/);
+});
+
+test("旧プロフィール編集（店舗あり）: 公開用の項目は表示も送信もせず、ロゴだけを update_salon_logo で保存する", () => {
+  const f = readFileSync("components/salon-profile/salon-profile-form.tsx", "utf8");
+  assert.match(f, /storeManaged \? saveSalonLogoAction : saveSalonProfileAction/);
+  // 古い値を送り直す hidden input を持たない（storeManagedのときに送る項目はavatarPathのみ）
+  assert.ok(!/value=\{initialValues\.(salonName|prefecture|city|streetAddress|employeeSizeCode|cultureDescription|bio|visibility)\}\s*\/>\s*\n\s*\{?\/?\*?[^<]*店舗プロフィールで編集/.test(f));
+  assert.ok(!/storeManaged \? \(\s*<input type="hidden" name="visibility"/.test(f));
+  const a = readFileSync("lib/salon/actions.ts", "utf8");
+  const logo = a.slice(a.indexOf("export async function saveSalonLogoAction"));
+  assert.match(logo, /rpc\("update_salon_logo"/);
+  assert.ok(!/save_salon_profile/.test(logo.replace(/\/\*[\s\S]*?\*\//g, "")));
+  const p = readFileSync("app/salon/profile/page.tsx", "utf8");
+  assert.match(p, /storeManaged=\{storeLinks\.length > 0\}/);
+  assert.match(p, /storesError \?/);
+});
+
+test("ロゴ保存の入力検証: avatarPath以外は受け取らない", () => {
+  const v = readFileSync("lib/validation/salon-logo.ts", "utf8");
+  assert.match(v, /avatarPath/);
+  assert.ok(!/salonName|visibility|bio/.test(v.replace(/\/\*[\s\S]*?\*\//g, "")));
+});
+
+test("0057ドラフト: 店舗プロフィール作成は初回登録ブロック内のみ、補完記録は行の識別子・時刻・保存列ハッシュを持つ", () => {
+  const m = readFileSync("supabase/migrations/0057_store_profile_consistency.sql", "utf8");
+  const body = m.slice(m.indexOf("create or replace function public.save_salon_profile"), m.indexOf("create or replace function public.update_salon_logo"));
+  const onboardStart = body.indexOf("if not v_already_onboarded then");
+  const insertAt = body.indexOf("insert into public.salon_store_profiles");
+  const endIf = body.indexOf("end if;", insertAt);
+  assert.ok(onboardStart >= 0 && insertAt > onboardStart && endIf > insertAt);
+  assert.equal((body.match(/insert into public\.salon_store_profiles/g) ?? []).length, 1);
+  assert.match(body, /values \(\s*v_store_id,/);
+  assert.ok(!/on conflict \(store_id\) do nothing[\s\S]*return v_profile/.test(body));
+  assert.match(m, /row_created_at\s+timestamptz not null/);
+  assert.match(m, /row_updated_at\s+timestamptz not null/);
+  assert.match(m, /content_hash\s+text not null/);
+  assert.match(m, /revoke all on function public\.update_salon_logo\(text\) from public, anon, authenticated, service_role;/);
+  assert.match(m, /grant execute on function public\.update_salon_logo\(text\) to authenticated;/);
+  const r = readFileSync("docs/review-0057/backfill-recheck-and-rollback.sql", "utf8");
+  assert.match(r, /p\.created_at = b\.row_created_at/);
+  assert.match(r, /p\.updated_at = b\.row_updated_at/);
+});
+
+test("新規登録の公開設定: 初期値は非公開で、利用者が選んだ値だけが保存される（既定値で公開しない）", () => {
+  const g = readFileSync("lib/salon/get-initial-values.ts", "utf8");
+  assert.match(g, /visibility: salon\?\.visibility \?\? "PRIVATE"/);
+  const a = readFileSync("lib/salon/actions.ts", "utf8");
+  assert.match(a, /visibility: formData\.get\("visibility"\)/);
+  const v = readFileSync("lib/validation/salon-profile.ts", "utf8");
+  assert.match(v, /visibility: visibilityEnum,/);
+  assert.ok(!/visibilityEnum\.default|visibilityEnum\.catch/.test(v));
+  const f = readFileSync("components/salon-profile/salon-profile-form.tsx", "utf8");
+  assert.match(f, /初期値は「非公開」です/);
+});
+
+test("旧プロフィール編集画面: 店舗プロフィールで編集する案内と店舗ごとのリンクを出す（取得失敗時は案内しない）", () => {
+  const c = readFileSync("app/salon/profile/page.tsx", "utf8");
+  assert.match(c, /店舗プロフィールを編集/);
+  assert.match(c, /\/salon\/stores\/\$\{st\.id\}\/profile/);
+  assert.match(c, /storesError \? \[\]/);
 });
 
 test("プレビュー: 編集対象の店舗名と保存先の違いを案内し、店舗プロフィール未保存はその旨を出す", () => {

@@ -21,8 +21,12 @@ export async function getSalonStoreProfileFormInitialValues(
 ): Promise<{
   initialValues: SalonStoreProfileFormInitialValues;
   employeeSizeOptions: Array<{ code: string; label: string }>;
+  /** 取得に失敗した（空フォームを出して保存させると既存内容を上書きしかねないため、呼び出し側でフォームを出さない） */
+  loadError: boolean;
+  /** 店舗プロフィールが既に保存されているか（false=これから作成する） */
+  exists: boolean;
 }> {
-  const [{ data: storeProfile }, { data: employeeSizes }] = await Promise.all([
+  const [{ data: storeProfile, error: profileError }, { data: employeeSizes, error: sizeError }] = await Promise.all([
     supabase.from("salon_store_profiles").select("*").eq("store_id", storeId).maybeSingle(),
     supabase.from("employee_size_master").select("*").order("sort_order", { ascending: true }),
   ]);
@@ -42,6 +46,8 @@ export async function getSalonStoreProfileFormInitialValues(
 
   return {
     initialValues,
+    loadError: Boolean(profileError) || Boolean(sizeError),
+    exists: Boolean(storeProfile),
     employeeSizeOptions: (employeeSizes ?? []).map(
       (e: { code: string; label: string }) => ({ code: e.code, label: e.label }),
     ),

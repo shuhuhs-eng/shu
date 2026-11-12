@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { salonProfileFormSchema } from "@/lib/validation/salon-profile";
+import { salonLogoFormSchema } from "@/lib/validation/salon-logo";
 import type { AuthActionState } from "@/lib/auth/types";
 
 /**
@@ -103,4 +104,52 @@ export async function saveSalonProfileAction(
   revalidatePath("/");
 
   return { success: "プロフィールを保存しました。" };
+}
+
+/**
+ * サロンロゴだけを保存する（店舗がある場合の「ロゴ・写真・リンクを編集」画面用）。
+ *
+ * 旧プロフィール項目（サロン名・所在地・紹介文・公開設定など）は送らない。update_salon_logo() RPC は
+ * profiles.avatar_path だけを更新し、salon_profiles / salon_store_profiles には触れないため、
+ * 画面を開いた時点の古い値で、店舗プロフィール側の最新の編集（初期店舗では旧プロフィールへの同期分を含む）を
+ * 巻き戻すことがない。写真・外部リンクはそれぞれ別の操作で即時に保存される。
+ */
+export async function saveSalonLogoAction(
+  _prevState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  const parsed = salonLogoFormSchema.safeParse({ avatarPath: formData.get("avatarPath") });
+  if (!parsed.success) {
+    return {
+      error: "入力内容をご確認ください。",
+      fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
+    };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "セッションが切れています。再度ログインしてください。" };
+  }
+
+  const newAvatarPath = parsed.data.avatarPath || null;
+
+  const { data: beforeProfile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+  const previousAvatarPath = beforeProfile?.avatar_path ?? null;
+
+  const { error } = await supabase.rpc("update_salon_logo", { p_avatar_path: newAvatarPath });
+  if (error) {
+    return { error: "保存に失敗しました。しばらくしてから再度お試しください。" };
+  }
+
+  if (previousAvatarPath && previousAvatarPath !== newAvatarPath) {
+    await supabase.storage.from("avatars").remove([previousAvatarPath]);
+  }
+
+  revalidatePath("/salon/profile");
+  revalidatePath("/salon/mypage");
+
+  return { success: "ロゴを保存しました。" };
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { saveSalonProfileAction } from "@/lib/salon/actions";
+import { saveSalonProfileAction, saveSalonLogoAction } from "@/lib/salon/actions";
 import { initialAuthActionState } from "@/lib/auth/types";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { PendingFieldset } from "@/components/auth/pending-fieldset";
@@ -44,6 +44,12 @@ type Props = {
   userId: string;
   initialValues: SalonProfileFormInitialValues;
   employeeSizeOptions: Array<{ code: string; label: string }>;
+  /**
+   * true のとき（店舗がある editモード）、ロゴだけを update_salon_logo() で保存する。
+   * サロン名・所在地・従業員数・得意技術・紹介文・文化・公開範囲は表示も送信もしない
+   * （店舗プロフィールで編集する。古い画面の値で最新内容を巻き戻さないため）。
+   */
+  storeManaged?: boolean;
 };
 
 const toOptions = (labels: Record<string, string>) =>
@@ -56,9 +62,12 @@ const toOptions = (labels: Record<string, string>) =>
  * 従業員数はenumではなくemployee_size_masterから取得した選択肢を使う点のみ、
  * stylist側と構造が異なる（マスタテーブル参照のため）。
  */
-export function SalonProfileForm({ mode, userId, initialValues, employeeSizeOptions }: Props) {
+export function SalonProfileForm({ mode, userId, initialValues, employeeSizeOptions, storeManaged = false }: Props) {
   const router = useRouter();
-  const [state, formAction] = useActionState(saveSalonProfileAction, initialAuthActionState);
+  const [state, formAction] = useActionState(
+    storeManaged ? saveSalonLogoAction : saveSalonProfileAction,
+    initialAuthActionState,
+  );
 
   // 初回オンボーディング（複数role対応での2つ目のroleとしての登録も含む）は
   // 保存完了後、サロンマイページへ直接遷移する。編集画面はその場に留まり
@@ -77,7 +86,7 @@ export function SalonProfileForm({ mode, userId, initialValues, employeeSizeOpti
       <PendingFieldset>
         <div className="space-y-8">
           <section className="space-y-4">
-            <h2 className="eyebrow">公開プロフィール</h2>
+            <h2 className="eyebrow">{storeManaged ? "サロンロゴ" : "公開プロフィール"}</h2>
             <AvatarUploader
               userId={userId}
               initialPath={initialValues.avatarPath}
@@ -86,6 +95,8 @@ export function SalonProfileForm({ mode, userId, initialValues, employeeSizeOpti
               label="サロンロゴ（任意）"
               description="サロンのロゴ画像を登録できます（JPEG・PNG・WebP / 5MB以下）"
             />
+            {storeManaged ? null : (
+              <>
             <TextField
               id="salonName"
               name="salonName"
@@ -163,6 +174,8 @@ export function SalonProfileForm({ mode, userId, initialValues, employeeSizeOpti
               maxLength={1000}
               errors={state.fieldErrors?.bio}
             />
+              </>
+            )}
           </section>
 
           <section className="space-y-5">
@@ -172,10 +185,15 @@ export function SalonProfileForm({ mode, userId, initialValues, employeeSizeOpti
               // user_roles(salon)を必須とするため、保存前のアップロードは必ず失敗していた）。
               // 保存後にサロンマイページの「サロンプロフィールを編集」から追加できる。
               <p className="rounded-xl border border-line bg-surface2 px-4 py-3 text-[12.5px] leading-relaxed text-sub">
-                内装・スタッフの写真は、プロフィールを保存した後に、マイページの「サロンプロフィールを編集」から追加できます。
+                内装・スタッフの写真は、プロフィールを保存した後に、マイページの「ロゴ・写真・リンクを編集」から追加できます。
               </p>
             ) : (
               <>
+                {storeManaged && (
+                  <p className="rounded-xl border border-line bg-surface2 px-4 py-3 text-[12.5px] leading-relaxed text-sub">
+                    ここで登録した写真は、現時点では美容師向けの店舗画面には表示されません（店舗ごとの写真は今後の対応です）。
+                  </p>
+                )}
                 <SalonPhotoUploader
                   userId={userId}
                   category="interior"
@@ -200,6 +218,7 @@ export function SalonProfileForm({ mode, userId, initialValues, employeeSizeOpti
             <SalonLinksEditor initialLinks={initialValues.salonLinks} />
           </section>
 
+          {storeManaged ? null : (
           <section className="space-y-4">
             <h2 className="eyebrow">公開範囲</h2>
             <SelectField
@@ -210,12 +229,18 @@ export function SalonProfileForm({ mode, userId, initialValues, employeeSizeOpti
               options={toOptions(VISIBILITY_LABELS)}
               errors={state.fieldErrors?.visibility}
             />
+            {mode === "create" && (
+              <p className="text-[12px] leading-relaxed text-sub">
+                初期値は「非公開」です。「公開」を選んで保存すると、保存後すぐに、美容師に店舗の情報が表示されます。
+              </p>
+            )}
           </section>
+          )}
         </div>
       </PendingFieldset>
 
       <SubmitButton pendingText="保存中...">
-        {mode === "create" ? "プロフィールを保存して始める" : "変更を保存"}
+        {mode === "create" ? "プロフィールを保存して始める" : storeManaged ? "ロゴを保存" : "変更を保存"}
       </SubmitButton>
 
       {mode === "edit" && (

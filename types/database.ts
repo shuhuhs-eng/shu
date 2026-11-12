@@ -686,6 +686,13 @@ export type Database = {
         };
         Returns: Database["public"]["Tables"]["profiles"]["Row"];
       };
+      update_salon_logo: {
+        // 0057で追加（ドラフト）。ロゴ(profiles.avatar_path)だけを更新する。salon_profilesには触れない。
+        Args: {
+          p_avatar_path: string | null;
+        };
+        Returns: Database["public"]["Tables"]["profiles"]["Row"];
+      };
       add_salon_photo: {
         // 0014で追加。caller=salon role・storage_pathの本人所有権・categoryの
         // 整合性はRPC内部（SQL側）で検証する。クライアントはstorage_pathの

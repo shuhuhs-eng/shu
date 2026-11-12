@@ -85,26 +85,63 @@ export default async function SalonMyPage() {
   const salonTypeClassification =
     cultureProfile?.status === "completed" ? deriveSalonTypes(cultureProfile.culture_axes ?? {}) : null;
 
-  const { data: salon } = await supabase
+  const { data: salon, error: salonError } = await supabase
     .from("salon_profiles")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
+  if (salonError) logError("salonMypage.salonProfile", salonError);
 
   // 「美容師からの見え方を確認」の対象店舗。既存RLS（is_store_accessible）で見える店舗だけが返る。
-  // 取得失敗は「店舗なし」とは別に扱う。
+  // 取得失敗は「店舗なし」とも「未作成」とも別に扱う（旧プロフィールへ黙って切り替えない）。
   const { data: previewStores, error: previewStoresError } = await supabase
     .from("salon_stores")
     .select("id, store_name")
     .order("store_name", { ascending: true });
   if (previewStoresError) logError("salonMypage.previewStores", previewStoresError);
 
+  const storeList = previewStoresError ? [] : (previewStores ?? []);
+  type StoreProfileSummary = {
+    store_id: string;
+    salon_name: string | null;
+    prefecture: string | null;
+    city: string | null;
+    employee_size_code: string | null;
+  };
+  // 店舗プロフィール（美容師に表示される内容）。店舗ごとの有無をここで判定する。
+  let storeProfiles: StoreProfileSummary[] = [];
+  let storeProfilesError = false;
+  if (storeList.length > 0) {
+    const { data: sps, error: spError } = await supabase
+      .from("salon_store_profiles")
+      .select("store_id, salon_name, prefecture, city, employee_size_code")
+      .in(
+        "store_id",
+        storeList.map((st) => st.id),
+      );
+    if (spError) {
+      logError("salonMypage.storeProfiles", spError);
+      storeProfilesError = true;
+    } else {
+      storeProfiles = sps ?? [];
+    }
+  }
+  const profileByStore = new Map(storeProfiles.map((sp) => [sp.store_id, sp]));
+  const hasStores = storeList.length > 0;
+  // 概要欄の表示元:
+  //   店舗なし → 旧プロフィール（従来どおり） / 店舗1つ → その店舗プロフィール（未作成なら未作成と表示）
+  //   店舗複数 → 概要は店舗ごとの一覧（旧プロフィールの内容は出さない）
+  const overviewLoadError = Boolean(previewStoresError) || storeProfilesError || (!hasStores && Boolean(salonError));
+  const singleStore = storeList.length === 1 ? storeList[0] : null;
+  const singleStoreProfile = singleStore ? (profileByStore.get(singleStore.id) ?? null) : null;
+  const overview = hasStores ? singleStoreProfile : salon;
+
   let employeeSizeLabel: string | null = null;
-  if (salon?.employee_size_code) {
+  if (overview?.employee_size_code) {
     const { data: sizeRow } = await supabase
       .from("employee_size_master")
       .select("*")
-      .eq("code", salon.employee_size_code)
+      .eq("code", overview.employee_size_code)
       .maybeSingle();
     employeeSizeLabel = sizeRow?.label ?? null;
   }
@@ -156,51 +193,91 @@ export default async function SalonMyPage() {
       <h1 className="mt-5 font-serif text-2xl font-bold text-ink">マイページ</h1>
 
       <section className="mt-6 rounded-2xl border border-line bg-surface p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
+        <div className="flex flex-col items-start gap-3 min-[400px]:flex-row min-[400px]:justify-between">
+          <div className="min-w-0">
             <p className="eyebrow mb-1">サロン概要</p>
-            <h2 className="font-serif text-xl font-bold text-ink">{salon?.salon_name ?? "（サロン名未設定）"}</h2>
-            <p className="mt-1 text-[13px] text-sub">
-              {[salon?.prefecture, salon?.city].filter(Boolean).join(" ") || "所在地未設定"}
-            </p>
-            {employeeSizeLabel && <p className="mt-1 text-[13px] text-sub">従業員数: {employeeSizeLabel}</p>}
+            {overviewLoadError ? (
+              <p className="text-[13px] leading-relaxed text-sub">
+                サロン情報を読み込めませんでした。画面を更新してもう一度お試しください。
+              </p>
+            ) : storeList.length > 1 ? (
+              <p className="text-[13px] leading-relaxed text-sub">
+                店舗が複数あります。美容師に表示される内容は、店舗ごとに下で確認・編集できます。
+              </p>
+            ) : singleStore && !singleStoreProfile ? (
+              <>
+                <h2 className="font-serif text-xl font-bold text-ink">{singleStore.store_name}</h2>
+                <p className="mt-1 text-[13px] text-sub">公開用の店舗プロフィールは、まだ作成されていません。</p>
+              </>
+            ) : (
+              <>
+                <h2 className="font-serif text-xl font-bold text-ink">{overview?.salon_name ?? "（サロン名未設定）"}</h2>
+                <p className="mt-1 text-[13px] text-sub">
+                  {[overview?.prefecture, overview?.city].filter(Boolean).join(" ") || "所在地未設定"}
+                </p>
+                {employeeSizeLabel && <p className="mt-1 text-[13px] text-sub">従業員数: {employeeSizeLabel}</p>}
+              </>
+            )}
           </div>
           <Link href="/salon/profile" className="text-[13px] font-semibold underline shrink-0">
-            サロンプロフィールを編集
+            {hasStores ? "ロゴ・写真・リンクを編集" : "サロンプロフィールを編集"}
           </Link>
         </div>
 
         {/* 美容師からの見え方（プレビュー）への入口。店舗ごとに別のページで、別店舗の内容は混ぜない。 */}
         <div className="mt-4 border-t border-line pt-4">
-          {previewStoresError ? (
+          {previewStoresError || storeProfilesError ? (
             <p className="text-[12.5px] leading-relaxed text-sub">
               店舗情報を読み込めませんでした。画面を更新してもう一度お試しください。
             </p>
-          ) : (previewStores ?? []).length === 0 ? null : (
-            <div className="space-y-2">
-              {(previewStores ?? []).map((st) => {
-                const many = (previewStores ?? []).length > 1;
+          ) : storeList.length === 0 ? null : (
+            <div className="space-y-4">
+              {storeList.map((st) => {
+                const many = storeList.length > 1;
+                const sp = profileByStore.get(st.id) ?? null;
                 return (
                   <div key={st.id} className="space-y-2">
-                    <Link
-                      href={`/salon/stores/${st.id}/preview`}
-                      className="flex w-full items-center justify-center rounded-full border border-line bg-surface2 px-5 py-3 text-[13.5px] font-semibold text-ink"
-                    >
-                      美容師からの見え方を確認
-                      {many && <span className="ml-1 font-normal text-sub">（{st.store_name}）</span>}
-                    </Link>
-                    <Link
-                      href={`/salon/stores/${st.id}/profile`}
-                      className="flex w-full items-center justify-center rounded-full border border-line bg-surface px-5 py-3 text-[13.5px] font-semibold text-ink"
-                    >
-                      店舗プロフィールを編集
-                      {many && <span className="ml-1 font-normal text-sub">（{st.store_name}）</span>}
-                    </Link>
+                    {many && (
+                      <p className="text-[13px] font-bold text-ink">
+                        {st.store_name}
+                        <span className="ml-2 text-[12px] font-normal text-sub">
+                          {sp ? [sp.prefecture, sp.city].filter(Boolean).join(" ") || "所在地未設定" : "店舗プロフィール未作成"}
+                        </span>
+                      </p>
+                    )}
+                    {sp ? (
+                      <>
+                        <Link
+                          href={`/salon/stores/${st.id}/preview`}
+                          className="flex w-full items-center justify-center rounded-full border border-line bg-surface2 px-5 py-3 text-[13.5px] font-semibold text-ink"
+                        >
+                          美容師からの見え方を確認
+                        </Link>
+                        <Link
+                          href={`/salon/stores/${st.id}/profile`}
+                          className="flex w-full items-center justify-center rounded-full border border-line bg-surface px-5 py-3 text-[13.5px] font-semibold text-ink"
+                        >
+                          店舗プロフィールを編集
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-[12.5px] leading-relaxed text-sub">
+                          この店舗の公開用プロフィールは未作成のため、美容師には表示されません。作成して保存すると、選んだ公開範囲で表示されます。
+                        </p>
+                        <Link
+                          href={`/salon/stores/${st.id}/profile`}
+                          className="flex w-full items-center justify-center rounded-full bg-ink px-5 py-3 text-[13.5px] font-semibold text-surface"
+                        >
+                          店舗プロフィールを作成して保存
+                        </Link>
+                      </>
+                    )}
                   </div>
                 );
               })}
               <p className="text-[11.5px] leading-relaxed text-sub">
-                美容師に表示される内容は、店舗ごとの「店舗プロフィール」の保存内容です。上の「サロンプロフィールを編集」（この概要欄の表示元）とは保存先が別のため、美容師からの見え方は上のボタンで確認し、内容を直すときは「店舗プロフィールを編集」から行ってください。
+                美容師に表示される店舗の基本情報は「店舗プロフィール」で編集します。保存後は「美容師からの見え方を確認」で同じ内容を確認できます。ロゴ・写真・リンクは「ロゴ・写真・リンクを編集」から編集します。
               </p>
             </div>
           )}
