@@ -17,8 +17,10 @@ type LoadState = "loading" | "none" | ComputedDiagnosis;
  *
  * これは表示専用のプレビューであり、真値は /api/diagnosis/guest が
  * 既にpending_diagnosesへ保存済み（claim_token Cookieも発行済み）。
- * 会員登録・ログインすると、既存のclaimPendingDiagnosisIfPresent()が
- * 自動的にこの診断結果をアカウントへ紐づけ、diagnosis_resultsとして確定保存する。
+ * 「新規会員登録」した場合だけ、その新しいアカウントの初回結果として引き継ぎ（claimPendingDiagnosisForNewAccount。
+ * サーバー側で新規作成されたアカウントであることを確認した場合のみ）、diagnosis_resultsとして確定保存する。
+ * 既存アカウントへのログインでは、この結果は保存されない（保存済みの診断結果は変わらない）。
+ * 既存会員が結果を更新したいときは、ログイン中に「診断を受け直す」から回答する。
  *
  * ★美容師診断（mode==="stylist"）のファーストビューを、6才能グラフ先出しから
  * 「8タイプキャラクター→登録CTA」優先の構成に変更した。
@@ -56,7 +58,7 @@ function MemberResultNotice({ saved, mypageHref, retakeHref }: { saved: boolean;
       <p className="text-[13.5px] leading-relaxed text-charcoal">
         {saved
           ? "今回の診断結果をあなたのアカウントに保存しました。"
-          : "ログイン中です。マイページで最新の診断結果を確認できます。"}
+          : "この結果は、あなたのアカウントには保存されていません。保存済みの診断結果は、マイページで確認できます。"}
       </p>
       <Link
         href={mypageHref}
@@ -76,6 +78,11 @@ function MemberResultNotice({ saved, mypageHref, retakeHref }: { saved: boolean;
       <Link href={retakeHref} className="mt-3 inline-block text-[13px] text-sub underline">
         診断を受け直す
       </Link>
+      {!saved && (
+        <p className="mt-2 text-[12px] leading-relaxed text-sub">
+          ログイン中に「診断を受け直す」から回答すると、その結果があなたのアカウントに保存されます。
+        </p>
+      )}
     </div>
   );
 }
@@ -175,7 +182,7 @@ export default function DiagnosisResultPage() {
         {isMember ? (
           <div className="mt-8 rounded-2xl border border-line bg-surface2 p-6 text-center">
             <p className="text-[13.5px] leading-relaxed text-charcoal">
-              {saved ? "今回の診断の回答をあなたのアカウントに保存しました。" : "ログイン中です。"}
+              {saved ? "今回の診断の回答をあなたのアカウントに保存しました。" : "この結果は、あなたのアカウントには保存されていません。"}
             </p>
             <Link
               href="/salon/mypage"
@@ -339,8 +346,11 @@ export default function DiagnosisResultPage() {
       <p className="mt-3 text-center text-[13px] text-sub">
         すでに会員の方は{" "}
         <Link href="/stylist/login?next=/stylist/mypage" className="underline">
-          ログインして今回の診断結果を保存・表示する
+          ログイン
         </Link>
+      </p>
+      <p className="mt-1 text-center text-[11.5px] leading-relaxed text-sub">
+        ログインしても、今回の結果は保存されません。保存済みの結果はマイページで確認できます（更新するには、ログイン後に診断を受け直してください）。
       </p>
       <p className="mt-3 text-center">
         <Link href={retakeHref} className="text-[13px] text-sub underline">

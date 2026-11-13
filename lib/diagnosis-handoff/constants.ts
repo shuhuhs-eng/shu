@@ -18,3 +18,17 @@ export const DIAGNOSIS_RESULT_STORAGE_KEY = "br_diagnosis_preview";
  * 結果画面はこれが無い限り「保存済み」とは表示しない。
  */
 export const DIAGNOSIS_SAVED_STORAGE_KEY = "br_diagnosis_saved_id";
+
+/**
+ * 新規アカウント作成時に、ゲスト診断の保留トークンのハッシュを Supabase Auth の user_metadata へ入れるキー。
+ * サーバー側の signUp 処理（lib/auth/actions.ts）だけが、その時点の Cookie から計算して入れる。
+ * 「この新規アカウントは、このゲスト診断につながる登録として作られた」ことの確認に使う
+ * （既存アカウントへのログインや、登録済みメールでの再登録では入らない）。
+ */
+export const CLAIM_BINDING_METADATA_KEY = "diagnosis_claim_hash";
+
+/** 新規アカウントとして扱う、メール確認（または登録）からの最大経過時間。確認リンクの有効期限より短くする。 */
+export const NEW_ACCOUNT_CONFIRMED_WITHIN_MS = 10 * 60 * 1000;
+
+/** 新規アカウントとして扱う、アカウント作成からの最大経過時間（確認メールを後で開く場合を含む）。 */
+export const NEW_ACCOUNT_CREATED_WITHIN_MS = 48 * 60 * 60 * 1000;

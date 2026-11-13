@@ -6,16 +6,30 @@ import { createTokenClient } from "@/lib/supabase/token-client";
 import { computeDiagnosis, isValidAnswers, type ComputedDiagnosis } from "@/lib/diagnosis";
 import { generateDiagnosisNarrative } from "@/lib/ai/generate-diagnosis-narrative";
 import { CLAIM_TOKEN_COOKIE } from "@/lib/diagnosis-handoff/constants";
+import { isFreshAccountBoundToClaimToken, type AuthUserForClaim } from "@/lib/diagnosis-handoff/new-account";
 import { logError } from "@/lib/security/log";
 
 export type ClaimResult = { claimed: boolean; diagnosisResultId: string | null };
 
 /**
- * 未ログイン時に受けた診断結果を、ログイン中の本人アカウントへ紐づける。
- * ログイン直後・メール確認直後など「セッションが確立した直後」からベストエフォートで
- * 呼び出す想定（失敗してもログイン処理自体は継続してよい）。
+ * 未ログインで受けた診断（ゲスト診断）を、「新しく作られたアカウント」の初回結果として引き継ぐ。
  *
- * 処理順序（claim_status: PENDING → PROCESSING → COMPLETED）:
+ * ★既存アカウントへのログインでは呼ばない（呼んではいけない）。既存会員が未ログインで別の診断を
+ *   出してからログインしても、保存済みの診断結果・タイプ・マイページの表示は変えない。
+ *   ログインした事実は、ゲスト診断を保存することへの同意として扱わない（lib/auth/actions.ts の signInAction は
+ *   discardGuestDiagnosisCookie() だけを呼ぶ）。
+ *
+ * 引き継ぐのは、次を「サーバー側で」すべて確認できたときだけ（isFreshAccountBoundToClaimToken）:
+ *   ・登録時にサーバーが user_metadata に入れた、保留トークンのハッシュが今のCookieと一致する
+ *   ・アカウントの作成が最近で、メール確認（登録）がたった今である
+ * URLのフラグやブラウザ内の印は使わない。呼び出し元は、signUp の直後（確認不要の設定の場合）と、
+ * メール確認コールバック（パスワード再設定ではない場合）だけ。
+ *
+ * 以降の処理は従来どおり（claim_status: PENDING → PROCESSING → COMPLETED）。
+ * ★途中で失敗して PROCESSING のまま残った場合の再開は、同じ呼び出し元（新規登録の確認直後）で
+ *   引き継ぎ条件（メール確認から10分以内）を満たす間だけ行える。期限を過ぎたら自動では再開しない
+ *   （ログインでは再開しない。遅れて保存される経路を作らないため）。
+ * 処理順序:
  *   1. Cookieのclaim_tokenを読む（無ければ何もしない）
  *   2. start_pending_diagnosis_claim() RPCで PENDING→PROCESSING（二重クレームはRPC側で防止。
  *      同一ユーザーによる再試行は同じPROCESSING行を冪等に返す）
@@ -41,16 +55,24 @@ export type ClaimResult = { claimed: boolean; diagnosisResultId: string | null }
  *        → このclaim_tokenで再試行しても状況は変わらないため削除する。
  *      ・complete_pending_diagnosis_claim() まで成功した場合 → 完了したので削除する。
  *      ・上記以外（start成功後、回答検証・INSERT・completeのいずれかで失敗した場合）
- *        → claim_tokenを保持したままにする。次回このユーザーが再度ログイン等で
+ *        → claim_tokenを保持したままにする。新規登録の確認直後（引き継ぎ条件を満たす間）に
  *          このフローに入れば、同じCookieを使ってPROCESSING状態から再試行できる
  *          （Cookieを消してしまうと、再試行に必要な資格情報自体が失われ、
  *          「PROCESSING状態から何度でも再実行できる」設計が機能しなくなるため）。
  */
-export async function claimPendingDiagnosisIfPresent(): Promise<ClaimResult> {
+export async function claimPendingDiagnosisForNewAccount(user: AuthUserForClaim): Promise<ClaimResult> {
   const cookieStore = await cookies();
   const claimToken = cookieStore.get(CLAIM_TOKEN_COOKIE)?.value;
 
   if (!claimToken) {
+    return { claimed: false, diagnosisResultId: null };
+  }
+
+  // 新規アカウントの初回結果としての引き継ぎ条件を満たさない場合は、何も保存しない。
+  // Cookieもここでは消さない（まだ確認が済んでいない新規登録のためのものかもしれず、
+  // 別のアカウントのログインで消えると、本当の新規登録の引き継ぎができなくなるため）。
+  // トークンのハッシュが一致するアカウントにしか使えないので、残っていても他人には紐づかない。
+  if (!isFreshAccountBoundToClaimToken(user, claimToken)) {
     return { claimed: false, diagnosisResultId: null };
   }
 
@@ -75,10 +97,11 @@ export async function claimPendingDiagnosisIfPresent(): Promise<ClaimResult> {
   }
 
   const {
-    data: { user },
+    data: { user: sessionUser },
   } = await supabase.auth.getUser();
-  if (!user) {
-    // セッションが取れない一時的な状態。Cookieは保持し、次回に再試行させる。
+  if (!sessionUser || sessionUser.id !== user.id) {
+    // セッションが取れない一時的な状態、または渡されたユーザーと現在のセッションが一致しない。
+    // 別のアカウントへ紐づけないよう、何も保存しない。
     return { claimed: false, diagnosisResultId: null };
   }
 
@@ -91,7 +114,7 @@ export async function claimPendingDiagnosisIfPresent(): Promise<ClaimResult> {
   await createServiceClient()
     .from("diagnosis_results")
     .insert({
-      user_id: user.id,
+      user_id: sessionUser.id,
       diagnosis_version: computed.diagnosisVersion,
       mode: computed.mode,
       answers: pending.answers,
@@ -283,4 +306,16 @@ export async function runAiGenerationJob(
     p_diagnosis_result_id: diagnosisResultId,
     p_status: allOk ? "READY" : "FAILED",
   });
+}
+
+/**
+ * 既存アカウントへのログイン時に、このブラウザに残っているゲスト診断の保留Cookieを破棄する。
+ * ゲスト診断は保存せず、後日の再ログイン・メール確認・別アカウントへの切り替えで遅れて取り込まれる
+ * 余地も残さないための後始末（DBの保留行は期限で自動的に失効する。ここでは何も保存しない）。
+ */
+export async function discardGuestDiagnosisCookie(): Promise<void> {
+  const cookieStore = await cookies();
+  if (cookieStore.get(CLAIM_TOKEN_COOKIE)) {
+    cookieStore.delete(CLAIM_TOKEN_COOKIE);
+  }
 }

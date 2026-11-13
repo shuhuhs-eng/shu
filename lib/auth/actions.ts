@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSiteUrl } from "@/lib/site-url";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getClientIpFromHeaders } from "@/lib/rate-limit/memory-rate-limiter";
 import { checkSharedRateLimit } from "@/lib/rate-limit/shared-rate-limiter";
 import { CAPTCHA_REQUIRED_MESSAGE, requireCaptchaToken } from "@/lib/security/bot-protection";
@@ -11,7 +11,9 @@ import { safeInternalPath } from "@/lib/auth/safe-path";
 import { checkSignupRateLimit, signupRateLimitMessage } from "@/lib/auth/signup-rate-limit";
 import { describeAuthError } from "@/lib/auth/errors";
 import { determinePostAuthPath, determineRoleEntryPath } from "@/lib/auth/post-auth-redirect";
-import { claimPendingDiagnosisIfPresent } from "@/lib/diagnosis-handoff/claim";
+import { claimPendingDiagnosisForNewAccount, discardGuestDiagnosisCookie } from "@/lib/diagnosis-handoff/claim";
+import { CLAIM_BINDING_METADATA_KEY, CLAIM_TOKEN_COOKIE } from "@/lib/diagnosis-handoff/constants";
+import { hashClaimToken } from "@/lib/diagnosis-handoff/new-account";
 import {
   signUpSchema,
   loginSchema,
@@ -60,6 +62,12 @@ async function performSignUp(
 
   const supabase = await createClient();
 
+  // ゲスト診断につながる新規登録の印: このブラウザに保留中のゲスト診断（Cookie）があれば、そのトークンの
+  // ハッシュを user_metadata に入れる。メール確認後のコールバックが「この新規アカウントは、この診断につながる
+  // 登録として作られた」ことをサーバー側で確かめるために使う。既存アカウントのログインには入らない。
+  const guestClaimToken = (await cookies()).get(CLAIM_TOKEN_COOKIE)?.value;
+  const claimBinding = guestClaimToken ? { [CLAIM_BINDING_METADATA_KEY]: hashClaimToken(guestClaimToken) } : {};
+
   // signUpが例外で終わった場合（通信切断など）は結果が分からないため、予約はそのまま残す
   // （期限で自動的に枠から外れる。未確認の要求を「消費した」とも「消費していない」とも断定しない）。
   const { data, error } = await supabase.auth.signUp({
@@ -67,7 +75,7 @@ async function performSignUp(
     password,
     options: {
       emailRedirectTo: `${getSiteUrl()}/auth/callback`,
-      data: { display_name: displayName, role },
+      data: { display_name: displayName, role, ...claimBinding },
       captchaToken: captcha.captchaToken,
     },
   });
@@ -95,6 +103,12 @@ async function performSignUp(
     return {
       error: "このメールアドレスは既に登録されています。ログインをご利用ください。",
     };
+  }
+
+  // メール確認が不要な設定（signUpの時点でセッションが作られる）の場合は、ここで「本当に新しく作られた
+  // アカウント」の初回結果としてゲスト診断を引き継ぐ。確認メールが必要な設定では、確認リンクのコールバックで行う。
+  if (data.session && data.user) {
+    await claimPendingDiagnosisForNewAccount(data.user);
   }
 
   return {
@@ -168,9 +182,11 @@ export async function signInAction(
     return { error: describeAuthError("login", error) };
   }
 
-  // 未ログイン時に受けた診断結果があれば、ここで本人アカウントへ紐づける。
-  // 失敗してもログイン処理自体は継続する（ベストエフォート）。
-  await claimPendingDiagnosisIfPresent();
+  // ★既存アカウントへのログインでは、未ログイン時に出したゲスト診断を保存しない（取り込まない）。
+  // 保存済みの診断結果・タイプ・マイページの表示は変えない。ログインしたことを、ゲスト診断を保存することへの
+  // 同意として扱わない。このブラウザに残っている保留Cookieは、後日の再ログイン・メール確認・別アカウントへの
+  // 切り替えで遅れて取り込まれないよう、ここで破棄する。
+  await discardGuestDiagnosisCookie();
 
   // 保護ルートから弾かれてログインに来た場合は、元のURLへ戻す（安全なパスのみ）。
   const next = safeInternalPath(formData.get("next"));
