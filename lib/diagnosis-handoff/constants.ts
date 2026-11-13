@@ -20,15 +20,19 @@ export const DIAGNOSIS_RESULT_STORAGE_KEY = "br_diagnosis_preview";
 export const DIAGNOSIS_SAVED_STORAGE_KEY = "br_diagnosis_saved_id";
 
 /**
- * 新規アカウント作成時に、ゲスト診断の保留トークンのハッシュを Supabase Auth の user_metadata へ入れるキー。
- * サーバー側の signUp 処理（lib/auth/actions.ts）だけが、その時点の Cookie から計算して入れる。
- * 「この新規アカウントは、このゲスト診断につながる登録として作られた」ことの確認に使う
- * （既存アカウントへのログインや、登録済みメールでの再登録では入らない）。
+ * 「この新規登録は、このブラウザのゲスト診断につながる」ことをサーバーが署名して残すCookie名（httpOnly）。
+ * 値は「発行時刻.HMAC」。HMACは、サーバーだけが持つ秘密鍵で（ユーザーID・保留トークンのハッシュ・発行時刻）に
+ * 署名したもの。利用者本人が書き換えられる user_metadata や、URL・localStorage の印は使わない。
+ * 発行するのは signUp の応答が「今まさに作られた新しいユーザー」を示したときだけ（lib/auth/actions.ts）。
  */
-export const CLAIM_BINDING_METADATA_KEY = "diagnosis_claim_hash";
+export const CLAIM_BINDING_COOKIE = "br_claim_bind";
 
-/** 新規アカウントとして扱う、メール確認（または登録）からの最大経過時間。確認リンクの有効期限より短くする。 */
-export const NEW_ACCOUNT_CONFIRMED_WITHIN_MS = 10 * 60 * 1000;
+/** 署名の有効時間。確認メールを後で開く場合も含めるための上限（Supabaseの確認リンクの最長有効期限と同じ24時間）。 */
+export const CLAIM_BINDING_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** 新規アカウントとして扱う、アカウント作成からの最大経過時間（確認メールを後で開く場合を含む）。 */
-export const NEW_ACCOUNT_CREATED_WITHIN_MS = 48 * 60 * 60 * 1000;
+/**
+ * signUp の応答のユーザーを「今回の処理で作られた」と見なす、作成時刻からの最大経過時間。
+ * Supabaseは登録済み（確認待ち）のメールで再登録しても、既存ユーザーを返す（作成時刻は過去のまま）。
+ * その場合を「新しく作られた」と誤認しないための確認。サーバー間の時計のずれを見込んで2分。
+ */
+export const SIGNUP_CREATED_WITHIN_MS = 2 * 60 * 1000;

@@ -12,8 +12,8 @@ import { checkSignupRateLimit, signupRateLimitMessage } from "@/lib/auth/signup-
 import { describeAuthError } from "@/lib/auth/errors";
 import { determinePostAuthPath, determineRoleEntryPath } from "@/lib/auth/post-auth-redirect";
 import { claimPendingDiagnosisForNewAccount, discardGuestDiagnosisCookie } from "@/lib/diagnosis-handoff/claim";
-import { CLAIM_BINDING_METADATA_KEY, CLAIM_TOKEN_COOKIE } from "@/lib/diagnosis-handoff/constants";
-import { hashClaimToken } from "@/lib/diagnosis-handoff/new-account";
+import { CLAIM_BINDING_COOKIE, CLAIM_BINDING_TTL_MS, CLAIM_TOKEN_COOKIE } from "@/lib/diagnosis-handoff/constants";
+import { issueSignUpBinding } from "@/lib/diagnosis-handoff/new-account";
 import {
   signUpSchema,
   loginSchema,
@@ -62,11 +62,9 @@ async function performSignUp(
 
   const supabase = await createClient();
 
-  // ゲスト診断につながる新規登録の印: このブラウザに保留中のゲスト診断（Cookie）があれば、そのトークンの
-  // ハッシュを user_metadata に入れる。メール確認後のコールバックが「この新規アカウントは、この診断につながる
-  // 登録として作られた」ことをサーバー側で確かめるために使う。既存アカウントのログインには入らない。
+  // このブラウザに保留中のゲスト診断（Cookie）があるか。新規登録の印は、signUp が「今作られた新しいユーザー」を
+  // 返した後にだけ、サーバーが署名して発行する（下）。利用者が書き換えられる user_metadata には入れない。
   const guestClaimToken = (await cookies()).get(CLAIM_TOKEN_COOKIE)?.value;
-  const claimBinding = guestClaimToken ? { [CLAIM_BINDING_METADATA_KEY]: hashClaimToken(guestClaimToken) } : {};
 
   // signUpが例外で終わった場合（通信切断など）は結果が分からないため、予約はそのまま残す
   // （期限で自動的に枠から外れる。未確認の要求を「消費した」とも「消費していない」とも断定しない）。
@@ -75,7 +73,7 @@ async function performSignUp(
     password,
     options: {
       emailRedirectTo: `${getSiteUrl()}/auth/callback`,
-      data: { display_name: displayName, role, ...claimBinding },
+      data: { display_name: displayName, role },
       captchaToken: captcha.captchaToken,
     },
   });
@@ -107,8 +105,20 @@ async function performSignUp(
 
   // メール確認が不要な設定（signUpの時点でセッションが作られる）の場合は、ここで「本当に新しく作られた
   // アカウント」の初回結果としてゲスト診断を引き継ぐ。確認メールが必要な設定では、確認リンクのコールバックで行う。
-  if (data.session && data.user) {
-    await claimPendingDiagnosisForNewAccount(data.user);
+  // 新規登録の印（署名付き）は、signUp が今まさに作ったユーザーに対してだけ発行する。登録済み（確認待ち含む）の
+  // メールでの再登録では、作成時刻が過去になるため発行されず、ゲスト診断は取り込まれない。
+  const binding = data.user ? issueSignUpBinding(data.user, guestClaimToken) : null;
+  if (binding) {
+    (await cookies()).set(CLAIM_BINDING_COOKIE, binding, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: Math.floor(CLAIM_BINDING_TTL_MS / 1000),
+    });
+    if (data.session && data.user) {
+      await claimPendingDiagnosisForNewAccount(data.user, { binding });
+    }
   }
 
   return {

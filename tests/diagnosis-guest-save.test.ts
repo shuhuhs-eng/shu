@@ -3,13 +3,15 @@ import test, { after as afterAll } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
-  hashClaimToken,
-  isFreshAccountBoundToClaimToken,
-  type AuthUserForClaim,
+  isUserCreatedBySignUp,
+  issueSignUpBinding,
+  verifySignUpBinding,
 } from "../lib/diagnosis-handoff/new-account";
-import { CLAIM_BINDING_METADATA_KEY, CLAIM_TOKEN_COOKIE } from "../lib/diagnosis-handoff/constants";
+import { CLAIM_BINDING_COOKIE, CLAIM_TOKEN_COOKIE } from "../lib/diagnosis-handoff/constants";
+
+process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key-for-hmac";
 import { Q } from "../lib/diagnosis/questions";
 
 /**
@@ -50,7 +52,7 @@ const env = {
   pendings: [] as Pending[],
   results: [] as Result[],
   codes: new Map<string, string>(), // 確認コード -> user id
-  signUpMode: "confirm" as "confirm" | "auto" | "existing",
+  signUpMode: "confirm" as "confirm" | "auto" | "existing" | "unconfirmed",
   failResultInsert: false,
   clock: 0, // 結果の created_at を単調増加させるための刻み
 };
@@ -125,6 +127,13 @@ function fakeSupabase() {
         if (env.signUpMode === "existing") {
           // 登録済みメールでの再登録: 新しいユーザーは作られず、identities は空
           return { data: { user: { id: randomUUID(), identities: [], user_metadata: options.data }, session: null }, error: null };
+        }
+        if (env.signUpMode === "unconfirmed") {
+          // 確認待ち（未確認）の既存ユーザーで再登録: Supabaseは既存ユーザーを返し（作成時刻は過去のまま・identitiesあり）、
+          // 送られたメタデータで上書きして確認メールを再送する。
+          const old = [...env.users.values()].find((x) => x.email === email)!;
+          old.user_metadata = { ...old.user_metadata, ...options.data };
+          return { data: { user: { ...old, identities: [{ id: "i" }] }, session: null }, error: null };
         }
         const u = makeUser(email, { ageMs: 1000, confirmedAgoMs: env.signUpMode === "auto" ? 0 : null, meta: options.data });
         if (env.signUpMode === "auto") env.sessionUserId = u.id;
@@ -295,31 +304,38 @@ function seedExistingMemberWithResultA() {
 }
 
 // ------------------------------------------------------------------ 純粋な判定
-test("新規アカウント判定: 印・作成直後・確認直後がそろった場合だけ true。既存・古い・別トークン・印なしは false", () => {
+test("新規登録の印: サーバー署名つき。作成直後のユーザーにだけ発行され、ユーザーID・トークン・期限が合うときだけ有効", () => {
   const token = randomUUID();
-  const fresh = (over: Partial<AuthUserForClaim> = {}): AuthUserForClaim => ({
-    id: "u",
-    created_at: new Date(Date.now() - 60_000).toISOString(),
-    email_confirmed_at: new Date(Date.now() - 5_000).toISOString(),
-    user_metadata: { [CLAIM_BINDING_METADATA_KEY]: hashClaimToken(token) },
+  const now = Date.now();
+  const created = (over: Record<string, unknown> = {}) => ({
+    id: "user-1",
+    created_at: new Date(now - 5_000).toISOString(),
+    identities: [{ id: "i" }],
     ...over,
   });
-  assert.equal(isFreshAccountBoundToClaimToken(fresh(), token), true);
-  assert.equal(isFreshAccountBoundToClaimToken(fresh(), randomUUID()), false, "別のトークン");
-  assert.equal(isFreshAccountBoundToClaimToken(fresh(), undefined), false, "Cookieなし");
-  assert.equal(isFreshAccountBoundToClaimToken(fresh({ user_metadata: {} }), token), false, "登録時の印なし（既存アカウント）");
-  assert.equal(
-    isFreshAccountBoundToClaimToken(fresh({ email_confirmed_at: new Date(Date.now() - 3 * 3600_000).toISOString() }), token),
-    false,
-    "確認が10分より前（再ログイン・再設定リンク）",
-  );
-  assert.equal(isFreshAccountBoundToClaimToken(fresh({ email_confirmed_at: null }), token), false, "未確認");
-  assert.equal(
-    isFreshAccountBoundToClaimToken(fresh({ created_at: new Date(Date.now() - 3 * 24 * 3600_000).toISOString() }), token),
-    false,
-    "作成から3日",
-  );
-  assert.ok(!JSON.stringify(fresh().user_metadata).includes(token), "トークンそのものはメタデータに入れない");
+  // 発行条件
+  assert.equal(isUserCreatedBySignUp(created(), now), true);
+  assert.equal(isUserCreatedBySignUp(created({ identities: [] }), now), false, "登録済みメールの再登録（identities空）");
+  assert.equal(isUserCreatedBySignUp(created({ created_at: new Date(now - 10 * 60_000).toISOString() }), now), false, "作成時刻が過去（確認待ちの再登録）");
+  assert.equal(issueSignUpBinding(created({ created_at: new Date(now - 3600_000).toISOString() }), token, now), null);
+  assert.equal(issueSignUpBinding(created(), undefined, now), null, "ゲスト診断なし");
+  const b = issueSignUpBinding(created(), token, now)!;
+  assert.ok(b);
+  assert.ok(!b.includes(token), "トークンそのものは含まない");
+  // 検証
+  assert.equal(verifySignUpBinding(b, { id: "user-1" }, token, now + 1000), true);
+  assert.equal(verifySignUpBinding(b, { id: "other-user" }, token, now + 1000), false, "別のユーザーID");
+  assert.equal(verifySignUpBinding(b, { id: "user-1" }, randomUUID(), now + 1000), false, "別のゲスト診断");
+  assert.equal(verifySignUpBinding(b, { id: "user-1" }, token, now + 25 * 3600_000), false, "24時間超");
+  assert.equal(verifySignUpBinding(undefined, { id: "user-1" }, token, now), false);
+  assert.equal(verifySignUpBinding(`${now}.${"0".repeat(64)}`, { id: "user-1" }, token, now), false, "偽造した署名");
+  assert.equal(verifySignUpBinding("garbage", { id: "user-1" }, token, now), false);
+  // 秘密鍵が無ければ発行も検証もできない（安全側）
+  const saved = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  assert.equal(issueSignUpBinding(created(), token, now), null);
+  assert.equal(verifySignUpBinding(b, { id: "user-1" }, token, now), false);
+  process.env.SUPABASE_SERVICE_ROLE_KEY = saved;
 });
 
 // ------------------------------------------------------------------ シナリオ
@@ -406,7 +422,8 @@ test("シナリオ3a: ゲスト診断から新規登録（確認メールあり�
   assert.ok(r.success, "確認メール送信の成功");
   const created = [...env.users.values()].find((u) => u.email === "new@example.test")!;
   assert.equal(resultsOf(created.id).length, 0, "確認前は保存されない");
-  assert.equal(created.user_metadata[CLAIM_BINDING_METADATA_KEY], hashClaimToken(env.pendings[0].claim_token));
+  assert.ok(env.cookies.has(CLAIM_BINDING_COOKIE), "サーバー署名の印が発行される");
+  assert.deepEqual(Object.keys(created.user_metadata).sort(), ["display_name", "role"], "利用者が書き換えられるメタデータには印を入れない");
 
   // 同じブラウザで確認リンクを開く
   env.codes.set("code-new", created.id);
@@ -462,36 +479,92 @@ test("シナリオ4: 別アカウント・古い保留結果・再登録・再�
   assert.equal(resultsOf(m.id).length, 0);
   assert.equal(resultsOf(nUser.id).length, 0, "Nへもログインでは保存されない（遅れて自動保存されない）");
 
-  // (c) 作成から3日たった「新規」アカウント（確認が遅れた）は引き継がない
+  // (c) 作成から時間がたった既存ユーザー（印の発行条件を満たさない）には、サーバーは印を発行しない。
+  //     確認が遅れた新規会員が24時間を過ぎた場合も、印は無効（ログインして診断をやり直す）。
   resetEnv();
   await guestTakes(D);
-  const token = env.pendings[0].claim_token;
-  const stale = makeUser("stale@example.test", { ageMs: 3 * 24 * 3600_000, confirmedAgoMs: null, meta: { [CLAIM_BINDING_METADATA_KEY]: hashClaimToken(token) } });
-  env.cookies.set(CLAIM_TOKEN_COOKIE, token);
-  env.codes.set("code-stale", stale.id);
-  env.sessionUserId = null;
-  await callback("code-stale");
-  assert.equal(resultsOf(stale.id).length, 0);
+  env.signUpMode = "confirm";
+  await signUpAction({}, form({ displayName: "L", email: "late@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  const late = [...env.users.values()].find((u) => u.email === "late@example.test")!;
+  const realNow = Date.now;
+  Date.now = () => realNow() + 25 * 3600_000;
+  try {
+    env.codes.set("code-late", late.id);
+    env.sessionUserId = null;
+    await callback("code-late");
+  } finally {
+    Date.now = realNow;
+  }
+  assert.equal(resultsOf(late.id).length, 0, "印の有効期限（24時間）を過ぎた新規会員には自動では保存しない");
 
-  // (d) パスワード再設定リンク（next あり）では、新規直後で印が一致していても引き継がない
+  // (d) パスワード再設定リンク（next あり）では、有効な印があっても引き継がない
   resetEnv();
   await guestTakes(D);
-  const t2 = env.pendings[0].claim_token;
-  const fresh = makeUser("reset@example.test", { ageMs: 1000, confirmedAgoMs: null, meta: { [CLAIM_BINDING_METADATA_KEY]: hashClaimToken(t2) } });
+  env.signUpMode = "confirm";
+  await signUpAction({}, form({ displayName: "R", email: "reset@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  const fresh = [...env.users.values()].find((u) => u.email === "reset@example.test")!;
   env.codes.set("code-reset", fresh.id);
   env.sessionUserId = null;
   await callback("code-reset", "/update-password");
   assert.equal(resultsOf(fresh.id).length, 0);
 
-  // (e) 既存会員が、他人の保留トークンのハッシュを自分のメタデータに入れても、確認済み（古い）なので引き継がれない
+  // (e) 既存会員が自分のメタデータを書き換えても（旧方式の印）、引き継がれない
   resetEnv();
   const x2 = makeUser("x2@example.test", { meta: {} });
   await guestTakes(B);
-  x2.user_metadata[CLAIM_BINDING_METADATA_KEY] = hashClaimToken(env.pendings[0].claim_token);
+  x2.user_metadata["diagnosis_claim_hash"] = createHash("sha256").update(env.pendings[0].claim_token).digest("hex");
   env.codes.set("code-x2", x2.id);
   env.sessionUserId = null;
   await callback("code-x2");
   assert.equal(resultsOf(x2.id).length, 0);
+
+  // (f) 作成直後の既存会員（作成1秒・確認直後）が、印をメタデータに書き込んでも、引き継がれない
+  //     （旧方式では 48時間/10分の窓の中ならすり抜けた）。
+  resetEnv();
+  const y = makeUser("y@example.test", { ageMs: 1000, confirmedAgoMs: 0, meta: {} });
+  await guestTakes(B);
+  y.user_metadata["diagnosis_claim_hash"] = createHash("sha256").update(env.pendings[0].claim_token).digest("hex");
+  env.codes.set("code-y", y.id);
+  env.sessionUserId = null;
+  await callback("code-y");
+  assert.equal(resultsOf(y.id).length, 0, "メタデータを書き換えても、サーバー署名がないので取り込まれない");
+  assert.equal(env.pendings[0].claim_status, "PENDING");
+
+  // (g) 利用者がCookieを自作・他人の印を流用しても、取り込まれない
+  resetEnv();
+  const z = makeUser("z@example.test", { ageMs: 1000, confirmedAgoMs: 0, meta: {} });
+  await guestTakes(B);
+  env.cookies.set(CLAIM_BINDING_COOKIE, `${Date.now()}.${"a".repeat(64)}`);
+  env.codes.set("code-z", z.id);
+  env.sessionUserId = null;
+  await callback("code-z");
+  assert.equal(resultsOf(z.id).length, 0, "偽造した署名");
+  // 別の新規会員Nに発行された本物の印を、既存会員Zが使っても無効
+  resetEnv();
+  await guestTakes(D);
+  env.signUpMode = "confirm";
+  await signUpAction({}, form({ displayName: "N", email: "nn@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  const z2 = makeUser("z2@example.test", { ageMs: 1000, confirmedAgoMs: 0, meta: {} });
+  env.codes.set("code-z2", z2.id);
+  env.sessionUserId = null;
+  await callback("code-z2");
+  assert.equal(resultsOf(z2.id).length, 0, "他人（新規会員N）の印は、別ユーザーIDには無効");
+
+  // (h) 確認待ち（未確認）のメールでゲスト診断後に再登録しても、取り込まれない（メタデータが上書きされても）
+  resetEnv();
+  env.signUpMode = "confirm";
+  await signUpAction({}, form({ displayName: "U", email: "u@example.test", password: "password-1234", confirmPassword: "password-1234" })); // ゲスト診断なしで先に登録（未確認）
+  const u1 = [...env.users.values()].find((u) => u.email === "u@example.test")!;
+  u1.created_at = new Date(Date.now() - 3600_000).toISOString(); // 1時間前に作られた確認待ちの会員
+  await guestTakes(B);
+  env.signUpMode = "unconfirmed";
+  await signUpAction({}, form({ displayName: "U", email: "u@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  assert.ok(!env.cookies.has(CLAIM_BINDING_COOKIE), "新しく作られていないので印は発行されない");
+  env.codes.set("code-u", u1.id);
+  env.sessionUserId = null;
+  await callback("code-u");
+  assert.equal(resultsOf(u1.id).length, 0, "未確認メールでの再登録では取り込まない");
+  assert.equal(env.pendings[0].claim_status, "PENDING");
 });
 
 // ------------------------------------------------------------------ 構造・文言

@@ -75,7 +75,7 @@ function MemberResultNotice({ saved, mypageHref, retakeHref }: { saved: boolean;
       >
         <PendingLabel pendingText="マイページを開いています...">マイページで結果を見る</PendingLabel>
       </Link>
-      <Link href={retakeHref} className="mt-3 inline-block text-[13px] text-sub underline">
+      <Link href={retakeHref} className="mt-1 inline-flex min-h-[44px] items-center text-[13px] text-sub underline">
         診断を受け直す
       </Link>
       {!saved && (
@@ -191,7 +191,7 @@ export default function DiagnosisResultPage() {
             >
               マイページで「サロンらしさ」を見る
             </Link>
-            <Link href="/salon/culture" className="mt-3 inline-block text-[13px] text-sub underline">
+            <Link href="/salon/culture" className="mt-1 inline-flex min-h-[44px] items-center text-[13px] text-sub underline">
               サロンらしさを回答する・更新する
             </Link>
           </div>
@@ -345,7 +345,7 @@ export default function DiagnosisResultPage() {
       {/* ログイン導線 */}
       <p className="mt-3 text-center text-[13px] text-sub">
         すでに会員の方は{" "}
-        <Link href="/stylist/login?next=/stylist/mypage" className="underline">
+        <Link href="/stylist/login?next=/stylist/mypage" className="inline-flex min-h-[44px] items-center px-2 underline">
           ログイン
         </Link>
       </p>
@@ -353,7 +353,7 @@ export default function DiagnosisResultPage() {
         ログインしても、今回の結果は保存されません。保存済みの結果はマイページで確認できます（更新するには、ログイン後に診断を受け直してください）。
       </p>
       <p className="mt-3 text-center">
-        <Link href={retakeHref} className="text-[13px] text-sub underline">
+        <Link href={retakeHref} className="inline-flex min-h-[44px] items-center text-[13px] text-sub underline">
           診断を受け直す
         </Link>
       </p>

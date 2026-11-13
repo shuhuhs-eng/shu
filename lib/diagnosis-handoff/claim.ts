@@ -5,8 +5,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { createTokenClient } from "@/lib/supabase/token-client";
 import { computeDiagnosis, isValidAnswers, type ComputedDiagnosis } from "@/lib/diagnosis";
 import { generateDiagnosisNarrative } from "@/lib/ai/generate-diagnosis-narrative";
-import { CLAIM_TOKEN_COOKIE } from "@/lib/diagnosis-handoff/constants";
-import { isFreshAccountBoundToClaimToken, type AuthUserForClaim } from "@/lib/diagnosis-handoff/new-account";
+import { CLAIM_BINDING_COOKIE, CLAIM_TOKEN_COOKIE } from "@/lib/diagnosis-handoff/constants";
+import { verifySignUpBinding, type AuthUserForClaim } from "@/lib/diagnosis-handoff/new-account";
 import { logError } from "@/lib/security/log";
 
 export type ClaimResult = { claimed: boolean; diagnosisResultId: string | null };
@@ -19,15 +19,15 @@ export type ClaimResult = { claimed: boolean; diagnosisResultId: string | null }
  *   ログインした事実は、ゲスト診断を保存することへの同意として扱わない（lib/auth/actions.ts の signInAction は
  *   discardGuestDiagnosisCookie() だけを呼ぶ）。
  *
- * 引き継ぐのは、次を「サーバー側で」すべて確認できたときだけ（isFreshAccountBoundToClaimToken）:
- *   ・登録時にサーバーが user_metadata に入れた、保留トークンのハッシュが今のCookieと一致する
- *   ・アカウントの作成が最近で、メール確認（登録）がたった今である
- * URLのフラグやブラウザ内の印は使わない。呼び出し元は、signUp の直後（確認不要の設定の場合）と、
+ * 引き継ぐのは、サーバーが署名した「新規登録の印」（verifySignUpBinding）が、このユーザーID×今のゲスト診断に
+ * 対して有効なときだけ。印は signUp が「今まさに新しく作ったユーザー」を返した直後にだけサーバーが発行する
+ * （lib/auth/actions.ts / isUserCreatedBySignUp）ので、既存会員や、確認待ちメールでの再登録では発行されない。
+ * 利用者が書き換えられる user_metadata・URLのフラグ・localStorage の印は使わない。呼び出し元は、signUp の直後（確認不要の設定の場合）と、
  * メール確認コールバック（パスワード再設定ではない場合）だけ。
  *
  * 以降の処理は従来どおり（claim_status: PENDING → PROCESSING → COMPLETED）。
  * ★途中で失敗して PROCESSING のまま残った場合の再開は、同じ呼び出し元（新規登録の確認直後）で
- *   引き継ぎ条件（メール確認から10分以内）を満たす間だけ行える。期限を過ぎたら自動では再開しない
+ *   印の有効期間（24時間）の間だけ行える。期限を過ぎたら自動では再開しない
  *   （ログインでは再開しない。遅れて保存される経路を作らないため）。
  * 処理順序:
  *   1. Cookieのclaim_tokenを読む（無ければ何もしない）
@@ -55,12 +55,20 @@ export type ClaimResult = { claimed: boolean; diagnosisResultId: string | null }
  *        → このclaim_tokenで再試行しても状況は変わらないため削除する。
  *      ・complete_pending_diagnosis_claim() まで成功した場合 → 完了したので削除する。
  *      ・上記以外（start成功後、回答検証・INSERT・completeのいずれかで失敗した場合）
- *        → claim_tokenを保持したままにする。新規登録の確認直後（引き継ぎ条件を満たす間）に
+ *        → claim_tokenを保持したままにする。新規登録の確認直後（印が有効な間）に
  *          このフローに入れば、同じCookieを使ってPROCESSING状態から再試行できる
  *          （Cookieを消してしまうと、再試行に必要な資格情報自体が失われ、
  *          「PROCESSING状態から何度でも再実行できる」設計が機能しなくなるため）。
  */
-export async function claimPendingDiagnosisForNewAccount(user: AuthUserForClaim): Promise<ClaimResult> {
+function dropClaimCookies(store: { delete: (name: string) => unknown }) {
+  store.delete(CLAIM_TOKEN_COOKIE);
+  store.delete(CLAIM_BINDING_COOKIE);
+}
+
+export async function claimPendingDiagnosisForNewAccount(
+  user: AuthUserForClaim,
+  opts: { binding?: string | null } = {},
+): Promise<ClaimResult> {
   const cookieStore = await cookies();
   const claimToken = cookieStore.get(CLAIM_TOKEN_COOKIE)?.value;
 
@@ -72,7 +80,8 @@ export async function claimPendingDiagnosisForNewAccount(user: AuthUserForClaim)
   // Cookieもここでは消さない（まだ確認が済んでいない新規登録のためのものかもしれず、
   // 別のアカウントのログインで消えると、本当の新規登録の引き継ぎができなくなるため）。
   // トークンのハッシュが一致するアカウントにしか使えないので、残っていても他人には紐づかない。
-  if (!isFreshAccountBoundToClaimToken(user, claimToken)) {
+  const binding = opts.binding ?? cookieStore.get(CLAIM_BINDING_COOKIE)?.value;
+  if (!verifySignUpBinding(binding, user, claimToken)) {
     return { claimed: false, diagnosisResultId: null };
   }
 
@@ -85,14 +94,14 @@ export async function claimPendingDiagnosisForNewAccount(user: AuthUserForClaim)
   if (startError || !pending) {
     // このclaim_tokenでは今後も状況が変わらない（無効・期限切れ・他ユーザーが処理中・
     // 既にCOMPLETED等）。ログイン処理自体は継続してよいので、Cookieを削除して終了する。
-    cookieStore.delete(CLAIM_TOKEN_COOKIE);
+    dropClaimCookies(cookieStore);
     return { claimed: false, diagnosisResultId: null };
   }
 
   if (!isValidAnswers(pending.mode, pending.answers)) {
     console.error("claimPendingDiagnosisIfPresent: invalid answers in pending diagnosis", pending.id);
     // 回答データ自体が壊れている場合は再試行しても回復しないため、ここでは削除する。
-    cookieStore.delete(CLAIM_TOKEN_COOKIE);
+    dropClaimCookies(cookieStore);
     return { claimed: false, diagnosisResultId: null };
   }
 
@@ -186,7 +195,7 @@ export async function claimPendingDiagnosisForNewAccount(user: AuthUserForClaim)
   }
 
   // ここまで到達＝完全に完了。再試行不要なのでCookieを削除する。
-  cookieStore.delete(CLAIM_TOKEN_COOKIE);
+  dropClaimCookies(cookieStore);
 
   // AI解説の生成は非同期ジョブとして実行し、レスポンスをブロックしない。
   // ★重要: after() のコールバック内では cookies() 等のリクエストスコープ
@@ -315,7 +324,5 @@ export async function runAiGenerationJob(
  */
 export async function discardGuestDiagnosisCookie(): Promise<void> {
   const cookieStore = await cookies();
-  if (cookieStore.get(CLAIM_TOKEN_COOKIE)) {
-    cookieStore.delete(CLAIM_TOKEN_COOKIE);
-  }
+  dropClaimCookies(cookieStore);
 }
