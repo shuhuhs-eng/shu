@@ -18,6 +18,8 @@ import {
   CLAIM_BINDING_FOR_APP_METADATA_KEY,
   CLAIM_BINDING_ISSUED_APP_METADATA_KEY,
   CLAIM_BINDING_TTL_MS,
+  GUEST_NOT_CARRIED_NOTICE_COOKIE,
+  GUEST_SIGNUP_UNVERIFIED_COOKIE,
   CLAIM_TOKEN_COOKIE,
 } from "@/lib/diagnosis-handoff/constants";
 import { hashClaimToken, issueSignUpBinding } from "@/lib/diagnosis-handoff/new-account";
@@ -130,7 +132,22 @@ async function performSignUp(
       data.user.app_metadata = { ...(data.user.app_metadata ?? {}), ...markerForClaim };
     }
   }
+  if (!binding && guestClaimToken) {
+    // ゲスト診断があったのに、新規作成の確認（または記録の書き込み）ができず印を出さなかった。
+    // 期限切れとは別の理由なので、目印を残して案内の文言を分ける。確認メールが不要な設定ではここで案内を出す。
+    const opts = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax" as const,
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60,
+    };
+    const store = await cookies();
+    store.set(GUEST_SIGNUP_UNVERIFIED_COOKIE, "1", opts);
+    if (data.session) store.set(GUEST_NOT_CARRIED_NOTICE_COOKIE, "unverified", opts);
+  }
   if (binding) {
+    (await cookies()).delete(GUEST_SIGNUP_UNVERIFIED_COOKIE);
     (await cookies()).set(CLAIM_BINDING_COOKIE, binding, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

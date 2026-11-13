@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { determinePostAuthPath } from "@/lib/auth/post-auth-redirect";
 import { cookies } from "next/headers";
 import { claimPendingDiagnosisForNewAccount } from "@/lib/diagnosis-handoff/claim";
-import { CLAIM_TOKEN_COOKIE, GUEST_NOT_CARRIED_NOTICE_COOKIE } from "@/lib/diagnosis-handoff/constants";
+import { CLAIM_TOKEN_COOKIE, GUEST_NOT_CARRIED_NOTICE_COOKIE, GUEST_SIGNUP_UNVERIFIED_COOKIE } from "@/lib/diagnosis-handoff/constants";
 
 /**
  * メール認証（新規登録の確認リンク）・パスワード再設定リンクの共通コールバック。
@@ -43,8 +43,11 @@ export async function GET(request: Request) {
     const hadGuestDiagnosis = !!(await cookies()).get(CLAIM_TOKEN_COOKIE)?.value;
     const claim = await claimPendingDiagnosisForNewAccount(confirmedUser);
     if (hadGuestDiagnosis && !claim.claimed) {
-      // 期限切れなどで初回結果を引き継げなかった。マイページで案内する（表示専用。結果が保存されるまで表示）。
-      (await cookies()).set(GUEST_NOT_CARRIED_NOTICE_COOKIE, "1", {
+      // 初回結果を引き継げなかった。マイページで案内する（表示専用。結果が保存されるまで表示）。
+      // 登録時に「新規作成の確認ができなかった」目印があれば unverified、なければ（印の期限切れ等）expired。
+      const unverified = !!(await cookies()).get(GUEST_SIGNUP_UNVERIFIED_COOKIE)?.value;
+      (await cookies()).delete(GUEST_SIGNUP_UNVERIFIED_COOKIE);
+      (await cookies()).set(GUEST_NOT_CARRIED_NOTICE_COOKIE, unverified ? "unverified" : "expired", {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",

@@ -9,7 +9,7 @@ import {
   issueSignUpBinding,
   verifySignUpBinding,
 } from "../lib/diagnosis-handoff/new-account";
-import { CLAIM_BINDING_COOKIE, CLAIM_TOKEN_COOKIE, GUEST_NOT_CARRIED_NOTICE_COOKIE } from "../lib/diagnosis-handoff/constants";
+import { CLAIM_BINDING_COOKIE, CLAIM_TOKEN_COOKIE, GUEST_NOT_CARRIED_NOTICE_COOKIE, GUEST_SIGNUP_UNVERIFIED_COOKIE } from "../lib/diagnosis-handoff/constants";
 
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key-for-hmac";
 import { Q } from "../lib/diagnosis/questions";
@@ -45,7 +45,7 @@ type Pending = {
   claim_status: "PENDING" | "PROCESSING" | "COMPLETED";
   claimed_by: string | null;
 };
-type Result = { id: string; user_id: string; answers: number[]; created_at: string; source_pending_id: string | null; type_id: string };
+type Result = { id: string; user_id: string; mode?: string; answers: number[]; created_at: string; source_pending_id: string | null; type_id: string };
 
 const env = {
   users: new Map<string, AuthUser>(),
@@ -54,6 +54,7 @@ const env = {
   pendings: [] as Pending[],
   results: [] as Result[],
   codes: new Map<string, string>(), // 確認コード -> user id
+  omitTimestamps: false, // 実Authが確認メール送信時刻・確認時刻を返さない場合の再現
   signUpMode: "confirm" as "confirm" | "auto" | "existing" | "unconfirmed",
   adminFail: false,
   failResultInsert: false,
@@ -69,6 +70,7 @@ function resetEnv() {
   env.codes.clear();
   env.signUpMode = "confirm";
   env.failResultInsert = false;
+  env.omitTimestamps = false;
 }
 const tick = () => new Date(Date.UTC(2026, 10, 13, 0, 0, 0) + ++env.clock * 1000).toISOString();
 
@@ -152,6 +154,7 @@ function fakeSupabase() {
         }
         const u = makeUser(email, { ageMs: 1000, confirmedAgoMs: env.signUpMode === "auto" ? 1000 : null, meta: options.data, noConfirmationSent: env.signUpMode === "auto" });
         if (env.signUpMode === "auto") env.sessionUserId = u.id;
+        if (env.omitTimestamps) { u.confirmation_sent_at = null; u.email_confirmed_at = null; }
         const user = { ...u, identities: [{ id: "i" }] };
         return { data: { user, session: env.signUpMode === "auto" ? { access_token: "tok" } : null }, error: null };
       },
@@ -218,6 +221,7 @@ function fakeService() {
               const r: Result = {
                 id: randomUUID(),
                 user_id: row.user_id,
+                mode: row.mode,
                 answers: row.answers,
                 created_at: row.created_at ?? tick(),
                 source_pending_id: row.source_pending_id ?? null,
@@ -324,7 +328,7 @@ const resultsOf = (userId: string) => env.results.filter((r) => r.user_id === us
 
 function seedExistingMemberWithResultA() {
   const x = makeUser("x@example.test");
-  env.results.push({ id: randomUUID(), user_id: x.id, answers: A, created_at: "2026-01-01T00:00:00.000Z", source_pending_id: null, type_id: "A" });
+  env.results.push({ id: randomUUID(), user_id: x.id, mode: "stylist", answers: A, created_at: "2026-01-01T00:00:00.000Z", source_pending_id: null, type_id: "A" });
   return x;
 }
 
@@ -690,6 +694,78 @@ test("再登録の穴(2): 1秒前・4秒前に作られた未確認アカウン�
   assert.equal(verifySignUpBinding(bindA, { id: "race-user", app_metadata: stored }, tokenA, now + 1000), false, "先に書いた側の印は無効");
   assert.equal(verifySignUpBinding(bindB, { id: "race-user", app_metadata: stored }, tokenB, now + 1000), true, "最後に書かれた1つだけが有効");
   assert.equal(verifySignUpBinding(bindA, { id: "race-user", app_metadata: stored }, tokenB, now + 1000), false, "Aの印をBのトークンに流用しても無効");
+});
+
+test("同時要求の順序: Aの取り込みが完了した後にBの記録が更新されても、初回結果は2件にならない（アプリ側のガード。DB側の保証は0058の回数制限SQL）", async () => {
+  resetEnv();
+  await guestTakes(D);
+  env.signUpMode = "confirm";
+  await signUpAction({}, form({ displayName: "N", email: "seq@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  const n = [...env.users.values()].find((u) => u.email === "seq@example.test")!;
+  // Aの取り込みを開始・完了
+  env.codes.set("code-seq", n.id);
+  env.sessionUserId = null;
+  await callback("code-seq");
+  assert.equal(resultsOf(n.id).length, 1);
+  assert.equal(env.pendings[0].claim_status, "COMPLETED");
+  // その後に、同時に走っていたBの要求が記録を更新し、Bの印を発行した（別ブラウザのCookieを再現）
+  await guestTakes(B);
+  const tokenB = env.pendings[1].claim_token;
+  const snap = { id: n.id, created_at: new Date(Date.now() - 1000).toISOString(), confirmation_sent_at: new Date(Date.now() - 1000).toISOString(), identities: [{ id: "i" }], app_metadata: {} };
+  const bindB = issueSignUpBinding(snap, tokenB, Date.now() - 2000, Date.now())!;
+  assert.ok(bindB);
+  n.app_metadata = { diagnosis_claim_binding_issued_at: new Date().toISOString(), diagnosis_claim_binding_for: createHash("sha256").update(tokenB).digest("hex") };
+  env.cookies.set(CLAIM_BINDING_COOKIE, bindB);
+  env.codes.set("code-seq2", n.id);
+  env.sessionUserId = null;
+  await callback("code-seq2");
+  assert.equal(resultsOf(n.id).length, 1, "既に結果がある会員には、Bの診断を追加しない");
+  assert.deepEqual(latest(n.id).answers, D, "初回結果はAのまま");
+  assert.notEqual(env.pendings[1].claim_status, "COMPLETED");
+});
+
+test("新規登録の応答が想定と違い、新規作成を確認できなかった場合: 取り込まず、案内は「期限切れ」ではなく「登録の状況を確認できなかった」になる", async () => {
+  // 確認メールあり: 登録時に確認できず印なし → 確認リンク後のマイページ案内は unverified
+  resetEnv();
+  env.omitTimestamps = true;
+  await guestTakes(D);
+  env.signUpMode = "confirm";
+  await signUpAction({}, form({ displayName: "Q", email: "q@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  env.omitTimestamps = false;
+  const q = [...env.users.values()].find((u) => u.email === "q@example.test")!;
+  assert.ok(!env.cookies.has(CLAIM_BINDING_COOKIE), "印は出ない");
+  assert.ok(env.cookies.has(GUEST_SIGNUP_UNVERIFIED_COOKIE), "確認できなかった目印");
+  assert.ok(!env.cookies.has(GUEST_NOT_CARRIED_NOTICE_COOKIE), "確認メール待ちの間はまだ案内を出さない");
+  env.codes.set("code-q", q.id);
+  env.sessionUserId = null;
+  await callback("code-q");
+  assert.equal(resultsOf(q.id).length, 0, "誤取り込みはしない");
+  assert.equal(env.cookies.get(GUEST_NOT_CARRIED_NOTICE_COOKIE), "unverified", "期限切れと誤表示しない");
+  assert.ok(!env.cookies.has(GUEST_SIGNUP_UNVERIFIED_COOKIE));
+
+  // 確認メール不要（登録直後にセッションあり）: 登録の時点で unverified の案内になる
+  resetEnv();
+  env.omitTimestamps = true;
+  await guestTakes(D);
+  env.signUpMode = "auto";
+  await signUpAction({}, form({ displayName: "R", email: "r@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  env.omitTimestamps = false;
+  const r = [...env.users.values()].find((u) => u.email === "r@example.test")!;
+  assert.equal(resultsOf(r.id).length, 0);
+  assert.equal(env.cookies.get(GUEST_NOT_CARRIED_NOTICE_COOKIE), "unverified");
+
+  // 印が出たのに24時間後に確認した場合は、従来どおり expired
+  resetEnv();
+  await guestTakes(D);
+  env.signUpMode = "confirm";
+  await signUpAction({}, form({ displayName: "S", email: "s@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  const sUser = [...env.users.values()].find((u) => u.email === "s@example.test")!;
+  env.cookies.delete(CLAIM_BINDING_COOKIE); // Cookieの24時間の期限切れ
+  env.codes.set("code-s", sUser.id);
+  env.sessionUserId = null;
+  await callback("code-s");
+  assert.equal(resultsOf(sUser.id).length, 0);
+  assert.equal(env.cookies.get(GUEST_NOT_CARRIED_NOTICE_COOKIE), "expired");
 });
 
 // ------------------------------------------------------------------ 構造・文言

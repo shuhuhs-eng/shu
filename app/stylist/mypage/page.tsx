@@ -32,7 +32,8 @@ type AiOutputRow = Database["public"]["Tables"]["diagnosis_ai_outputs"]["Row"];
  * 決め打ちで飛ばすのではなく、美容師オンボーディングへ誘導する。
  */
 export default async function StylistMyPage() {
-  const guestNotCarried = !!(await cookies()).get(GUEST_NOT_CARRIED_NOTICE_COOKIE)?.value;
+  const guestNoticeReason = (await cookies()).get(GUEST_NOT_CARRIED_NOTICE_COOKIE)?.value;
+  const guestNotCarried = !!guestNoticeReason;
   const perfStart = nowMs();
   const supabase = await createClient();
   const {
@@ -215,7 +216,9 @@ export default async function StylistMyPage() {
 
           {!latest && guestNotCarried && (
             <p className="mt-6 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">
-              ログイン前に受けた診断の結果は、登録の確認までに時間がたったため、保存できませんでした。
+              {guestNoticeReason === "unverified"
+                ? "ログイン前に受けた診断の結果は、登録の状況を確認できなかったため、保存できませんでした。"
+                : "ログイン前に受けた診断の結果は、登録の確認までに時間がたったため、保存できませんでした。"}
               お手数ですが、もう一度診断を受けてください。
             </p>
           )}

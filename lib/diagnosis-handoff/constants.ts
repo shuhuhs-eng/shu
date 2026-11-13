@@ -61,3 +61,10 @@ export const SIGNUP_SELF_CONSISTENCY_MS = 500;
  * 表示のためだけに使い、引き継ぎの判定には一切使わない。診断結果がまだ無い間だけ表示される。
  */
 export const GUEST_NOT_CARRIED_NOTICE_COOKIE = "br_guest_notice";
+
+/**
+ * 新規登録の時点で、ゲスト診断があったのに「新規作成の確認」ができず印を出さなかったことの目印（表示専用）。
+ * これがあるときの案内は「期限切れ」ではなく「登録の状況を確認できなかった」とする（原因を取り違えて表示しない）。
+ */
+export const GUEST_SIGNUP_UNVERIFIED_COOKIE = "br_guest_unverified";
+export type GuestNoticeReason = "expired" | "unverified";
