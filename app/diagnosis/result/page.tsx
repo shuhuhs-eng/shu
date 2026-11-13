@@ -6,7 +6,8 @@ import Link, { useLinkStatus } from "next/link";
 import type { ComputedDiagnosis } from "@/lib/diagnosis";
 import { calculateCoreType } from "@/lib/diagnosis/core-types";
 import { CORE_TYPE_CONTENT } from "@/lib/diagnosis/core-type-content";
-import { DIAGNOSIS_RESULT_STORAGE_KEY, DIAGNOSIS_SAVED_STORAGE_KEY } from "@/lib/diagnosis-handoff/constants";
+import { formatJstDateTime } from "@/lib/diagnosis-limit/messages";
+import { DIAGNOSIS_NEXT_CHANGE_STORAGE_KEY, DIAGNOSIS_RESULT_STORAGE_KEY, DIAGNOSIS_SAVED_STORAGE_KEY } from "@/lib/diagnosis-handoff/constants";
 import { createClient } from "@/lib/supabase/client";
 
 type LoadState = "loading" | "none" | ComputedDiagnosis;
@@ -53,7 +54,7 @@ function PendingLabel({ children, pendingText }: { children: React.ReactNode; pe
 }
 
 /** ログイン中の本人向け。登録・ログインの案内は出さず、保存結果の確認先（マイページ）だけを案内する。 */
-function MemberResultNotice({ saved, mypageHref, retakeHref }: { saved: boolean; mypageHref: string; retakeHref: string }) {
+function MemberResultNotice({ saved, nextChange, mypageHref, retakeHref }: { saved: boolean; nextChange: string | null; mypageHref: string; retakeHref: string }) {
   return (
     <div className="mt-8 rounded-2xl border border-line bg-surface2 p-6 text-center">
       <p className="text-[13.5px] leading-relaxed text-charcoal">
@@ -61,6 +62,11 @@ function MemberResultNotice({ saved, mypageHref, retakeHref }: { saved: boolean;
           ? "今回の診断結果をあなたのアカウントに保存しました。"
           : "この結果は、あなたのアカウントには保存されていません。保存済みの診断結果は、マイページで確認できます。"}
       </p>
+      {saved && nextChange && (
+        <p className="mt-2 text-[13px] leading-relaxed text-sub">
+          次に結果を変更できるのは {formatJstDateTime(nextChange)} 以降です。
+        </p>
+      )}
       <Link
         href={mypageHref}
         prefetch={false}
@@ -93,6 +99,7 @@ export default function DiagnosisResultPage() {
   // ログイン状態（表示の出し分け専用。保存の可否はサーバー側が判断する）。
   const [auth, setAuth] = useState<"checking" | "member" | "guest">("checking");
   const [saved, setSaved] = useState(false);
+  const [nextChange, setNextChange] = useState<string | null>(null);
 
   // 「保存済み」の印は、診断クイズがサーバー保存の成功を確認した後にだけ書く（保存前・失敗時は書かない）。
   // 印がある場合は追加の通信なしで即座にログイン中の表示にする（以前は結果表示のたびに認証サーバーへの
@@ -100,14 +107,17 @@ export default function DiagnosisResultPage() {
   useEffect(() => {
     let cancelled = false;
     let hasSaved = false;
+    let next: string | null = null;
     try {
       hasSaved = !!sessionStorage.getItem(DIAGNOSIS_SAVED_STORAGE_KEY);
+      next = sessionStorage.getItem(DIAGNOSIS_NEXT_CHANGE_STORAGE_KEY);
     } catch {
       // sessionStorageが使えない場合は「保存済み」を表示しない。
     }
     Promise.resolve().then(() => {
       if (cancelled) return;
       setSaved(hasSaved);
+      setNextChange(next && !Number.isNaN(Date.parse(next)) ? next : null);
       setAuth(hasSaved ? "member" : "guest");
     });
     if (!hasSaved) {
@@ -291,7 +301,7 @@ export default function DiagnosisResultPage() {
       </div>
 
       {isMember ? (
-        <MemberResultNotice saved={saved} mypageHref="/stylist/mypage" retakeHref={retakeHref} />
+        <MemberResultNotice saved={saved} nextChange={nextChange} mypageHref="/stylist/mypage" retakeHref={retakeHref} />
       ) : (
         <>
       {/* ④登録したくなる「続き」。3つの問いで興味を強める

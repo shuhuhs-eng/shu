@@ -7,6 +7,7 @@ import { computeDiagnosis, isValidAnswers, type ComputedDiagnosis } from "@/lib/
 import { generateDiagnosisNarrative } from "@/lib/ai/generate-diagnosis-narrative";
 import { CLAIM_BINDING_COOKIE, CLAIM_TOKEN_COOKIE } from "@/lib/diagnosis-handoff/constants";
 import { verifySignUpBinding, type AuthUserForClaim } from "@/lib/diagnosis-handoff/new-account";
+import { commitDiagnosisResult, type CommitClient } from "@/lib/diagnosis-limit/commit";
 import { logError } from "@/lib/security/log";
 
 export type ClaimResult = { claimed: boolean; diagnosisResultId: string | null };
@@ -131,36 +132,27 @@ export async function claimPendingDiagnosisForNewAccount(
 
   let diagnosisResultId: string | null = null;
 
-  const insertResult = // ★0053: diagnosis_results への直接INSERTはクライアント（本人のJWT）には許可しない。
-  // 認証済みの本人（上のgetUser）のuser_idと、サーバーが回答から再計算した値だけをservice roleで保存する。
-  await createServiceClient()
-    .from("diagnosis_results")
-    .insert({
-      user_id: sessionUser.id,
-      diagnosis_version: computed.diagnosisVersion,
-      mode: computed.mode,
-      answers: pending.answers,
-      craft_score: computed.scores.T,
-      sense_score: computed.scores.S,
-      hospitality_score: computed.scores.H,
-      brand_score: computed.scores.B,
-      drive_score: computed.scores.A,
-      mentor_score: computed.scores.M,
-      type_id: computed.typeId,
-      type_name: computed.typeName,
-      market_value_score: computed.marketValueScore,
-      salary_band: computed.salaryBand,
-      source_pending_id: pending.id,
-      // 「最新の診断」は created_at で決まる。引き継ぎが後から行われても、診断を受けた時刻を使い、
-      // 後から受けた別の診断（ログイン中の再診断など）を古い保留結果で巻き戻さない。
-      created_at: pending.created_at,
-    })
-    .select("*")
-    .single();
+  // ★0058: 回数制限つきの確定保存。ログイン前の診断の引き継ぎは「初回結果」としてだけ保存する（allowChange=false）。
+  // すでにその種別の結果がある所有者には、DB側が diagnosis_already_saved で拒否する（上のアプリ側の確認が同時要求で
+  // すり抜けても、所有者ごとのロックで1件だけが保存される）。request_id は保留診断のIDなので、再試行しても二重に保存されない。
+  // 診断を受けた時刻（created_at）は保留結果のものを使い、後から受けた診断を巻き戻さない。
+  const committed = await commitDiagnosisResult(createServiceClient() as unknown as CommitClient, {
+    userId: sessionUser.id,
+    requestId: pending.id,
+    allowChange: false,
+    computed,
+    answers: pending.answers,
+    sourcePendingId: pending.id,
+    createdAt: pending.created_at,
+  });
 
-  if (insertResult.error || !insertResult.data) {
-    // 再試行（PROCESSINGからの冪等な再開）で source_pending_id が既に使われている場合、
-    // 前回の試行で保存自体は成功していた可能性が高いので、既存行を探して復旧する。
+  if (!committed.ok) {
+    if (committed.error.code === "already_saved") {
+      // 初回結果がすでにある（同時要求の競合を含む）。この診断は取り込まない。再試行しても変わらないのでCookieを消す。
+      dropClaimCookies(cookieStore);
+      return { claimed: false, diagnosisResultId: null };
+    }
+    // 再試行（PROCESSINGからの冪等な再開）で既に保存済みの可能性があるので、既存行を探して復旧する。
     const { data: existing } = await supabase
       .from("diagnosis_results")
       .select("*")
@@ -168,14 +160,14 @@ export async function claimPendingDiagnosisForNewAccount(
       .maybeSingle();
 
     if (!existing) {
-      logError("claimDiagnosis.insert", insertResult.error);
+      logError("claimDiagnosis.insert", { code: committed.error.code });
       // claim_statusはPROCESSINGのまま残す。Cookieも保持し、次回の呼び出しで
       // start_pending_diagnosis_claim()の冪等フォールバックにより再開できるようにする。
       return { claimed: false, diagnosisResultId: null };
     }
     diagnosisResultId = existing.id;
   } else {
-    diagnosisResultId = insertResult.data.id;
+    diagnosisResultId = committed.resultId;
   }
 
   // 8タイプ（front-facing称号）の判定・保存。美容師診断のみ対象

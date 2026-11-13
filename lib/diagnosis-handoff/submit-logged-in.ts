@@ -6,10 +6,14 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { computeDiagnosis, isValidAnswers, type DiagnosisMode } from "@/lib/diagnosis";
 import { runAiGenerationJob } from "@/lib/diagnosis-handoff/claim";
 import { logError } from "@/lib/security/log";
+import { commitDiagnosisResult, type CommitClient } from "@/lib/diagnosis-limit/commit";
+import type { LimitErrorCode } from "@/lib/diagnosis-limit/messages";
 
 export type SubmitLoggedInResult =
-  | { success: true; diagnosisResultId: string }
-  | { success: false; error: string };
+  | { success: true; diagnosisResultId: string; action: string; lockedUntil: string | null }
+  | { success: false; error: string; code?: LimitErrorCode; message?: string; lockedUntil?: string | null };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * ログイン済みユーザーが30問（または14問）診断を完了した際に、
@@ -56,9 +60,14 @@ export type SubmitLoggedInResult =
 export async function submitDiagnosisForLoggedInUser(
   mode: DiagnosisMode,
   answers: unknown,
+  requestId: string,
 ): Promise<SubmitLoggedInResult> {
   if (!isValidAnswers(mode, answers)) {
     return { success: false, error: "invalid_answers" };
+  }
+  // 確認画面で1回だけ作られ、再送でも同じ値が送られる保存の識別子。これが無い・形が違う送信は受け付けない。
+  if (typeof requestId !== "string" || !UUID_RE.test(requestId)) {
+    return { success: false, error: "invalid_request_id" };
   }
 
   const supabase = await createClient();
@@ -77,37 +86,29 @@ export async function submitDiagnosisForLoggedInUser(
   // lib/diagnosis-handoff/claim.ts と全く同じ関数・同じ手順。
   const computed = computeDiagnosis(mode, answers);
 
-  const insertResult = // ★0053: diagnosis_results への直接INSERTはクライアント（本人のJWT）には許可しない。
-  // 認証済みの本人（上のgetUser）のuser_idと、サーバーが回答から再計算した値だけをservice roleで保存する。
-  await createServiceClient()
-    .from("diagnosis_results")
-    .insert({
-      user_id: user.id,
-      diagnosis_version: computed.diagnosisVersion,
-      mode: computed.mode,
-      answers,
-      craft_score: computed.scores.T,
-      sense_score: computed.scores.S,
-      hospitality_score: computed.scores.H,
-      brand_score: computed.scores.B,
-      drive_score: computed.scores.A,
-      mentor_score: computed.scores.M,
-      type_id: computed.typeId,
-      type_name: computed.typeName,
-      market_value_score: computed.marketValueScore,
-      salary_band: computed.salaryBand,
-      // source_pending_id は付けない（pending_diagnoses経由ではないため）。
-      // 既存スキーマ上nullable。
-    })
-    .select("*")
-    .single();
+  // ★0058: 回数制限つきの確定保存（commit_diagnosis_result。service_role専用）。認証済みの本人（上のgetUser）の
+  // user_idと、サーバーが回答から再計算した値だけを渡す。判定・消費・排他・重複検知はDB側。
+  // 失敗しても回数は消費されない（DBは保存と同じトランザクションで消費する）。同じrequestIdの再送は、再保存せず前回の結果を返す。
+  const committed = await commitDiagnosisResult(createServiceClient() as unknown as CommitClient, {
+    userId: user.id,
+    requestId,
+    allowChange: true,
+    computed,
+    answers,
+  });
 
-  if (insertResult.error || !insertResult.data) {
-    logError("submitDiagnosis.insert", insertResult.error);
-    return { success: false, error: "save_failed" };
+  if (!committed.ok) {
+    logError("submitDiagnosis.commit", { code: committed.error.code });
+    return {
+      success: false,
+      error: committed.error.code === "unknown" ? "save_failed" : committed.error.code,
+      code: committed.error.code,
+      message: committed.error.message,
+      lockedUntil: committed.error.lockedUntil,
+    };
   }
 
-  const diagnosisResultId: string = insertResult.data.id;
+  const diagnosisResultId: string = committed.resultId;
 
   // 8タイプ（front-facing称号）の判定・保存。美容師診断のみ対象。
   // ベストエフォート：失敗してもdiagnosis_results自体は保存済みのため、
@@ -141,5 +142,5 @@ export async function submitDiagnosisForLoggedInUser(
     console.error("submitDiagnosisForLoggedInUser: no access token available, skipping AI generation");
   }
 
-  return { success: true, diagnosisResultId };
+  return { success: true, diagnosisResultId, action: committed.action, lockedUntil: committed.lockedUntil };
 }

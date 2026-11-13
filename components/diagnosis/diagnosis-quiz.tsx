@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { bankFor, computeDiagnosis, type DiagnosisMode } from "@/lib/diagnosis";
-import { DIAGNOSIS_RESULT_STORAGE_KEY, DIAGNOSIS_SAVED_STORAGE_KEY } from "@/lib/diagnosis-handoff/constants";
+import { DIAGNOSIS_NEXT_CHANGE_STORAGE_KEY, DIAGNOSIS_RESULT_STORAGE_KEY, DIAGNOSIS_SAVED_STORAGE_KEY } from "@/lib/diagnosis-handoff/constants";
+import { confirmNotice, UNKNOWN_STATUS, type LimitErrorCode, type LimitStatus } from "@/lib/diagnosis-limit/messages";
 import { submitDiagnosisForLoggedInUser } from "@/lib/diagnosis-handoff/submit-logged-in";
 
 const SECTION_SIZE = 5;
@@ -21,6 +22,8 @@ type Props = {
    * 未ログイン時の挙動・APIは一切変更していない。
    */
   isLoggedIn: boolean;
+  /** ログイン済みの本人の、結果の変更状態（案内用。保存の可否は保存時にDBが判断する）。 */
+  limitStatus?: LimitStatus;
 };
 
 /**
@@ -41,7 +44,7 @@ type Props = {
  * save_core_type_result() も実行される）。未ログイン時の経路・挙動は
  * この分岐の影響を一切受けない。
  */
-export function DiagnosisQuiz({ mode, isLoggedIn }: Props) {
+export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS }: Props) {
   const router = useRouter();
   const bank = bankFor(mode);
 
@@ -49,6 +52,16 @@ export function DiagnosisQuiz({ mode, isLoggedIn }: Props) {
   const [index, setIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<LimitErrorCode | null>(null);
+  // ログイン済みは、最後の質問のあと確認画面を挟み、そこで「確定する」を押したときだけ保存する。
+  const [reviewing, setReviewing] = useState(false);
+  // 確認画面から回答を直しに行ったあとは、次の質問へ進まず確認画面へ戻る。
+  const [returnToReview, setReturnToReview] = useState(false);
+  // 保存の識別子。同じ回答の再送では同じ値を送り（二重に数えない）、回答が変わったら作り直す
+  // （同じ識別子で別の内容を送ると、DBが拒否する）。
+  const requestRef = useRef<{ id: string; key: string } | null>(null);
+  // 送信中の連打を、再描画を待たずに止める。
+  const inFlight = useRef(false);
 
   const question = bank[index];
   const sectionNumber = Math.floor(index / SECTION_SIZE) + 1;
@@ -62,8 +75,19 @@ export function DiagnosisQuiz({ mode, isLoggedIn }: Props) {
     next[index] = optionIndex;
     setAnswers(next);
 
+    if (returnToReview) {
+      setReturnToReview(false);
+      setReviewing(true);
+      return;
+    }
+
     if (index < bank.length - 1) {
       setIndex(index + 1);
+      return;
+    }
+
+    if (isLoggedIn) {
+      setReviewing(true);
       return;
     }
 
@@ -71,8 +95,11 @@ export function DiagnosisQuiz({ mode, isLoggedIn }: Props) {
   }
 
   async function submit(finalAnswers: number[]) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setSubmitting(true);
     setError(null);
+    setErrorCode(null);
     // 今回の回答で結果を作り直すため、前回の「保存済み」「プレビュー」を残さない。
     try {
       sessionStorage.removeItem(DIAGNOSIS_SAVED_STORAGE_KEY);
@@ -86,9 +113,17 @@ export function DiagnosisQuiz({ mode, isLoggedIn }: Props) {
     // 経路をそのまま通る（挙動は一切変更していない）。
     if (isLoggedIn) {
       try {
-        const result = await submitDiagnosisForLoggedInUser(mode, finalAnswers);
+        const key = JSON.stringify(finalAnswers);
+        if (!requestRef.current || requestRef.current.key !== key) {
+          requestRef.current = { id: crypto.randomUUID(), key };
+        }
+        const result = await submitDiagnosisForLoggedInUser(mode, finalAnswers, requestRef.current.id);
         if (!result.success) {
-          throw new Error(result.error);
+          setError(result.message ?? "結果の保存に失敗しました。今回の保存は変更回数に数えていません。もう一度お試しください。");
+          setErrorCode(result.code ?? "unknown");
+          inFlight.current = false;
+          setSubmitting(false);
+          return;
         }
         // 表示用プレビューは既存のcomputeDiagnosis()をクライアント側でも
         // 呼んで作る（ゲスト経路のpreviewと同じ考え方：表示専用であり、
@@ -98,9 +133,13 @@ export function DiagnosisQuiz({ mode, isLoggedIn }: Props) {
         sessionStorage.setItem(DIAGNOSIS_RESULT_STORAGE_KEY, JSON.stringify(preview));
         // 保存に成功した場合だけ「保存済み」を結果画面へ伝える（失敗時は書かない）。
         sessionStorage.setItem(DIAGNOSIS_SAVED_STORAGE_KEY, result.diagnosisResultId);
+        if (result.lockedUntil) sessionStorage.setItem(DIAGNOSIS_NEXT_CHANGE_STORAGE_KEY, result.lockedUntil);
+        else sessionStorage.removeItem(DIAGNOSIS_NEXT_CHANGE_STORAGE_KEY);
         router.push("/diagnosis/result");
       } catch {
-        setError("結果の保存に失敗しました。もう一度お試しください。");
+        setError("結果の保存に失敗しました。通信状況を確認して、もう一度お試しください。同じ内容の再送は、二重には数えません。");
+        setErrorCode("unknown");
+        inFlight.current = false;
         setSubmitting(false);
       }
       return;
@@ -120,12 +159,106 @@ export function DiagnosisQuiz({ mode, isLoggedIn }: Props) {
       router.push("/diagnosis/result");
     } catch {
       setError("結果の保存に失敗しました。もう一度お試しください。");
+      inFlight.current = false;
       setSubmitting(false);
     }
   }
 
   function handleBack() {
-    if (index > 0 && !submitting) setIndex(index - 1);
+    if (submitting) return;
+    if (reviewing) {
+      setError(null);
+      setErrorCode(null);
+      setReviewing(false);
+      setIndex(bank.length - 1);
+      return;
+    }
+    if (index > 0) setIndex(index - 1);
+  }
+
+  function editAnswer(i: number) {
+    if (submitting) return;
+    setError(null);
+    setErrorCode(null);
+    setReviewing(false);
+    setReturnToReview(true);
+    setIndex(i);
+  }
+
+  if (reviewing) {
+    const notice = confirmNotice(limitStatus);
+    const canRetry = errorCode !== null && errorCode !== "locked" && errorCode !== "not_authenticated";
+    return (
+      <main className="mx-auto max-w-[520px] px-5 py-10">
+        <div className="mb-7 flex items-center gap-2.5">
+          <span className="eyebrow">Beauty Reach</span>
+          <hr className="h-px flex-1 border-0 bg-line" />
+          <span className="eyebrow" style={{ color: "var(--gold)" }}>回答の確認</span>
+        </div>
+        <h1 className="font-serif text-2xl font-bold leading-snug text-ink">この内容で確定しますか？</h1>
+        <p className="mt-2 text-[13.5px] leading-relaxed text-sub">
+          確定する前に、回答を見直せます。直したい質問の「直す」を押してください。
+        </p>
+
+        {notice.lines.length > 0 && (
+          <div className="mt-5 rounded-2xl border border-line bg-surface2 px-4 py-3 text-[13.5px] leading-relaxed text-charcoal">
+            {notice.lines.map((l) => (
+              <p key={l} className="mt-1 first:mt-0">{l}</p>
+            ))}
+          </div>
+        )}
+
+        <ol className="mt-6 space-y-3">
+          {bank.map((q, i) => (
+            <li key={i} className="rounded-2xl border border-line bg-surface px-4 py-3">
+              <p className="text-[12.5px] leading-relaxed text-sub">問 {i + 1}　{q.q}</p>
+              <p className="mt-1 text-[14px] leading-relaxed text-ink">{answers[i] !== null ? q.opts[answers[i] as number].t : "未回答"}</p>
+              <button
+                type="button"
+                onClick={() => editAnswer(i)}
+                disabled={submitting}
+                className="mt-1 inline-flex min-h-[44px] items-center text-[13px] font-semibold text-sub underline disabled:opacity-60"
+              >
+                直す
+              </button>
+            </li>
+          ))}
+        </ol>
+
+        {error && (
+          <div role="alert" className="mt-4 rounded-xl border border-[#C24545]/30 bg-[#C24545]/10 px-4 py-3 text-[13px] text-[#8A2E2E]">
+            <p>{error}</p>
+            {canRetry && (
+              <button
+                type="button"
+                onClick={() => submit(answers as number[])}
+                disabled={submitting}
+                className="mt-2 inline-flex min-h-[44px] items-center font-semibold underline disabled:opacity-60"
+              >
+                今回の回答でもう一度保存する
+              </button>
+            )}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => submit(answers as number[])}
+          disabled={submitting || notice.blocking || answers.some((a) => a === null)}
+          className="mt-6 flex min-h-[48px] w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface disabled:opacity-50"
+        >
+          {submitting ? "保存しています..." : "この内容で確定する"}
+        </button>
+        <button
+          type="button"
+          onClick={handleBack}
+          disabled={submitting}
+          className="mt-2 inline-flex min-h-[44px] items-center text-[13px] font-semibold text-sub underline disabled:opacity-60"
+        >
+          最後の質問に戻る
+        </button>
+      </main>
+    );
   }
 
   return (
@@ -181,7 +314,7 @@ export function DiagnosisQuiz({ mode, isLoggedIn }: Props) {
               type="button"
               onClick={() => submit(answers as number[])}
               disabled={submitting}
-              className="mt-2 font-semibold underline disabled:opacity-60"
+              className="mt-2 inline-flex min-h-[44px] items-center font-semibold underline disabled:opacity-60"
             >
               今回の回答でもう一度保存する
             </button>
@@ -194,7 +327,7 @@ export function DiagnosisQuiz({ mode, isLoggedIn }: Props) {
           type="button"
           onClick={handleBack}
           disabled={index === 0 || submitting}
-          className="text-[13px] font-semibold text-sub underline disabled:opacity-0"
+          className="inline-flex min-h-[44px] items-center text-[13px] font-semibold text-sub underline disabled:opacity-0"
         >
           戻る
         </button>

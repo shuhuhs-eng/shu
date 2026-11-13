@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { DiagnosisQuiz } from "@/components/diagnosis/diagnosis-quiz";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
+import { getDiagnosisChangeStatus } from "@/lib/diagnosis-limit/status";
+import { formatJstDateTime } from "@/lib/diagnosis-limit/messages";
+import Link from "next/link";
 
 // ログイン状態をサーバー側で確認し、DiagnosisQuizへ渡す。ログイン済みの
 // 場合は診断完了時に /api/diagnosis/guest ではなくログイン済み専用の
@@ -23,5 +26,25 @@ export default async function StylistDiagnosisPage() {
     redirect("/salon/mypage");
   }
 
-  return <DiagnosisQuiz mode="stylist" isLoggedIn={!!user} />;
+  // 回数制限中は、質問に答えてもらう前に案内する（答えたあとで保存できないとわかるより親切）。
+  // 状態が取れないとき（0058の適用前など）は案内を出さず、これまでどおり進める。
+  const limitStatus = user ? await getDiagnosisChangeStatus(supabase, "stylist") : undefined;
+  if (limitStatus?.state === "locked" && limitStatus.lockedUntil) {
+    return (
+      <main className="mx-auto max-w-[520px] px-5 py-10">
+        <h1 className="font-serif text-2xl font-bold leading-snug text-ink">いまは診断結果を変更できません</h1>
+        <p className="mt-3 text-[14px] leading-relaxed text-charcoal">
+          次に変更できるのは {formatJstDateTime(limitStatus.lockedUntil)} 以降です。それまでは、いまの結果をマイページで確認できます。
+        </p>
+        <Link
+          href="/stylist/mypage"
+          className="mt-6 flex min-h-[48px] w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface"
+        >
+          マイページで結果を見る
+        </Link>
+      </main>
+    );
+  }
+
+  return <DiagnosisQuiz mode="stylist" isLoggedIn={!!user} limitStatus={limitStatus} />;
 }

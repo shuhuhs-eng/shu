@@ -19,6 +19,9 @@ export const DIAGNOSIS_RESULT_STORAGE_KEY = "br_diagnosis_preview";
  */
 export const DIAGNOSIS_SAVED_STORAGE_KEY = "br_diagnosis_saved_id";
 
+/** 保存に成功したとき、次に変更できる日時（ISO）。結果画面で案内するための表示専用。保存の可否には使わない。 */
+export const DIAGNOSIS_NEXT_CHANGE_STORAGE_KEY = "br_diagnosis_next_change";
+
 /**
  * 「この新規登録は、このブラウザのゲスト診断につながる」ことをサーバーが署名して残すCookie名（httpOnly）。
  * 値は「発行時刻.HMAC」。HMACは、サーバーだけが持つ秘密鍵で（ユーザーID・保留トークンのハッシュ・発行時刻）に

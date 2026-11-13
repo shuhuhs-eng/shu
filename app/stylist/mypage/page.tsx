@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { getDiagnosisChangeStatus } from "@/lib/diagnosis-limit/status";
+import { formatJstDateTime } from "@/lib/diagnosis-limit/messages";
 import { GUEST_NOT_CARRIED_NOTICE_COOKIE } from "@/lib/diagnosis-handoff/constants";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { DiagnosisSummary } from "@/components/mypage/diagnosis-summary";
@@ -55,6 +57,7 @@ export default async function StylistMyPage() {
   // role未完了の場合はこの直後にredirectするので、並列に取得した結果は使われず破棄される。
   const [
     hasStylistRole,
+    limitStatus,
     { data: latest },
     { data: preferenceProfile },
     { data: matchProfile, error: matchProfileError },
@@ -67,6 +70,7 @@ export default async function StylistMyPage() {
     { notifications, unreadCount },
   ] = await Promise.all([
     hasCompletedRole(supabase, user.id, "stylist"),
+    getDiagnosisChangeStatus(supabase, "stylist"),
     supabase
       .from("diagnosis_results")
       .select("*")
@@ -221,6 +225,11 @@ export default async function StylistMyPage() {
           >
             {latest ? "診断を受け直す" : "診断を受ける"}
           </Link>
+          {latest && limitStatus.state === "locked" && limitStatus.lockedUntil && (
+            <p className="mt-2 text-center text-[12.5px] leading-relaxed text-sub">
+              結果を次に変更できるのは {formatJstDateTime(limitStatus.lockedUntil)} 以降です。
+            </p>
+          )}
         </>
       )}
 

@@ -253,13 +253,19 @@ test("I: アプリ（app/lib/components）から旧RPCを呼ばない。新UIは
   // 旧Server Actionのexportが残っていない
   assert.ok(!src.some((x) => /export async function (sendScout|createSalaryOffer|setSalonInterestAction)\b/.test(x.s)));
 });
-test("D: diagnosis_results への直接INSERTは service role（サーバー）経由のみ", () => {
+test("D: diagnosis_results への保存は、回数制限つきの commit_diagnosis_result（service role）経由。直接INSERTは0058未適用時のフォールバックだけ", () => {
   const files = [...walk("app"), ...walk("lib"), ...walk("components")];
-  const inserters = files.filter((f) => /from\("diagnosis_results"\)\s*\.insert\(|createServiceClient\(\)\s*\.from\("diagnosis_results"\)\s*\.insert\(/.test(readFileSync(f, "utf8").replace(/\n\s*/g, "")));
-  for (const f of inserters) assert.match(readFileSync(f, "utf8"), /createServiceClient\(\)\s*\.from\("diagnosis_results"\)/, f);
-  assert.ok(inserters.length >= 2);
-  // クライアントコンポーネントから直接INSERTしない
-  assert.ok(!walk("components").some((f) => /from\("diagnosis_results"\)\s*\.insert/.test(readFileSync(f, "utf8"))));
+  const inserters = files.filter((f) => /\.from\("diagnosis_results"\)\s*\.insert\(/.test(readFileSync(f, "utf8").replace(/\n\s*/g, "")));
+  // 直接INSERTは共通の保存関数（関数が存在しないときだけ使うフォールバック）にしか残さない
+  assert.deepEqual(inserters.map((f) => f.replace(/\\/g, "/")), ["lib/diagnosis-limit/commit.ts"]);
+  const commit = readFileSync("lib/diagnosis-limit/commit.ts", "utf8");
+  assert.match(commit, /rpc\("commit_diagnosis_result"/);
+  assert.match(commit, /if \(isMissingFunctionError\(error\)\)/, "フォールバックは関数が存在しないときだけ");
+  // 呼び出しはサーバー側（service role）だけ。クライアントコンポーネントからは保存しない
+  for (const f of ["lib/diagnosis-handoff/submit-logged-in.ts", "lib/diagnosis-handoff/claim.ts"]) {
+    assert.match(readFileSync(f, "utf8"), /commitDiagnosisResult\(createServiceClient\(\) as unknown as CommitClient/, f);
+  }
+  assert.ok(!walk("components").some((f) => /from\("diagnosis_results"\)\s*\.insert|commit_diagnosis_result/.test(readFileSync(f, "utf8"))));
 });
 test("0053: 旧RPCのrevoke・diagnosis_results INSERT廃止・rate limit がmigrationに含まれる。既存migrationは変更しない", () => {
   const sql = readFileSync("supabase/migrations/0053_security_production_hardening.sql", "utf8");
@@ -327,7 +333,7 @@ test("再診断フロー: 結果画面のログイン中表示・引き継ぎの
   assert.ok(quiz.includes("sessionStorage.removeItem(DIAGNOSIS_SAVED_STORAGE_KEY)"));
   assert.ok(quiz.includes("今回の回答でもう一度保存する"));
   // 古い保留結果の引き継ぎが、後から受けた診断を巻き戻さない（診断を受けた時刻を使う）。
-  assert.match(read("lib/diagnosis-handoff/claim.ts"), /created_at: pending\.created_at/);
+  assert.match(read("lib/diagnosis-handoff/claim.ts"), /createdAt: pending\.created_at/);
   // マイページの8タイプは最新診断の判定（履歴）を優先する。
   assert.match(read("app/stylist/mypage/page.tsx"), /stylist_core_type_history[\s\S]*eq\("diagnosis_result_id", latest\.id\)/);
   // 戻り先は既存の安全な内部パス検証を維持。

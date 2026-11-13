@@ -54,6 +54,9 @@ const env = {
   pendings: [] as Pending[],
   results: [] as Result[],
   codes: new Map<string, string>(), // 確認コード -> user id
+  rpcMissing: false, // 0058未適用（commit_diagnosis_result が無い）の再現
+  requests: new Map<string, { resultId: string; action: string; hash: string }>(),
+  limits: new Map<string, { lockedUntil: string | null; changes: number }>(),
   omitTimestamps: false, // 実Authが確認メール送信時刻・確認時刻を返さない場合の再現
   signUpMode: "confirm" as "confirm" | "auto" | "existing" | "unconfirmed",
   adminFail: false,
@@ -71,6 +74,9 @@ function resetEnv() {
   env.signUpMode = "confirm";
   env.failResultInsert = false;
   env.omitTimestamps = false;
+  env.rpcMissing = false;
+  env.requests.clear();
+  env.limits.clear();
 }
 const tick = () => new Date(Date.UTC(2026, 10, 13, 0, 0, 0) + ++env.clock * 1000).toISOString();
 
@@ -189,6 +195,39 @@ function fakeSupabase() {
 
 function fakeService() {
   return {
+    // 0058 の commit_diagnosis_result の簡易再現（判定の詳細はSQL側の検証で行う。ここは呼び出し側の振る舞いの確認用）
+    rpc: async (name: string, a: any) => {
+      if (env.failResultInsert && name === "commit_diagnosis_result") return { data: null, error: { message: "boom" } };
+      if (name !== "commit_diagnosis_result" || env.rpcMissing)
+        return { data: null, error: { code: "PGRST202", message: "Could not find the function public." + name } };
+      const hash = JSON.stringify(a.p_answers);
+      const prior = env.requests.get(a.p_request_id);
+      if (prior) {
+        if (prior.hash !== hash) return { data: null, error: { message: "request id content mismatch" } };
+        return { data: { action: prior.action, replay: true, result_id: prior.resultId, locked_until: null }, error: null };
+      }
+      const mine = env.results.filter((r) => r.user_id === a.p_user_id && r.mode === a.p_mode);
+      const lim = env.limits.get(a.p_user_id + a.p_mode) ?? { lockedUntil: null, changes: 0 };
+      let action = "initial";
+      if (mine.length) {
+        if (!a.p_allow_change) return { data: null, error: { message: "diagnosis_already_saved" } };
+        const latestRow = mine.sort((x, y) => Date.parse(y.created_at) - Date.parse(x.created_at))[0];
+        if (JSON.stringify(latestRow.answers) === hash) {
+          env.requests.set(a.p_request_id, { resultId: latestRow.id, action: "unchanged", hash });
+          return { data: { action: "unchanged", replay: false, result_id: latestRow.id, locked_until: lim.lockedUntil }, error: null };
+        }
+        if (lim.lockedUntil && Date.now() < Date.parse(lim.lockedUntil))
+          return { data: null, error: { message: "diagnosis_change_locked", details: lim.lockedUntil } };
+        lim.changes += 1;
+        lim.lockedUntil = new Date(Date.now() + 90 * 86400_000).toISOString();
+        action = "change";
+      }
+      env.limits.set(a.p_user_id + a.p_mode, lim);
+      const r: Result = { id: randomUUID(), user_id: a.p_user_id, mode: a.p_mode, answers: a.p_answers, created_at: a.p_created_at ?? tick(), source_pending_id: a.p_source_pending_id ?? null, type_id: a.p_type_id };
+      env.results.push(r);
+      env.requests.set(a.p_request_id, { resultId: r.id, action, hash });
+      return { data: { action, replay: false, result_id: r.id, locked_until: lim.lockedUntil }, error: null };
+    },
     auth: {
       admin: {
         updateUserById: async (id: string, attrs: any) => {
@@ -438,7 +477,7 @@ test("シナリオ2: ログイン中に受け直して結果Cを保存すると�
   const x = seedExistingMemberWithResultA();
   env.sessionUserId = x.id;
 
-  const ok = await submitDiagnosisForLoggedInUser("stylist", C);
+  const ok = await submitDiagnosisForLoggedInUser("stylist", C, randomUUID());
   assert.equal(ok.success, true);
   assert.equal(resultsOf(x.id).length, 2);
   assert.deepEqual(latest(x.id).answers, C, "最新の結果はCになる");
@@ -452,15 +491,17 @@ test("シナリオ2: ログイン中に受け直して結果Cを保存すると�
   // 保存失敗: 以前の結果（C）が維持され、失敗が返る
   env.sessionUserId = x.id;
   env.failResultInsert = true;
-  const ng = await submitDiagnosisForLoggedInUser("stylist", D);
-  assert.deepEqual(ng, { success: false, error: "save_failed" });
+  const ng = await submitDiagnosisForLoggedInUser("stylist", D, randomUUID());
+  assert.equal(ng.success, false);
+  assert.equal((ng as any).error, "save_failed");
+  assert.match((ng as any).message, /変更回数に数えていません/, "失敗時は回数を消費していないことを伝える");
   assert.equal(resultsOf(x.id).length, 2);
   assert.deepEqual(latest(x.id).answers, C);
 
   // 未ログインでは保存しない
   env.failResultInsert = false;
   env.sessionUserId = null;
-  const na = await submitDiagnosisForLoggedInUser("stylist", D);
+  const na = await submitDiagnosisForLoggedInUser("stylist", D, randomUUID());
   assert.deepEqual(na, { success: false, error: "not_authenticated" });
 });
 
@@ -767,6 +808,77 @@ test("新規登録の応答が想定と違い、新規作成を確認できな�
   await callback("code-s");
   assert.equal(resultsOf(sUser.id).length, 0);
   assert.equal(env.cookies.get(GUEST_NOT_CARRIED_NOTICE_COOKIE), "expired");
+});
+
+test("回数制限の呼び出し側: 変更は1回→ロック中は拒否（数えない）／同じ送信の再送は二重に保存しない／識別子の不正は拒否／0058未適用でも保存できる", async () => {
+  resetEnv();
+  const x = seedExistingMemberWithResultA();
+  env.sessionUserId = x.id;
+  // 1回目の変更（既存会員のこの導入後の1回）
+  const req1 = randomUUID();
+  const c1 = await submitDiagnosisForLoggedInUser("stylist", C, req1);
+  assert.equal(c1.success, true);
+  assert.equal(resultsOf(x.id).length, 2);
+  assert.ok((c1 as any).lockedUntil, "保存の結果として、次に変更できる日時が返る");
+  // 同じ識別子の再送（通信の途中切れ・連打）: 再保存しない
+  const again = await submitDiagnosisForLoggedInUser("stylist", C, req1);
+  assert.equal(again.success, true);
+  assert.equal(resultsOf(x.id).length, 2, "二重に保存しない");
+  assert.equal((again as any).diagnosisResultId, (c1 as any).diagnosisResultId);
+  // 同じ識別子で別の内容は拒否
+  const mismatch = await submitDiagnosisForLoggedInUser("stylist", D, req1);
+  assert.equal(mismatch.success, false);
+  assert.equal((mismatch as any).code, "content_mismatch");
+  // ロック中の変更は拒否。回数を消費せず、次に変更できる日時を返す
+  const locked = await submitDiagnosisForLoggedInUser("stylist", D, randomUUID());
+  assert.equal(locked.success, false);
+  assert.equal((locked as any).code, "locked");
+  assert.ok((locked as any).lockedUntil);
+  assert.match((locked as any).message, /次に変更できるのは/);
+  assert.equal(resultsOf(x.id).length, 2);
+  // 同一内容の再保存（別の識別子）は、変更として数えず、追加もしない
+  const same = await submitDiagnosisForLoggedInUser("stylist", C, randomUUID());
+  assert.equal(same.success, true);
+  assert.equal(resultsOf(x.id).length, 2);
+  // 識別子が無い・形が違う送信は受け付けない
+  const bad = await submitDiagnosisForLoggedInUser("stylist", D, "not-a-uuid");
+  assert.deepEqual(bad, { success: false, error: "invalid_request_id" });
+
+  // 0058未適用のDB（関数が無い）: 従来どおり保存できる（切替の順序に依存しない／SQLを巻き戻しても動く）
+  resetEnv();
+  const y = seedExistingMemberWithResultA();
+  env.sessionUserId = y.id;
+  env.rpcMissing = true;
+  const legacy = await submitDiagnosisForLoggedInUser("stylist", C, randomUUID());
+  assert.equal(legacy.success, true);
+  assert.equal(resultsOf(y.id).length, 2);
+  assert.equal((legacy as any).action, "legacy");
+});
+
+test("引き継ぎ（新規登録直後）: 保存は初回結果の経路（allowChange=false）。会員に既に結果がある場合・同時要求の競合ではDBが拒否し、取り込まない", async () => {
+  // DB（commit_diagnosis_result）が diagnosis_already_saved を返したとき（アプリ側の確認をすり抜けた競合）の振る舞い
+  resetEnv();
+  await guestTakes(D);
+  env.signUpMode = "confirm";
+  await signUpAction({}, form({ displayName: "T", email: "t@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  const t = [...env.users.values()].find((u) => u.email === "t@example.test")!;
+  // アプリ側の「既存結果なし」の確認の直後に、別の経路で初回結果が保存された状況を再現する
+  // （確認の後・保存の前に差し込むため、結果の一覧取得をフックして一度だけ空を返す）
+  const raced = { id: randomUUID(), user_id: t.id, mode: "stylist", answers: B, created_at: tick(), source_pending_id: null, type_id: "B" };
+  env.results.push(raced as any);
+  const origFilter = env.results.filter.bind(env.results);
+  let first = true;
+  (env.results as any).filter = (fn: any) => {
+    if (first) { first = false; return []; } // アプリ側の確認だけが「結果なし」と見る
+    return origFilter(fn);
+  };
+  env.codes.set("code-t", t.id);
+  env.sessionUserId = null;
+  await callback("code-t");
+  (env.results as any).filter = origFilter;
+  assert.equal(resultsOf(t.id).length, 1, "初回結果は複数にならない");
+  assert.deepEqual(latest(t.id).answers, B, "先に保存された結果が残る");
+  assert.ok(!env.cookies.has(CLAIM_TOKEN_COOKIE), "再試行しても変わらないのでCookieは消える");
 });
 
 // ------------------------------------------------------------------ 構造・文言
