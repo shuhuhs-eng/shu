@@ -42,6 +42,21 @@ export const SIGNUP_CLOCK_SKEW_MS = 5 * 1000;
 export const CLAIM_BINDING_ISSUED_APP_METADATA_KEY = "diagnosis_claim_binding_issued_at";
 
 /**
+ * 印を有効にするゲスト診断（保留トークンのハッシュ）を、サーバーだけが書ける app_metadata に残すキー。
+ * 引き継ぎ時に「署名」と「この記録」の両方が今のゲスト診断と一致して初めて有効になる。
+ * 同時要求で複数の印が出ても、記録は最後の1つだけなので、有効になる印は1つだけ（最後に書かれたもの）。
+ */
+export const CLAIM_BINDING_FOR_APP_METADATA_KEY = "diagnosis_claim_binding_for";
+
+/**
+ * 「新規作成」の自己整合の許容。Supabase が1回の作成で付ける時刻同士
+ * （作成時刻と、確認メール送信時刻／自動確認の確認時刻）は、ほぼ同時になる。
+ * 確認待ちのアカウントへの再登録では、確認メール送信時刻だけが今に更新され、作成時刻は古いまま残るため、差が開く。
+ * アプリとDBの時計のずれを含まない（どちらもSupabase側の時計）。
+ */
+export const SIGNUP_SELF_CONSISTENCY_MS = 500;
+
+/**
  * 新規登録の確認後、ゲスト診断を引き継げなかったことを、マイページで一度案内するための目印（httpOnly Cookie）。
  * 表示のためだけに使い、引き継ぎの判定には一切使わない。診断結果がまだ無い間だけ表示される。
  */

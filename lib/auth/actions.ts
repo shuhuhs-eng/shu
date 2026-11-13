@@ -15,11 +15,12 @@ import { determinePostAuthPath, determineRoleEntryPath } from "@/lib/auth/post-a
 import { claimPendingDiagnosisForNewAccount, discardGuestDiagnosisCookie } from "@/lib/diagnosis-handoff/claim";
 import {
   CLAIM_BINDING_COOKIE,
+  CLAIM_BINDING_FOR_APP_METADATA_KEY,
   CLAIM_BINDING_ISSUED_APP_METADATA_KEY,
   CLAIM_BINDING_TTL_MS,
   CLAIM_TOKEN_COOKIE,
 } from "@/lib/diagnosis-handoff/constants";
-import { issueSignUpBinding } from "@/lib/diagnosis-handoff/new-account";
+import { hashClaimToken, issueSignUpBinding } from "@/lib/diagnosis-handoff/new-account";
 import {
   signUpSchema,
   loginSchema,
@@ -117,10 +118,17 @@ async function performSignUp(
   let binding = data.user ? issueSignUpBinding(data.user, guestClaimToken, requestStartedAt) : null;
   if (binding && data.user) {
     // 同じアカウントへ2回は発行しない。サーバーだけが書ける app_metadata に記録できなければ、印は出さない（安全側）。
-    const marked = await createServiceClient().auth.admin.updateUserById(data.user.id, {
-      app_metadata: { [CLAIM_BINDING_ISSUED_APP_METADATA_KEY]: new Date().toISOString() },
-    });
-    if (marked.error) binding = null;
+    // 記録には「どのゲスト診断の印か」も入れる。同時要求で複数の印が出ても、最後に書かれた記録と一致する1つだけが有効。
+    const markerForClaim = {
+      [CLAIM_BINDING_ISSUED_APP_METADATA_KEY]: new Date().toISOString(),
+      [CLAIM_BINDING_FOR_APP_METADATA_KEY]: hashClaimToken(guestClaimToken!),
+    };
+    const marked = await createServiceClient().auth.admin.updateUserById(data.user.id, { app_metadata: markerForClaim });
+    if (marked.error) {
+      binding = null;
+    } else {
+      data.user.app_metadata = { ...(data.user.app_metadata ?? {}), ...markerForClaim };
+    }
   }
   if (binding) {
     (await cookies()).set(CLAIM_BINDING_COOKIE, binding, {

@@ -1,8 +1,10 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import {
+  CLAIM_BINDING_FOR_APP_METADATA_KEY,
   CLAIM_BINDING_ISSUED_APP_METADATA_KEY,
   CLAIM_BINDING_TTL_MS,
   SIGNUP_CLOCK_SKEW_MS,
+  SIGNUP_SELF_CONSISTENCY_MS,
 } from "@/lib/diagnosis-handoff/constants";
 
 /** 保留トークン（claim_token）のハッシュ。 */
@@ -15,12 +17,13 @@ export type AuthUserForClaim = {
   id: string;
   created_at?: string | null;
   email_confirmed_at?: string | null;
+  app_metadata?: Record<string, unknown> | null;
 };
 
 /** signUp の応答のユーザー（identities は登録済みメールの再登録で空になる）。 */
 export type SignUpUser = AuthUserForClaim & {
   identities?: unknown[] | null;
-  app_metadata?: Record<string, unknown> | null;
+  confirmation_sent_at?: string | null;
 };
 
 /**
@@ -40,18 +43,27 @@ function sign(secret: string, userId: string, claimToken: string, issuedAt: numb
 }
 
 /**
- * 「今回の signUp 要求で、本当に新しく作られたユーザー」かを、signUp の応答だけで判定する。
- *  ・identities が空でない（登録済みメールでの再登録は空になる）
- *  ・作成時刻が「この要求の開始時刻」以降（時計のずれ分だけ許容）。確認待ちの既存ユーザーで再登録した場合、
- *    作成時刻は要求より前になる。直前（2分以内など）に作られた未確認アカウントでも同じ。
- *  ・サーバーだけが書ける app_metadata に「印を発行済み」の記録が無い（同じアカウントへ2回発行しない）
+ * 「今回の signUp 要求で、本当に新しく作られたユーザー」かを、signUp の応答だけで判定する。次をすべて満たすこと。
+ *  1. identities が空でない（登録済みメールでの再登録は空になる）
+ *  2. サーバーだけが書ける app_metadata に「印を発行済み」の記録が無い
+ *  3. 作成時刻が「この要求の開始時刻」以降（アプリとDBの時計のずれ分5秒だけ手前を許容）
+ *  4. 自己整合: 作成時刻と、確認メール送信時刻（確認不要の設定では確認時刻）がほぼ同時（500ms以内）。
+ *     ※5秒の許容だけでは、直前（1〜5秒前）に作られた確認待ちのアカウントへの再登録を区別できない。
+ *       再登録では確認メール送信時刻が今に更新される一方、作成時刻は古いままなので、差が開いて弾ける。
+ *       どちらもSupabase側の時計なので、アプリとのずれの影響を受けない。
+ *       どちらの時刻も応答に無い場合は発行しない（安全側）。
+ * 実Authでは、これらの時刻・identitiesが想定どおり返るかを未確認（README参照）。
  */
 export function isUserCreatedBySignUp(user: SignUpUser, requestStartedAt: number, now: number = Date.now()): boolean {
   if (!Array.isArray(user.identities) || user.identities.length === 0) return false;
   if (user.app_metadata && user.app_metadata[CLAIM_BINDING_ISSUED_APP_METADATA_KEY]) return false;
   const created = user.created_at ? Date.parse(user.created_at) : NaN;
   if (!Number.isFinite(created)) return false;
-  return created >= requestStartedAt - SIGNUP_CLOCK_SKEW_MS && created - now <= 60_000;
+  if (!(created >= requestStartedAt - SIGNUP_CLOCK_SKEW_MS && created - now <= 60_000)) return false;
+  const anchor = user.confirmation_sent_at ?? user.email_confirmed_at ?? null;
+  const anchorMs = anchor ? Date.parse(anchor) : NaN;
+  if (!Number.isFinite(anchorMs)) return false;
+  return Math.abs(anchorMs - created) <= SIGNUP_SELF_CONSISTENCY_MS;
 }
 
 /**
@@ -83,6 +95,8 @@ export function verifySignUpBinding(
 ): boolean {
   const secret = bindingSecret();
   if (!secret || !binding || !claimToken || !user.id) return false;
+  // サーバーだけが書ける記録が、今のゲスト診断を指していること（同時要求では最後に書かれた1つだけが有効）
+  if (!user.app_metadata || user.app_metadata[CLAIM_BINDING_FOR_APP_METADATA_KEY] !== hashClaimToken(claimToken)) return false;
   const m = /^(\d{10,16})\.([0-9a-f]{64})$/.exec(binding);
   if (!m) return false;
   const issuedAt = Number(m[1]);

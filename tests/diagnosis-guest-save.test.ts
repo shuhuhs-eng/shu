@@ -31,6 +31,7 @@ type AuthUser = {
   email: string;
   created_at: string;
   email_confirmed_at: string | null;
+  confirmation_sent_at?: string | null;
   user_metadata: Record<string, unknown>;
   app_metadata?: Record<string, unknown>;
 };
@@ -77,7 +78,7 @@ class RedirectSignal extends Error {
   }
 }
 
-function makeUser(email: string, opts: { ageMs?: number; confirmedAgoMs?: number | null; meta?: Record<string, unknown> } = {}): AuthUser {
+function makeUser(email: string, opts: { ageMs?: number; confirmedAgoMs?: number | null; meta?: Record<string, unknown>; noConfirmationSent?: boolean } = {}): AuthUser {
   const now = Date.now();
   const u: AuthUser = {
     id: randomUUID(),
@@ -87,6 +88,8 @@ function makeUser(email: string, opts: { ageMs?: number; confirmedAgoMs?: number
     user_metadata: opts.meta ?? {},
     app_metadata: {},
   } as AuthUser;
+  // Supabase は作成時に確認メール送信時刻を付ける（確認不要の設定では付かない想定）
+  u.confirmation_sent_at = opts.noConfirmationSent ? null : u.created_at;
   env.users.set(u.id, u);
   return u;
 }
@@ -100,9 +103,17 @@ const cookieStore = {
 function fakeSupabase() {
   const current = () => (env.sessionUserId ? env.users.get(env.sessionUserId) ?? null : null);
   const builder = (table: string) => {
+    const filters: Record<string, unknown> = {};
     const b: any = {
       select: () => b,
-      eq: () => b,
+      eq: (col: string, val: unknown) => {
+        filters[col] = val;
+        return b;
+      },
+      limit: async () => ({
+        data: table === "diagnosis_results" ? env.results.filter((r: any) => Object.entries(filters).every(([k, v]) => (r as any)[k] === v)) : [],
+        error: null,
+      }),
       single: async () => (table === "profiles" ? { data: { id: env.sessionUserId, role: "stylist", onboarding_step: 4 }, error: null } : { data: null, error: null }),
       maybeSingle: async () => ({ data: null, error: null }),
     };
@@ -136,9 +147,10 @@ function fakeSupabase() {
           // 送られたメタデータで上書きして確認メールを再送する。
           const old = [...env.users.values()].find((x) => x.email === email)!;
           old.user_metadata = { ...old.user_metadata, ...options.data };
+          old.confirmation_sent_at = new Date().toISOString(); // 確認メールの再送時刻だけが今に更新される（作成時刻は古いまま）
           return { data: { user: { ...old, identities: [{ id: "i" }] }, session: null }, error: null };
         }
-        const u = makeUser(email, { ageMs: 1000, confirmedAgoMs: env.signUpMode === "auto" ? 0 : null, meta: options.data });
+        const u = makeUser(email, { ageMs: 1000, confirmedAgoMs: env.signUpMode === "auto" ? 1000 : null, meta: options.data, noConfirmationSent: env.signUpMode === "auto" });
         if (env.signUpMode === "auto") env.sessionUserId = u.id;
         const user = { ...u, identities: [{ id: "i" }] };
         return { data: { user, session: env.signUpMode === "auto" ? { access_token: "tok" } : null }, error: null };
@@ -323,6 +335,7 @@ test("新規登録の印: サーバー署名つき。作成直後のユーザー
   const created = (over: Record<string, unknown> = {}) => ({
     id: "user-1",
     created_at: new Date(now - 5_000).toISOString(),
+    confirmation_sent_at: new Date(now - 5_000).toISOString(),
     identities: [{ id: "i" }],
     ...over,
   });
@@ -333,16 +346,32 @@ test("新規登録の印: サーバー署名つき。作成直後のユーザー
   assert.equal(isUserCreatedBySignUp(created({ created_at: new Date(now - 10 * 60_000).toISOString() }), started, now), false, "作成時刻が要求より前（確認待ちの再登録）");
   assert.equal(isUserCreatedBySignUp(created({ created_at: new Date(now - 90_000).toISOString() }), started, now), false, "90秒前に作られた未確認アカウントへの再登録（2分以内でも不可）");
   assert.equal(isUserCreatedBySignUp(created({ app_metadata: { diagnosis_claim_binding_issued_at: "x" } }), started, now), false, "既に印を発行済みのアカウントには発行しない");
+  // 要求の1秒前・4秒前に作られた確認待ちアカウントへの再登録（5秒の許容の内側）: 確認メール送信時刻だけが今に更新される
+  for (const agoMs of [1_000, 4_000]) {
+    const st = now - 100; // この要求の開始
+    const reRegistered = created({ created_at: new Date(st - agoMs).toISOString(), confirmation_sent_at: new Date(st + 300).toISOString() });
+    assert.equal(isUserCreatedBySignUp(reRegistered, st, now), false, `${agoMs / 1000}秒前に作られた未確認アカウントへの再登録は、5秒の許容内でも新規扱いしない`);
+  }
+  // 時刻が足りない応答は発行しない（安全側）／確認不要の設定では確認時刻で自己整合を見る
+  assert.equal(isUserCreatedBySignUp(created({ confirmation_sent_at: null }), started, now), false, "確認メール送信時刻も確認時刻も無い");
+  assert.equal(isUserCreatedBySignUp(created({ confirmation_sent_at: null, email_confirmed_at: new Date(now - 5_000).toISOString() }), started, now), true, "自動確認: 確認時刻が作成と同時");
+  assert.equal(isUserCreatedBySignUp(created({ confirmation_sent_at: null, email_confirmed_at: new Date(now - 60_000).toISOString() }), started, now), false, "確認時刻が作成と離れている");
+  // 発行済みの記録が無い古い既存アカウント（確認済み・作成時刻が古い）
+  assert.equal(isUserCreatedBySignUp(created({ created_at: new Date(now - 400 * 86400_000).toISOString(), confirmation_sent_at: new Date(now - 400 * 86400_000).toISOString() }), started, now), false, "記録のない古い既存アカウント");
   assert.equal(issueSignUpBinding(created({ created_at: new Date(now - 3600_000).toISOString() }), token, started, now), null);
   assert.equal(issueSignUpBinding(created(), undefined, started, now), null, "ゲスト診断なし");
   const b = issueSignUpBinding(created(), token, started, now)!;
   assert.ok(b);
+  const mark = (t: string) => ({ diagnosis_claim_binding_for: createHash("sha256").update(t).digest("hex") });
+  // 検証は「署名」＋「サーバー側の記録が今のゲスト診断を指す」の両方が必要
+  const withMark = { id: "user-1", app_metadata: mark(token) };
+  assert.equal(verifySignUpBinding(b, { id: "user-1" }, token, now + 1000), false, "記録が無ければ署名だけでは無効");
   assert.ok(!b.includes(token), "トークンそのものは含まない");
   // 検証
-  assert.equal(verifySignUpBinding(b, { id: "user-1" }, token, now + 1000), true);
-  assert.equal(verifySignUpBinding(b, { id: "other-user" }, token, now + 1000), false, "別のユーザーID");
-  assert.equal(verifySignUpBinding(b, { id: "user-1" }, randomUUID(), now + 1000), false, "別のゲスト診断");
-  assert.equal(verifySignUpBinding(b, { id: "user-1" }, token, now + 25 * 3600_000), false, "24時間超");
+  assert.equal(verifySignUpBinding(b, withMark, token, now + 1000), true);
+  assert.equal(verifySignUpBinding(b, { id: "other-user", app_metadata: mark(token) }, token, now + 1000), false, "別のユーザーID");
+  assert.equal(verifySignUpBinding(b, withMark, randomUUID(), now + 1000), false, "別のゲスト診断");
+  assert.equal(verifySignUpBinding(b, withMark, token, now + 25 * 3600_000), false, "24時間超");
   assert.equal(verifySignUpBinding(undefined, { id: "user-1" }, token, now), false);
   assert.equal(verifySignUpBinding(`${now}.${"0".repeat(64)}`, { id: "user-1" }, token, now), false, "偽造した署名");
   assert.equal(verifySignUpBinding("garbage", { id: "user-1" }, token, now), false);
@@ -618,6 +647,49 @@ test("再登録の穴: 直前に作られた未確認アカウントへ別のゲ
   const x9 = [...env.users.values()].find((u) => u.email === "x9@example.test")!;
   assert.ok(env.cookies.has(CLAIM_BINDING_COOKIE));
   assert.ok((x9 as any).app_metadata.diagnosis_claim_binding_issued_at, "発行済みの記録が残る");
+});
+
+test("再登録の穴(2): 1秒前・4秒前に作られた未確認アカウント／記録のない既存アカウント／同時要求でも、有効な印は1つだけ", async () => {
+  // (l) 要求の1秒前・4秒前（5秒の許容の内側）に作られた確認待ちアカウントへ、別のゲスト診断で再登録
+  for (const agoMs of [1_000, 4_000]) {
+    resetEnv();
+    env.signUpMode = "confirm";
+    await signUpAction({}, form({ displayName: "P", email: `p${agoMs}@example.test`, password: "password-1234", confirmPassword: "password-1234" }));
+    const p1 = [...env.users.values()].find((u) => u.email === `p${agoMs}@example.test`)!;
+    p1.created_at = new Date(Date.now() - agoMs).toISOString(); // 要求の直前に作られた
+    p1.app_metadata = {}; // 記録も無い状態（記録による防御に頼らず、時刻だけで弾けること）
+    await guestTakes(D);
+    env.signUpMode = "unconfirmed";
+    await signUpAction({}, form({ displayName: "P", email: `p${agoMs}@example.test`, password: "password-1234", confirmPassword: "password-1234" }));
+    assert.ok(!env.cookies.has(CLAIM_BINDING_COOKIE), `${agoMs / 1000}秒前に作られた未確認アカウントには印を発行しない`);
+    env.codes.set("code-p", p1.id);
+    env.sessionUserId = null;
+    await callback("code-p");
+    assert.equal(resultsOf(p1.id).length, 0);
+  }
+  // (m) 記録（app_metadata）の無い既存アカウント（確認済み・古い）: 再登録は identities が空になり、印は出ない／印を持ち込んでも無効
+  resetEnv();
+  const old = makeUser("old@example.test", { meta: {} });
+  await guestTakes(B);
+  env.signUpMode = "existing";
+  await signUpAction({}, form({ displayName: "O", email: "old@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  assert.ok(!env.cookies.has(CLAIM_BINDING_COOKIE));
+  env.codes.set("code-old", old.id);
+  env.sessionUserId = null;
+  await callback("code-old");
+  assert.equal(resultsOf(old.id).length, 0);
+  // (n) 同時要求: 同じ新規アカウントに対し2つの要求が「未発行確認」を両方通り、印をA・Bの2つ発行。記録は最後に書かれたBだけ → Bの印だけが有効
+  const tokenA = randomUUID();
+  const tokenB = randomUUID();
+  const now = Date.now();
+  const snap = { id: "race-user", created_at: new Date(now - 1000).toISOString(), confirmation_sent_at: new Date(now - 1000).toISOString(), identities: [{ id: "i" }], app_metadata: {} };
+  const bindA = issueSignUpBinding(snap, tokenA, now - 2000, now)!;
+  const bindB = issueSignUpBinding(snap, tokenB, now - 2000, now)!;
+  assert.ok(bindA && bindB, "両方とも未発行の状態を見て発行できてしまう（競合）");
+  const stored = { diagnosis_claim_binding_for: createHash("sha256").update(tokenB).digest("hex") }; // 後から書いた方が残る
+  assert.equal(verifySignUpBinding(bindA, { id: "race-user", app_metadata: stored }, tokenA, now + 1000), false, "先に書いた側の印は無効");
+  assert.equal(verifySignUpBinding(bindB, { id: "race-user", app_metadata: stored }, tokenB, now + 1000), true, "最後に書かれた1つだけが有効");
+  assert.equal(verifySignUpBinding(bindA, { id: "race-user", app_metadata: stored }, tokenB, now + 1000), false, "Aの印をBのトークンに流用しても無効");
 });
 
 // ------------------------------------------------------------------ 構造・文言

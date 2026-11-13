@@ -114,6 +114,19 @@ export async function claimPendingDiagnosisForNewAccount(
     return { claimed: false, diagnosisResultId: null };
   }
 
+  // 新規アカウントの「初回結果」としてだけ取り込む。すでにこのモードの結果がある会員（前回の取り込みの再開は除く）には
+  // 追加しない。回数制限（初回＋1回の再診断）を、取り込み経由で消費・迂回させないため。
+  const { data: already } = await supabase
+    .from("diagnosis_results")
+    .select("id, source_pending_id")
+    .eq("user_id", sessionUser.id)
+    .eq("mode", pending.mode)
+    .limit(5);
+  if ((already ?? []).some((r: { source_pending_id: string | null }) => r.source_pending_id !== pending.id)) {
+    dropClaimCookies(cookieStore);
+    return { claimed: false, diagnosisResultId: null };
+  }
+
   const computed = computeDiagnosis(pending.mode, pending.answers);
 
   let diagnosisResultId: string | null = null;
