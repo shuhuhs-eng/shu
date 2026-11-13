@@ -1,5 +1,9 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import { CLAIM_BINDING_TTL_MS, SIGNUP_CREATED_WITHIN_MS } from "@/lib/diagnosis-handoff/constants";
+import {
+  CLAIM_BINDING_ISSUED_APP_METADATA_KEY,
+  CLAIM_BINDING_TTL_MS,
+  SIGNUP_CLOCK_SKEW_MS,
+} from "@/lib/diagnosis-handoff/constants";
 
 /** 保留トークン（claim_token）のハッシュ。 */
 export function hashClaimToken(claimToken: string): string {
@@ -14,7 +18,10 @@ export type AuthUserForClaim = {
 };
 
 /** signUp の応答のユーザー（identities は登録済みメールの再登録で空になる）。 */
-export type SignUpUser = AuthUserForClaim & { identities?: unknown[] | null };
+export type SignUpUser = AuthUserForClaim & {
+  identities?: unknown[] | null;
+  app_metadata?: Record<string, unknown> | null;
+};
 
 /**
  * 署名に使う秘密鍵。サーバー専用の環境変数（SUPABASE_SERVICE_ROLE_KEY）から、用途専用に派生させる。
@@ -33,29 +40,33 @@ function sign(secret: string, userId: string, claimToken: string, issuedAt: numb
 }
 
 /**
- * 「今回の signUp で、本当に新しく作られたユーザー」かを、signUp の応答だけで判定する。
+ * 「今回の signUp 要求で、本当に新しく作られたユーザー」かを、signUp の応答だけで判定する。
  *  ・identities が空でない（登録済みメールでの再登録は空になる）
- *  ・作成時刻が「今」から2分以内（確認待ちの既存ユーザーで再登録した場合は、作成時刻が過去になる）
+ *  ・作成時刻が「この要求の開始時刻」以降（時計のずれ分だけ許容）。確認待ちの既存ユーザーで再登録した場合、
+ *    作成時刻は要求より前になる。直前（2分以内など）に作られた未確認アカウントでも同じ。
+ *  ・サーバーだけが書ける app_metadata に「印を発行済み」の記録が無い（同じアカウントへ2回発行しない）
  */
-export function isUserCreatedBySignUp(user: SignUpUser, now: number = Date.now()): boolean {
+export function isUserCreatedBySignUp(user: SignUpUser, requestStartedAt: number, now: number = Date.now()): boolean {
   if (!Array.isArray(user.identities) || user.identities.length === 0) return false;
+  if (user.app_metadata && user.app_metadata[CLAIM_BINDING_ISSUED_APP_METADATA_KEY]) return false;
   const created = user.created_at ? Date.parse(user.created_at) : NaN;
   if (!Number.isFinite(created)) return false;
-  return now - created <= SIGNUP_CREATED_WITHIN_MS && created - now <= 60_000;
+  return created >= requestStartedAt - SIGNUP_CLOCK_SKEW_MS && created - now <= 60_000;
 }
 
 /**
  * 署名付きの「新規登録の印」を作る。signUp が新しいユーザーを作った直後にだけ呼ぶ。
- * 秘密鍵が無い、トークンが無い、新しいユーザーでない場合は null。
+ * 秘密鍵が無い、トークンが無い、今回の要求で作られたユーザーでない場合は null。
  */
 export function issueSignUpBinding(
   user: SignUpUser,
   claimToken: string | undefined | null,
+  requestStartedAt: number,
   now: number = Date.now(),
 ): string | null {
   const secret = bindingSecret();
   if (!secret || !claimToken || !user.id) return null;
-  if (!isUserCreatedBySignUp(user, now)) return null;
+  if (!isUserCreatedBySignUp(user, requestStartedAt, now)) return null;
   return `${now}.${sign(secret, user.id, claimToken, now)}`;
 }
 

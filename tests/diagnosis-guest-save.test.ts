@@ -9,7 +9,7 @@ import {
   issueSignUpBinding,
   verifySignUpBinding,
 } from "../lib/diagnosis-handoff/new-account";
-import { CLAIM_BINDING_COOKIE, CLAIM_TOKEN_COOKIE } from "../lib/diagnosis-handoff/constants";
+import { CLAIM_BINDING_COOKIE, CLAIM_TOKEN_COOKIE, GUEST_NOT_CARRIED_NOTICE_COOKIE } from "../lib/diagnosis-handoff/constants";
 
 process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key-for-hmac";
 import { Q } from "../lib/diagnosis/questions";
@@ -32,6 +32,7 @@ type AuthUser = {
   created_at: string;
   email_confirmed_at: string | null;
   user_metadata: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
 };
 type Pending = {
   id: string;
@@ -53,6 +54,7 @@ const env = {
   results: [] as Result[],
   codes: new Map<string, string>(), // 確認コード -> user id
   signUpMode: "confirm" as "confirm" | "auto" | "existing" | "unconfirmed",
+  adminFail: false,
   failResultInsert: false,
   clock: 0, // 結果の created_at を単調増加させるための刻み
 };
@@ -83,7 +85,8 @@ function makeUser(email: string, opts: { ageMs?: number; confirmedAgoMs?: number
     created_at: new Date(now - (opts.ageMs ?? 400 * 24 * 3600 * 1000)).toISOString(),
     email_confirmed_at: opts.confirmedAgoMs === null ? null : new Date(now - (opts.confirmedAgoMs ?? 399 * 24 * 3600 * 1000)).toISOString(),
     user_metadata: opts.meta ?? {},
-  };
+    app_metadata: {},
+  } as AuthUser;
   env.users.set(u.id, u);
   return u;
 }
@@ -170,6 +173,16 @@ function fakeSupabase() {
 
 function fakeService() {
   return {
+    auth: {
+      admin: {
+        updateUserById: async (id: string, attrs: any) => {
+          if (env.adminFail) return { data: null, error: { message: "admin down" } };
+          const u = [...env.users.values()].find((x: any) => x.id === id);
+          if (u) u.app_metadata = { ...(u.app_metadata ?? {}), ...(attrs.app_metadata ?? {}) };
+          return { data: { user: u }, error: null };
+        },
+      },
+    },
     from: (table: string) => ({
       insert: (row: any) => ({
         select: () => ({
@@ -314,12 +327,15 @@ test("新規登録の印: サーバー署名つき。作成直後のユーザー
     ...over,
   });
   // 発行条件
-  assert.equal(isUserCreatedBySignUp(created(), now), true);
-  assert.equal(isUserCreatedBySignUp(created({ identities: [] }), now), false, "登録済みメールの再登録（identities空）");
-  assert.equal(isUserCreatedBySignUp(created({ created_at: new Date(now - 10 * 60_000).toISOString() }), now), false, "作成時刻が過去（確認待ちの再登録）");
-  assert.equal(issueSignUpBinding(created({ created_at: new Date(now - 3600_000).toISOString() }), token, now), null);
-  assert.equal(issueSignUpBinding(created(), undefined, now), null, "ゲスト診断なし");
-  const b = issueSignUpBinding(created(), token, now)!;
+  const started = now - 6_000; // この要求の開始時刻（作成は要求の1秒後）
+  assert.equal(isUserCreatedBySignUp(created(), started, now), true);
+  assert.equal(isUserCreatedBySignUp(created({ identities: [] }), started, now), false, "登録済みメールの再登録（identities空）");
+  assert.equal(isUserCreatedBySignUp(created({ created_at: new Date(now - 10 * 60_000).toISOString() }), started, now), false, "作成時刻が要求より前（確認待ちの再登録）");
+  assert.equal(isUserCreatedBySignUp(created({ created_at: new Date(now - 90_000).toISOString() }), started, now), false, "90秒前に作られた未確認アカウントへの再登録（2分以内でも不可）");
+  assert.equal(isUserCreatedBySignUp(created({ app_metadata: { diagnosis_claim_binding_issued_at: "x" } }), started, now), false, "既に印を発行済みのアカウントには発行しない");
+  assert.equal(issueSignUpBinding(created({ created_at: new Date(now - 3600_000).toISOString() }), token, started, now), null);
+  assert.equal(issueSignUpBinding(created(), undefined, started, now), null, "ゲスト診断なし");
+  const b = issueSignUpBinding(created(), token, started, now)!;
   assert.ok(b);
   assert.ok(!b.includes(token), "トークンそのものは含まない");
   // 検証
@@ -333,7 +349,7 @@ test("新規登録の印: サーバー署名つき。作成直後のユーザー
   // 秘密鍵が無ければ発行も検証もできない（安全側）
   const saved = process.env.SUPABASE_SERVICE_ROLE_KEY;
   delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-  assert.equal(issueSignUpBinding(created(), token, now), null);
+  assert.equal(issueSignUpBinding(created(), token, started, now), null);
   assert.equal(verifySignUpBinding(b, { id: "user-1" }, token, now), false);
   process.env.SUPABASE_SERVICE_ROLE_KEY = saved;
 });
@@ -496,6 +512,7 @@ test("シナリオ4: 別アカウント・古い保留結果・再登録・再�
     Date.now = realNow;
   }
   assert.equal(resultsOf(late.id).length, 0, "印の有効期限（24時間）を過ぎた新規会員には自動では保存しない");
+  assert.ok(env.cookies.has(GUEST_NOT_CARRIED_NOTICE_COOKIE), "引き継げなかったことを、マイページで案内するための目印が付く");
 
   // (d) パスワード再設定リンク（next あり）では、有効な印があっても引き継がない
   resetEnv();
@@ -567,6 +584,42 @@ test("シナリオ4: 別アカウント・古い保留結果・再登録・再�
   assert.equal(env.pendings[0].claim_status, "PENDING");
 });
 
+test("再登録の穴: 直前に作られた未確認アカウントへ別のゲスト診断で再登録しても、印は発行されず取り込まれない／印は同じアカウントへ2回出ない", async () => {
+  // (i) 30秒前に作られた未確認アカウント（旧方式の「作成2分以内」では印が出てしまう）
+  resetEnv();
+  env.signUpMode = "confirm";
+  await signUpAction({}, form({ displayName: "V", email: "v@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  const v1 = [...env.users.values()].find((u) => u.email === "v@example.test")!;
+  v1.created_at = new Date(Date.now() - 30_000).toISOString();
+  await guestTakes(D);
+  env.signUpMode = "unconfirmed";
+  await signUpAction({}, form({ displayName: "V", email: "v@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  assert.ok(!env.cookies.has(CLAIM_BINDING_COOKIE), "既存アカウントには署名を発行しない");
+  env.codes.set("code-v", v1.id);
+  env.sessionUserId = null;
+  await callback("code-v");
+  assert.equal(resultsOf(v1.id).length, 0);
+  assert.equal(env.pendings[0].claim_status, "PENDING");
+
+  // (j) サーバーだけが書ける記録（app_metadata）を残せないときは、印を出さない（安全側）
+  resetEnv();
+  await guestTakes(B);
+  env.adminFail = true;
+  env.signUpMode = "confirm";
+  await signUpAction({}, form({ displayName: "W", email: "w@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  assert.ok(!env.cookies.has(CLAIM_BINDING_COOKIE));
+  env.adminFail = false;
+
+  // (k) 新規作成の正常系では、印の発行と同時に app_metadata に記録される
+  resetEnv();
+  await guestTakes(B);
+  env.signUpMode = "confirm";
+  await signUpAction({}, form({ displayName: "X", email: "x9@example.test", password: "password-1234", confirmPassword: "password-1234" }));
+  const x9 = [...env.users.values()].find((u) => u.email === "x9@example.test")!;
+  assert.ok(env.cookies.has(CLAIM_BINDING_COOKIE));
+  assert.ok((x9 as any).app_metadata.diagnosis_claim_binding_issued_at, "発行済みの記録が残る");
+});
+
 // ------------------------------------------------------------------ 構造・文言
 test("構造: ログイン処理は引き継ぎを呼ばずCookieを破棄する。引き継ぎの呼び出しは新規登録直後とメール確認だけ", () => {
   const actions = readFileSync("lib/auth/actions.ts", "utf8");
@@ -589,4 +642,13 @@ test("文言: 結果画面に、仕様と食い違う『ログインして今回
   assert.ok(page.includes("ログインしても、今回の結果は保存されません"));
   assert.ok(page.includes("無料登録して診断結果をすべて見る"), "新規登録の導線は維持");
   assert.ok(page.includes("この結果は、あなたのアカウントには保存されていません"));
+});
+
+test("期限切れ案内: マイページは、結果がまだ無いときだけ案内を出す（表示専用で、判定には使わない）", () => {
+  const page = readFileSync(new URL("../app/stylist/mypage/page.tsx", import.meta.url), "utf8");
+  assert.ok(page.includes("GUEST_NOT_CARRIED_NOTICE_COOKIE"));
+  assert.ok(page.includes("!latest && guestNotCarried"));
+  assert.ok(page.includes("登録の確認までに時間がたったため、保存できませんでした"));
+  const claim = readFileSync(new URL("../lib/diagnosis-handoff/claim.ts", import.meta.url), "utf8");
+  assert.ok(!claim.includes("GUEST_NOT_CARRIED_NOTICE_COOKIE"), "目印は引き継ぎ判定に使わない");
 });

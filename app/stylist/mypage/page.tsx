@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { GUEST_NOT_CARRIED_NOTICE_COOKIE } from "@/lib/diagnosis-handoff/constants";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { DiagnosisSummary } from "@/components/mypage/diagnosis-summary";
 import { CoreTypeHeader } from "@/components/mypage/core-type-header";
@@ -30,6 +32,7 @@ type AiOutputRow = Database["public"]["Tables"]["diagnosis_ai_outputs"]["Row"];
  * 決め打ちで飛ばすのではなく、美容師オンボーディングへ誘導する。
  */
 export default async function StylistMyPage() {
+  const guestNotCarried = !!(await cookies()).get(GUEST_NOT_CARRIED_NOTICE_COOKIE)?.value;
   const perfStart = nowMs();
   const supabase = await createClient();
   const {
@@ -210,6 +213,12 @@ export default async function StylistMyPage() {
             <DiagnosisSummary latest={latest} aiByType={aiByType} />
           </div>
 
+          {!latest && guestNotCarried && (
+            <p className="mt-6 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">
+              ログイン前に受けた診断の結果は、登録の確認までに時間がたったため、保存できませんでした。
+              お手数ですが、もう一度診断を受けてください。
+            </p>
+          )}
           <Link
             href="/stylist/diagnosis"
             className="mt-6 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-4 text-[15px] font-semibold text-ink"

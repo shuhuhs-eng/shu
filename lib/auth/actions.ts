@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { getSiteUrl } from "@/lib/site-url";
 import { cookies, headers } from "next/headers";
 import { getClientIpFromHeaders } from "@/lib/rate-limit/memory-rate-limiter";
@@ -12,7 +13,12 @@ import { checkSignupRateLimit, signupRateLimitMessage } from "@/lib/auth/signup-
 import { describeAuthError } from "@/lib/auth/errors";
 import { determinePostAuthPath, determineRoleEntryPath } from "@/lib/auth/post-auth-redirect";
 import { claimPendingDiagnosisForNewAccount, discardGuestDiagnosisCookie } from "@/lib/diagnosis-handoff/claim";
-import { CLAIM_BINDING_COOKIE, CLAIM_BINDING_TTL_MS, CLAIM_TOKEN_COOKIE } from "@/lib/diagnosis-handoff/constants";
+import {
+  CLAIM_BINDING_COOKIE,
+  CLAIM_BINDING_ISSUED_APP_METADATA_KEY,
+  CLAIM_BINDING_TTL_MS,
+  CLAIM_TOKEN_COOKIE,
+} from "@/lib/diagnosis-handoff/constants";
 import { issueSignUpBinding } from "@/lib/diagnosis-handoff/new-account";
 import {
   signUpSchema,
@@ -65,6 +71,7 @@ async function performSignUp(
   // このブラウザに保留中のゲスト診断（Cookie）があるか。新規登録の印は、signUp が「今作られた新しいユーザー」を
   // 返した後にだけ、サーバーが署名して発行する（下）。利用者が書き換えられる user_metadata には入れない。
   const guestClaimToken = (await cookies()).get(CLAIM_TOKEN_COOKIE)?.value;
+  const requestStartedAt = Date.now();
 
   // signUpが例外で終わった場合（通信切断など）は結果が分からないため、予約はそのまま残す
   // （期限で自動的に枠から外れる。未確認の要求を「消費した」とも「消費していない」とも断定しない）。
@@ -107,7 +114,14 @@ async function performSignUp(
   // アカウント」の初回結果としてゲスト診断を引き継ぐ。確認メールが必要な設定では、確認リンクのコールバックで行う。
   // 新規登録の印（署名付き）は、signUp が今まさに作ったユーザーに対してだけ発行する。登録済み（確認待ち含む）の
   // メールでの再登録では、作成時刻が過去になるため発行されず、ゲスト診断は取り込まれない。
-  const binding = data.user ? issueSignUpBinding(data.user, guestClaimToken) : null;
+  let binding = data.user ? issueSignUpBinding(data.user, guestClaimToken, requestStartedAt) : null;
+  if (binding && data.user) {
+    // 同じアカウントへ2回は発行しない。サーバーだけが書ける app_metadata に記録できなければ、印は出さない（安全側）。
+    const marked = await createServiceClient().auth.admin.updateUserById(data.user.id, {
+      app_metadata: { [CLAIM_BINDING_ISSUED_APP_METADATA_KEY]: new Date().toISOString() },
+    });
+    if (marked.error) binding = null;
+  }
   if (binding) {
     (await cookies()).set(CLAIM_BINDING_COOKIE, binding, {
       httpOnly: true,

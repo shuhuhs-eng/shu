@@ -31,8 +31,18 @@ export const CLAIM_BINDING_COOKIE = "br_claim_bind";
 export const CLAIM_BINDING_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
- * signUp の応答のユーザーを「今回の処理で作られた」と見なす、作成時刻からの最大経過時間。
- * Supabaseは登録済み（確認待ち）のメールで再登録しても、既存ユーザーを返す（作成時刻は過去のまま）。
- * その場合を「新しく作られた」と誤認しないための確認。サーバー間の時計のずれを見込んで2分。
+ * signUp の応答のユーザーを「今回の要求で作られた」と見なす条件: 作成時刻が「この要求の開始時刻」以降であること
+ * （サーバー間の時計のずれ分だけ手前を許容）。確認待ちの既存ユーザーで再登録すると、Supabaseは既存ユーザーを返し、
+ * 作成時刻は要求より前になる。固定の「作成2分以内」では、直前に作られた未確認アカウントへの再登録を
+ * 区別できないため、要求の開始時刻を基準にする。
  */
-export const SIGNUP_CREATED_WITHIN_MS = 2 * 60 * 1000;
+export const SIGNUP_CLOCK_SKEW_MS = 5 * 1000;
+
+/** 新規登録の印を発行したことを、サーバーだけが書ける app_metadata に残すキー（同じアカウントへ2回発行しない）。 */
+export const CLAIM_BINDING_ISSUED_APP_METADATA_KEY = "diagnosis_claim_binding_issued_at";
+
+/**
+ * 新規登録の確認後、ゲスト診断を引き継げなかったことを、マイページで一度案内するための目印（httpOnly Cookie）。
+ * 表示のためだけに使い、引き継ぎの判定には一切使わない。診断結果がまだ無い間だけ表示される。
+ */
+export const GUEST_NOT_CARRIED_NOTICE_COOKIE = "br_guest_notice";
