@@ -49,7 +49,7 @@ export function mapMessageError(message: string | null | undefined): string {
   const m = String(message ?? "");
   if (m.includes("too many replies")) return "短時間に送れる返信数の上限に達しました。しばらくしてからお試しください。";
   if (m.includes("thread is closed")) return "この連絡は完了しているため、返信できません。";
-  if (m.includes("request id content mismatch")) return "同じ送信で内容が異なっています。画面を開き直してからやり直してください。";
+  if (m.includes("request id content mismatch")) return "前回の送信が保存済みの可能性があり、内容が異なるため送れません。一覧で保存済みか確認し、内容を変える場合は画面を開き直してください。";
   if (m.includes("invalid body")) return "本文を確認してください。";
   if (m.includes("invalid kind") || m.includes("invalid status")) return "入力を確認してください。";
   if (m.includes("recipient cannot access this thread")) return "指定した担当者は、この会社・店舗の連絡を受け取れません。";
@@ -59,6 +59,8 @@ export function mapMessageError(message: string | null | undefined): string {
   if (m.includes("thread not found") || m.includes("login required")) return "連絡が見つからないか、見る権限がありません。";
   return "保存できませんでした。時間をおいて、もう一度お試しください。";
 }
+
+export const UNKNOWN_RESULT_MESSAGE = "通信が途切れ、保存されたか確認できませんでした。入力はそのまま残っています。同じ内容でもう一度送信してください（二重には保存されません）。";
 
 /** URLの rid（失敗後の再表示で同じ送信IDを使う）か、無ければ新しいIDを返す。 */
 export function requestIdFrom(rid: string | string[] | undefined, make: () => string = () => crypto.randomUUID()): string {

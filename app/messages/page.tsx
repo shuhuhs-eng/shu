@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { inboxList } from "@/lib/messages/rpc";
 import { parsePage, PAGE_SIZE } from "@/lib/admin/directory";
+import { InboxCard } from "@/components/messages/cards";
 import { ErrorBox, Pager } from "@/components/admin/directory-ui";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
@@ -23,14 +23,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: SP 
         <>
           <ul className="mt-6 space-y-3">
             {res.data.rows.map((t) => (
-              <li key={t.id}><Link href={`/messages/${t.id}`} className="block rounded-2xl border border-line bg-surface p-4 hover:bg-surface2">
-                <div className="flex flex-wrap gap-2 text-[11px] font-semibold">
-                  {t.needs_reply && <span className="rounded-full bg-ink px-2.5 py-0.5 text-white">返信をお願いします</span>}
-                  {t.closed && <span className="rounded-full border border-line px-2.5 py-0.5">完了</span>}
-                </div>
-                <p className="mt-2 text-[14px] font-semibold text-ink">{t.subject}</p>
-                {(t.organization_name || t.store_name) && <p className="mt-1 text-[12px] text-sub">{[t.organization_name, t.store_name].filter(Boolean).join(" / ")}</p>}
-              </Link></li>
+              <li key={t.id}><InboxCard t={t} /></li>
             ))}
           </ul>
           <Pager total={res.data.total} page={page} basePath="/messages" params={{}} />

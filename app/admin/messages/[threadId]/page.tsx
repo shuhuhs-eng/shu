@@ -3,6 +3,7 @@ import { requireAdminPage } from "@/lib/admin/guard";
 import { adminGetThread } from "@/lib/messages/rpc";
 import { STATUS_LABEL, REOPEN_STATUSES, requestIdFrom } from "@/lib/messages/shared";
 import { postAdminMessageAction, setThreadStatusAction } from "@/lib/messages/actions";
+import { MessageForm } from "@/components/messages/message-form";
 import { ErrorBox } from "@/components/admin/directory-ui";
 import { FormError, ThreadMessages, adminItems } from "@/components/messages/thread-view";
 
@@ -16,9 +17,8 @@ export default async function AdminThreadPage({ params, searchParams }: { params
   const res = await adminGetThread(supabase, threadId);
   if (!res.ok) return <main className="mx-auto max-w-[900px] px-5 py-10"><Link href="/admin/messages" className="text-[13px] font-semibold text-sub underline">← 連絡</Link><ErrorBox reason={res.reason} /></main>;
   const { thread: t, messages } = res.data;
-  const rid = requestIdFrom(sp.rid);
+  const rid = requestIdFrom(undefined);
   const err = typeof sp.err === "string" ? sp.err : undefined;
-  const field = "w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-[13.5px]";
   return (
     <main className="mx-auto max-w-[900px] px-5 py-10">
       <Link href="/admin/messages" className="text-[13px] font-semibold text-sub underline">← 連絡</Link>
@@ -29,17 +29,9 @@ export default async function AdminThreadPage({ params, searchParams }: { params
       <ThreadMessages items={adminItems(messages)} />
       <FormError err={err} />
 
-      <form action={postAdminMessageAction} className="mt-6 grid gap-3 rounded-2xl border border-line bg-surface p-4">
-        <input type="hidden" name="rid" value={rid} /><input type="hidden" name="thread_id" value={t.id} />
-        <select name="kind" aria-label="種類" className={field} defaultValue="to_recipient">
-          <option value="to_recipient">相手に送信（相手に見えます）</option>
-          <option value="internal_note">運営内部メモ（相手には見えません）</option>
-          <option value="offline_log">電話・対面などの記録（相手には見えません）</option>
-        </select>
-        <textarea name="body" required maxLength={4000} rows={5} aria-label="本文" className={field} />
-        <button className="min-h-[44px] rounded-full bg-ink px-5 text-[13px] font-semibold text-white">追加する</button>
-        <p className="text-[11px] text-sub">二重に押しても、同じ内容は1件だけ保存されます。通知メールは送信されません。</p>
-      </form>
+      <MessageForm action={postAdminMessageAction} initialRequestId={rid} hidden={{ thread_id: t.id }} submitLabel="追加する"
+        kinds={[{ value: "to_recipient", label: "相手に送信（相手に見えます）" }, { value: "internal_note", label: "運営内部メモ（相手には見えません）" }, { value: "offline_log", label: "電話・対面などの記録（相手には見えません）" }]}
+        note="二重に押しても、同じ内容は1件だけ保存されます。通知メールは送信されません。" />
 
       <div className="mt-6 grid gap-3 rounded-2xl border border-line bg-surface p-4">
         {t.status !== "done" ? (
