@@ -1,5 +1,6 @@
 "use client";
 
+import { CharacterStage } from "@/components/character/character-stage";
 import { useEffect, useState } from "react";
 import Link, { useLinkStatus } from "next/link";
 import type { ComputedDiagnosis } from "@/lib/diagnosis";
@@ -267,13 +268,13 @@ export default function DiagnosisResultPage() {
           {content.name}
         </h2>
 
-        <div className="relative mt-3 h-40 w-40">
-          <div className="absolute inset-0 rounded-full bg-gradient-to-b from-[var(--gold)]/15 to-transparent blur-xl" />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={content.characterImagePath}
+        <div className="mt-3">
+          <CharacterStage
+            coreTypeCode={classification.topType}
+            legacySrc={content.characterImagePath}
             alt={content.name}
-            className="relative h-full w-full object-contain drop-shadow-sm"
+            stageClassName="w-48"
+            legacyClassName="h-40 w-40"
           />
         </div>
 

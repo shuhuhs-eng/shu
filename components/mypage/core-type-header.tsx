@@ -1,4 +1,5 @@
 import { CORE_TYPE_CONTENT } from "@/lib/diagnosis/core-type-content";
+import { CharacterStage } from "@/components/character/character-stage";
 import type { StylistCoreType } from "@/types/database";
 
 type Props = {
@@ -31,13 +32,13 @@ export function CoreTypeHeader({ coreTypeCode }: Props) {
 
   return (
     <section className="flex flex-col items-center px-2 pb-10 pt-6 text-center">
-      <div className="relative mb-8 h-48 w-48 sm:h-56 sm:w-56">
-        <div className="absolute inset-0 rounded-full bg-gradient-to-b from-[var(--gold)]/15 to-transparent blur-xl" />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={content.characterImagePath}
+      <div className="mb-8">
+        <CharacterStage
+          coreTypeCode={coreTypeCode}
+          legacySrc={content.characterImagePath}
           alt={content.name}
-          className="relative h-full w-full object-contain drop-shadow-sm"
+          stageClassName="w-56 sm:w-60"
+          legacyClassName="h-48 w-48 sm:h-56 sm:w-56"
         />
       </div>
 
