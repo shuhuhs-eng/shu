@@ -20,7 +20,7 @@ type Props = {
    * 認証ロジック（signInAction・validation・エラーハンドリング）は
    * mode の有無に関わらず完全に同一のものを使う（複製しない）。
    */
-  mode?: "stylist" | "salon";
+  mode?: "stylist" | "salon" | "admin";
 };
 
 const COPY = {
@@ -40,6 +40,15 @@ const COPY = {
     signupLabel: "新規登録はこちら",
     crossLinkHref: "/stylist/login",
     crossLinkLabel: "美容師の方はこちら",
+  },
+  admin: {
+    heading: "管理者ログイン",
+    subtext: "運営の方専用のログインです",
+    // 管理者の新規登録は無い。サロン名・店舗情報は入力しない。
+    signupHref: null,
+    signupLabel: null,
+    crossLinkHref: "/",
+    crossLinkLabel: "サイトのホームへ",
   },
 } as const;
 
@@ -114,7 +123,7 @@ export function LoginForm({ mode }: Props) {
         <Link href="/reset-password" className="underline">
           パスワードをお忘れですか？
         </Link>
-        {mode === "stylist" ? null : (
+        {mode === "stylist" || mode === "admin" ? null : (
           <Link href={copy?.signupHref ?? "/signup"} className="underline">
             {copy?.signupLabel ?? "新規登録はこちら"}
           </Link>

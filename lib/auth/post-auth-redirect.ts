@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { isOnboardingComplete } from "@/lib/auth/onboarding";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
-import { isPlatformAdmin } from "@/lib/admin/is-admin";
+import { getAdminStatus, isPlatformAdmin } from "@/lib/admin/is-admin";
 
 /** 運営者のログイン後の行き先。サロン名・店舗登録（オンボーディング）へは進ませない。 */
 export const ADMIN_HOME_PATH = "/admin";
@@ -67,4 +67,24 @@ export async function determineRoleEntryPath(
     return has ? "/stylist/mypage" : "/onboarding";
   }
   return has ? "/salon/mypage" : "/onboarding/salon";
+}
+
+/**
+ * 管理者専用ログイン入口（/admin/login）の遷移先決定。権限は is_platform_admin()（getAdminStatus）で確認する。
+ *   管理者        → /admin（next が /admin 配下の安全なパスならそこへ）
+ *   管理者でない  → not_admin（呼び出し側がセッションを破棄して案内する。管理画面へは進ませない）
+ *   確認できない  → check_failed（再試行できるエラー）
+ * ★メールアドレスの文字列では判定しない。この入口以外からログインした管理者の権限は、これによって変わらない。
+ */
+export type AdminEntryResult = { ok: true; path: string } | { ok: false; reason: "not_admin" | "check_failed" };
+export async function determineAdminEntryPath(
+  supabase: SupabaseClient<Database>,
+  next?: string | null,
+): Promise<AdminEntryResult> {
+  const status = await getAdminStatus(supabase);
+  if (status === "admin") {
+    const safe = next && (next === ADMIN_HOME_PATH || next.startsWith(`${ADMIN_HOME_PATH}/`)) ? next : ADMIN_HOME_PATH;
+    return { ok: true, path: safe };
+  }
+  return { ok: false, reason: status === "not_admin" ? "not_admin" : "check_failed" };
 }

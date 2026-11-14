@@ -82,9 +82,14 @@ export default async function Home() {
             <Link href="/" className="inline-flex min-h-[44px] items-center rounded-full border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-sub lg:text-[12.5px]">
               権限を確認できませんでした（再読み込み）
             </Link>
+          ) : isAdmin ? (
+            // 管理者としてログイン中のみ表示（未ログイン・ログアウト後・一般の美容師/サロンには出さない）。ログアウトの左。
+            <Link href="/admin" className="inline-flex min-h-[44px] items-center rounded-full border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-ink lg:text-[12.5px]">
+              管理画面へ
+            </Link>
           ) : (
             <Link href="/mypage" className="inline-flex min-h-[44px] items-center rounded-full border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-ink lg:text-[12.5px]">
-              {isAdmin ? "マイページ（管理画面へ）" : "マイページ"}
+              マイページ
             </Link>
           )}
           <form action={signOutAction}>
@@ -225,7 +230,7 @@ export default async function Home() {
             横並びに配置する。高さは揃え、文字・ボタンは縮小しすぎない。 */}
         <div className="relative z-10 mt-10 space-y-4 sm:flex sm:items-stretch sm:gap-5 sm:space-y-0 lg:mt-4 lg:gap-6">
           <section
-            className="rounded-[24px] p-5 shadow-sm sm:flex sm:flex-1 sm:flex-col lg:w-1/2 lg:p-4"
+            className="rounded-[24px] p-5 shadow-sm sm:flex sm:flex-none sm:basis-[calc(50%-0.625rem)] sm:flex-col lg:basis-[calc(50%-0.75rem)] lg:p-4"
             style={{ backgroundColor: "#F2EEFA" }}
           >
             <div className="flex items-center gap-3">
@@ -236,7 +241,7 @@ export default async function Home() {
                 <UserRound size={19} style={{ color: "#6E4AA6" }} />
               </span>
               <div>
-                <h2 className="font-serif text-[18px] font-bold text-ink lg:text-[16.5px]">美容師の方</h2>
+                <h2 className="font-serif text-[18px] font-bold text-ink lg:text-[16.5px]">あなたのタイプ</h2>
                 <span
                   className="inline-block rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
                   style={{ backgroundColor: "#E1D6F4", color: "#6E4AA6" }}
@@ -263,7 +268,7 @@ export default async function Home() {
                 // middlewareのGUEST_ONLY_PATHSにより押しても/へ戻されて
                 // しまうため表示しない。非クリックの案内表示にとどめる。
                 <p className="mt-3 rounded-full border border-line bg-surface px-6 py-3.5 text-center text-[13px] text-sub lg:mt-2.5 lg:py-2.5">
-                  {isAdmin ? "運営アカウントです。上の「マイページ」から管理画面へ進めます" : adminCheckFailed ? "権限を確認できませんでした。再読み込みしてください" : "美容師アカウントでログインするとご利用いただけます"}
+                  {isAdmin ? "運営アカウントです。上の「管理画面へ」から進めます" : adminCheckFailed ? "権限を確認できませんでした。再読み込みしてください" : "美容師アカウントでログインするとご利用いただけます"}
                 </p>
               ) : (
                 <Link
@@ -283,68 +288,51 @@ export default async function Home() {
             </div>
           </section>
 
-          <section
-            className="rounded-[24px] p-5 shadow-sm sm:flex sm:flex-1 sm:flex-col lg:w-1/2 lg:p-4"
-            style={{ backgroundColor: "#EAF3EC" }}
+          {/* サロンの方の入口: 以前の大きな緑の枠を、コンパクトな入口に変更（PCは従来の約半分の幅、スマホは幅いっぱいで高さ・文字・余白を控えめに）。
+              ログイン（既存サロン）と新規登録（初めてのサロン）は別の導線として分けて表示する。 */}
+          <aside
+            aria-label="サロンの方の入口"
+            className="rounded-2xl border border-line bg-surface p-3 sm:ml-auto sm:flex sm:flex-none sm:basis-[calc(25%-0.3125rem)] sm:flex-col sm:self-center lg:basis-[calc(25%-0.375rem)]"
           >
-            <div className="flex items-center gap-3">
-              <span
-                className="flex h-10 w-10 items-center justify-center rounded-full lg:h-9 lg:w-9"
-                style={{ backgroundColor: "#D3E7D9" }}
+            {hasSalon ? (
+              <Link
+                href="/salon/mypage"
+                className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-full px-4 py-2 text-[13px] font-semibold text-surface lg:text-[12.5px]"
+                style={{ backgroundColor: "#2E8B7F" }}
               >
-                <Store size={19} style={{ color: "#2E8B7F" }} />
-              </span>
-              <div>
-                <h2 className="font-serif text-[18px] font-bold text-ink lg:text-[16.5px]">サロンの方</h2>
-                <span
-                  className="inline-block rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
-                  style={{ backgroundColor: "#D3E7D9", color: "#2E8B7F" }}
-                >
-                  サロン分析
-                </span>
-              </div>
-            </div>
-            <p className="mt-2.5 text-[13.5px] leading-relaxed text-charcoal lg:mt-2 lg:text-[12.5px] lg:leading-snug">
-              サロンの魅力・相性の良い美容師・マッチングができます
-            </p>
-            <div className="sm:mt-auto">
-              {hasSalon ? (
+                サロンマイページへ
+                <ArrowRight size={14} />
+              </Link>
+            ) : user ? (
+              // ログイン済みだがサロンroleを持たない場合、ログイン・新規登録導線は middleware の GUEST_ONLY_PATHS により
+              // 押しても/へ戻されてしまうため表示しない。非クリックの案内表示にとどめる。
+              <p className="rounded-xl bg-surface2 px-3 py-2 text-center text-[11.5px] leading-snug text-sub">
+                {isAdmin ? "運営アカウントです。上の「管理画面へ」から進めます" : adminCheckFailed ? "権限を確認できませんでした。再読み込みしてください" : "サロンアカウントでログインするとご利用いただけます"}
+              </p>
+            ) : (
+              <>
                 <Link
-                  href="/salon/mypage"
-                  className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full px-6 py-3.5 text-[14.5px] font-semibold text-surface lg:mt-2.5 lg:py-2.5 lg:text-[13.5px]"
-                  style={{ backgroundColor: "#2E8B7F" }}
+                  href="/salon/login"
+                  className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-full border px-3 py-2 text-center text-[12.5px] font-semibold leading-tight lg:text-[12px]"
+                  style={{ borderColor: "#2E8B7F", backgroundColor: "#EAF3EC", color: "#2E8B7F" }}
                 >
-                  サロンマイページへ
-                  <ArrowRight size={15} />
+                  サロンの方のログインはこちら
+                  <ArrowRight size={13} className="shrink-0" />
                 </Link>
-              ) : user ? (
-                // ログイン済みだがサロンroleを持たない場合、ログイン・新規登録
-                // 導線はmiddlewareのGUEST_ONLY_PATHSにより押しても/へ戻されて
-                // しまうため表示しない。非クリックの案内表示にとどめる。
-                <p className="mt-3 rounded-full border border-line bg-surface px-6 py-3.5 text-center text-[13px] text-sub lg:mt-2.5 lg:py-2.5">
-                  {isAdmin ? "運営アカウントです。上の「マイページ」から管理画面へ進めます" : adminCheckFailed ? "権限を確認できませんでした。再読み込みしてください" : "サロンアカウントでログインするとご利用いただけます"}
-                </p>
-              ) : (
-                <>
-                  <Link
-                    href="/salon/login"
-                    className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full px-6 py-3.5 text-[14.5px] font-semibold text-surface lg:mt-2.5 lg:py-2.5 lg:text-[13.5px]"
-                    style={{ backgroundColor: "#2E8B7F" }}
-                  >
-                    サロンとしてログイン
-                    <ArrowRight size={15} />
+                <p className="mt-2 text-center text-[11px] leading-snug text-sub">
+                  初めてのサロンの方は
+                  <Link href="/signup/salon" className="inline-flex min-h-[32px] items-center px-0.5 underline">
+                    新規登録（受付）
                   </Link>
-                  <p className="mt-2 text-center text-[12px] text-sub lg:mt-1 lg:text-[11px]">
-                    初めての方は
-                    <Link href="/signup/salon" className="underline">
-                      サロン登録
-                    </Link>
-                    から始めましょう
-                  </p>
-                </>
-              )}
-            </div>
-          </section>
+                </p>
+                <p className="mt-1 text-center text-[10.5px] text-sub">
+                  <Link href="/admin/login" className="inline-flex min-h-[32px] items-center px-1 underline">
+                    管理者の方はこちら
+                  </Link>
+                </p>
+              </>
+            )}
+          </aside>
         </div>
 
         {/* Beauty Reachでできること */}

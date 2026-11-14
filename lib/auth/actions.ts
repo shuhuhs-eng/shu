@@ -11,7 +11,7 @@ import { CAPTCHA_REQUIRED_MESSAGE, requireCaptchaToken } from "@/lib/security/bo
 import { safeInternalPath } from "@/lib/auth/safe-path";
 import { checkSignupRateLimit, signupRateLimitMessage } from "@/lib/auth/signup-rate-limit";
 import { describeAuthError } from "@/lib/auth/errors";
-import { determinePostAuthPath, determineRoleEntryPath } from "@/lib/auth/post-auth-redirect";
+import { determineAdminEntryPath, determinePostAuthPath, determineRoleEntryPath } from "@/lib/auth/post-auth-redirect";
 import { claimPendingDiagnosisForNewAccount, discardGuestDiagnosisCookie } from "@/lib/diagnosis-handoff/claim";
 import {
   CLAIM_BINDING_COOKIE,
@@ -236,6 +236,18 @@ export async function signInAction(
   // 同意として扱わない。このブラウザに残っている保留Cookieは、後日の再ログイン・メール確認・別アカウントへの
   // 切り替えで遅れて取り込まれないよう、ここで破棄する。
   await discardGuestDiagnosisCookie();
+
+  // 管理者専用入口（/admin/login）: 権限は is_platform_admin() で確認する（メール文字列では判定しない）。
+  // 管理者でないアカウントは、管理画面へ進ませず、この入口で作ったセッションも破棄する。
+  if (formData.get("entryMode") === "admin") {
+    const adminEntry = await determineAdminEntryPath(supabase, safeInternalPath(formData.get("next")));
+    if (adminEntry.ok) redirect(adminEntry.path);
+    if (adminEntry.reason === "not_admin") {
+      await supabase.auth.signOut();
+      return { error: "このアカウントには管理者権限がありません。サロン・美容師の方は、それぞれのログインからお進みください。" };
+    }
+    return { error: "管理者権限を確認できませんでした。時間をおいて、もう一度お試しください。" };
+  }
 
   // 保護ルートから弾かれてログインに来た場合は、元のURLへ戻す（安全なパスのみ）。
   const next = safeInternalPath(formData.get("next"));

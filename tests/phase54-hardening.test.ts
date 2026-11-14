@@ -302,7 +302,7 @@ test("美容師ログイン画面には新規登録・診断の案内が無い�
   const src = readFileSync(join(process.cwd(), "app/(auth)/login/login-form.tsx"), "utf8");
   assert.match(src, /signupHref: null,\s*signupLabel: null/);
   assert.ok(!src.includes("初めての方は無料診断へ"));
-  assert.match(src, /mode === "stylist" \? null/);
+  assert.match(src, /mode === "stylist" \|\| mode === "admin" \? null/);
   assert.match(src, /signupHref: "\/signup\/salon",\s*signupLabel: "新規登録はこちら"/);
   assert.match(src, /copy\?\.signupHref \?\? "\/signup"/);
   assert.ok(readFileSync(join(process.cwd(), "app/(auth)/signup/page.tsx"), "utf8").includes("新規登録"));
