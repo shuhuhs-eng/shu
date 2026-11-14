@@ -32,7 +32,9 @@ async function call<T>(supabase: Supa, fn: string, args: Record<string, unknown>
 export type Person = { user_id: string; role: string; name: string | null; email: string; since?: string };
 export type OrgRow = {
   id: string; name: string; status: string; created_at: string; store_count: number;
-  stores: { id: string; name: string; prefecture: string | null; city: string | null; visibility: string | null; usage_status: string }[];
+  /** 絞り込み条件（所在地・公開状態・利用状態）を【1店舗で】すべて満たした店舗の数。絞り込みが無いときは 0。 */
+  matched_store_count: number;
+  stores: { id: string; name: string; prefecture: string | null; city: string | null; visibility: string | null; usage_status: string; matches_filter: boolean; matches_query: boolean }[];
   members: Person[];
 };
 export type OrgDetail = {
@@ -41,7 +43,11 @@ export type OrgDetail = {
   members: Person[];
   hiring_process_count: number;
 };
+export type RegistrationState = "completed" | "in_progress" | "no_profile";
+export const REGISTRATION_STATES: RegistrationState[] = ["completed", "in_progress", "no_profile"];
+export type SalonRegistrant = { user_id: string; email: string; name: string | null; email_confirmed: boolean; onboarding_step: number; created_at: string; has_salon_profile: boolean };
 export type StylistRow = {
+  registration_state: RegistrationState; onboarding_step: number;
   user_id: string; public_name: string | null; full_name: string | null; email: string; visibility: string;
   residence_prefecture: string | null; desired_work_location: string | null; experience_years: number | null;
   job_change_intent: string | null; created_at: string; diagnosis_type: string | null;
@@ -84,13 +90,18 @@ export function getOrganization(supabase: Supa, id: string) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return Promise.resolve<DirectoryResult<OrgDetail>>({ ok: false, reason: "not_found" });
   return call<OrgDetail>(supabase, "admin_get_organization", { p_organization_id: id });
 }
-export function listStylists(supabase: Supa, a: { q: string; residence: AreaFilter; desired: AreaFilter; visibility: string; page: number }) {
+export function listStylists(supabase: Supa, a: { q: string; residence: AreaFilter; desired: AreaFilter; visibility: string; state?: string; page: number }) {
   return call<{ total: number; rows: StylistRow[] }>(supabase, "admin_list_stylists", {
     p_q: a.q || null, p_residence_prefectures: a.residence.prefectures, p_residence_unset: a.residence.includeUnset,
     p_desired_prefectures: a.desired.prefectures,
     p_visibility: a.visibility === "PUBLIC" || a.visibility === "PRIVATE" ? a.visibility : null,
+    p_state: (REGISTRATION_STATES as string[]).includes(a.state ?? "") ? a.state : null,
     p_limit: PAGE_SIZE, p_offset: (a.page - 1) * PAGE_SIZE,
   });
+}
+/** 会社が作られていないサロン登録者（登録途中を含む）。 */
+export function listSalonRegistrants(supabase: Supa, page: number) {
+  return call<{ total: number; rows: SalonRegistrant[] }>(supabase, "admin_list_salon_registrants_without_company", { p_limit: PAGE_SIZE, p_offset: (page - 1) * PAGE_SIZE });
 }
 export function getStylist(supabase: Supa, id: string) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return Promise.resolve<DirectoryResult<StylistDetail>>({ ok: false, reason: "not_found" });

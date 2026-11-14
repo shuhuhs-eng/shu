@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireAdminPage } from "@/lib/admin/guard";
 import { getStylist } from "@/lib/admin/directory";
-import { ErrorBox, Where, VIS_LABEL } from "@/components/admin/directory-ui";
+import { ErrorBox, Where, VIS_LABEL, STATE_LABEL } from "@/components/admin/directory-ui";
 
 /** 運営: 美容師詳細（読み取り専用）。診断は「タイプ名と日時」のみ。回答・結果の編集機能は無い。 */
 export default async function AdminStylistDetailPage({ params }: { params: Promise<{ userId: string }> }) {
@@ -26,10 +26,11 @@ export default async function AdminStylistDetailPage({ params }: { params: Promi
             </dl>
             <h2 className="mt-6 font-serif text-lg font-bold text-ink">プロフィール</h2>
             <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-2xl border border-line bg-surface p-4 text-[12.5px]">
-              {row("公開状態", VIS_LABEL[d.visibility] ?? d.visibility)}
+              {row("登録状態", `${STATE_LABEL[d.registration_state] ?? d.registration_state}（ステップ ${d.onboarding_step}）`)}
+              {row("公開状態", d.visibility ? VIS_LABEL[d.visibility] ?? d.visibility : "未設定")}
               {row("経験年数", d.experience_years ?? "未設定")}
               {row("現在の役職", d.current_position ?? "未設定")}
-              {row("得意分野", d.specialties.length ? d.specialties.join("、") : "未設定")}
+              {row("得意分野", d.specialties?.length ? d.specialties?.join("、") : "未設定")}
               {row("転職意向", d.job_change_intent ?? "未設定")}
               {row("登録日", fmt(d.created_at))}
             </dl>

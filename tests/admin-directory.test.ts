@@ -84,10 +84,10 @@ function walk(d: string): string[] {
   return readdirSync(d).flatMap((n) => { const p = `${d}/${n}`; return statSync(p).isDirectory() ? walk(p) : [p]; });
 }
 test("新しい運営ページは、すべて requireAdminPage を最初に呼び、データ取得は lib/admin/directory 経由", () => {
-  for (const f of ["app/admin/salons/page.tsx", "app/admin/salons/[organizationId]/page.tsx", "app/admin/stylists/page.tsx", "app/admin/stylists/[userId]/page.tsx"]) {
+  for (const f of ["app/admin/salons/unassigned/page.tsx", "app/admin/salons/page.tsx", "app/admin/salons/[organizationId]/page.tsx", "app/admin/stylists/page.tsx", "app/admin/stylists/[userId]/page.tsx"]) {
     const s = readFileSync(f, "utf8");
     assert.match(s, /requireAdminPage\(/, f);
-    assert.ok(s.indexOf("requireAdminPage(") < s.search(/listOrganizations\(|getOrganization\(|listStylists\(|getStylist\(/), f + ": 権限確認が先");
+    assert.ok(s.indexOf("requireAdminPage(") < s.search(/listOrganizations\(|getOrganization\(|listStylists\(|getStylist\(|listSalonRegistrants\(/), f + ": 権限確認が先");
     assert.ok(!/from\("/.test(s) && !/service/i.test(s), f + ": 直接のテーブル参照・service roleを使わない");
   }
 });
@@ -102,4 +102,21 @@ test("既存の運営ページ（companies・contracts・stripe 等）が残っ�
   for (const p of ["companies", "contracts", "success-fees", "stripe", "issuer-settings", "integrity", "evidence", "legal"]) assert.ok(statSync(`app/admin/${p}/page.tsx`).isFile() || p === "stripe", p);
   const nav = readFileSync("components/admin/admin-nav.tsx", "utf8");
   for (const h of ["/admin/companies", "/admin/contracts", "/admin/success-fees", "/admin/stripe", "/admin/integrity", "/admin/evidence", "/admin/legal", "/admin/salons", "/admin/stylists"]) assert.ok(nav.includes(h), h);
+});
+
+test("美容師一覧: 登録状態は許可値だけRPCに渡り、会社未作成の登録者も同じ権限確認を通る", async () => {
+  const c = client({ admin: true, rpcResult: { data: { total: 0, rows: [] } } });
+  await dir.listStylists(c as never, { q: "", residence: mkBase().area, desired: mkBase().area, visibility: "", state: "in_progress", page: 1 });
+  assert.equal((c.calls[1].args as Record<string, unknown>).p_state, "in_progress");
+  const c2 = client({ admin: true, rpcResult: { data: { total: 0, rows: [] } } });
+  await dir.listStylists(c2 as never, { q: "", residence: mkBase().area, desired: mkBase().area, visibility: "", state: "'; drop", page: 1 });
+  assert.equal((c2.calls[1].args as Record<string, unknown>).p_state, null, "不正な値はnull");
+  for (const admin of [false, "error"] as const) {
+    const c3 = client({ admin });
+    assert.deepEqual(await dir.listSalonRegistrants(c3 as never, 1), { ok: false, reason: "forbidden" });
+    assert.ok(c3.calls.every((x) => x.fn === "is_platform_admin"));
+  }
+  const c4 = client({ admin: true, rpcResult: { data: { total: 0, rows: [] } } });
+  await dir.listSalonRegistrants(c4 as never, 2);
+  assert.equal(c4.calls[1].fn, "admin_list_salon_registrants_without_company");
 });
