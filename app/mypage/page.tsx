@@ -1,18 +1,15 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getUserRoles } from "@/lib/auth/user-roles";
+import { resolveMypagePath } from "@/lib/auth/mypage-path";
+import { StatusPanel } from "@/components/error-panel";
 
 /**
- * 旧URL。役割別ルーティング分離により、実体は /stylist/mypage・/salon/mypage に
- * 分かれた。複数role対応のため、現在のユーザー状態（ログイン状態・完了済みrole）を
- * 見たうえで、決め打ちせず適切な行き先へ振り分ける。
- *
- *   美容師roleのみ完了 → /stylist/mypage
- *   サロンroleのみ完了 → /salon/mypage
- *   両方完了           → /stylist/mypage（Beauty Reachは診断ファーストのため、
- *                        美容師側を既定の行き先とする。app/page.tsx のHOME
- *                        （ログイン済み時）と同じ優先順位）
- *   どちらも未完了     → /onboarding（美容師オンボーディングへ）
+ * サイト共通の「マイページ」。行き先は resolveMypagePath（運営者の判定を含む共通処理）で決める。
+ *   運営者 → /admin ／ 美容師 → /stylist/mypage ／ サロン → /salon/mypage ／ どちらも未完了 → /onboarding
+ * 運営者かどうか・roleを確認できなかったときは、美容師・オンボーディングへ送らず、再試行できるエラーを表示する。
+ * （旧URLの役割別ルーティング分離の経緯: 実体は /stylist/mypage・/salon/mypage。
+ *   両方完了の場合は /stylist/mypage を既定とする。app/page.tsx のHOMEと同じ優先順位。）
  */
 export default async function MyPageRedirect() {
   const supabase = await createClient();
@@ -24,13 +21,19 @@ export default async function MyPageRedirect() {
     redirect("/login?next=/mypage");
   }
 
-  const roles = await getUserRoles(supabase, user.id);
+  const target = await resolveMypagePath(supabase, user.id);
+  if (target.ok) redirect(target.path);
 
-  if (roles.has("stylist")) {
-    redirect("/stylist/mypage");
-  }
-  if (roles.has("salon")) {
-    redirect("/salon/mypage");
-  }
-  redirect("/onboarding");
+  return (
+    <StatusPanel
+      title="マイページを開けませんでした"
+      action={
+        <Link href="/mypage" className="flex w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface">
+          もう一度試す
+        </Link>
+      }
+    >
+      <p>アカウントの権限を確認できませんでした。通信状況を確認して、もう一度お試しください。</p>
+    </StatusPanel>
+  );
 }

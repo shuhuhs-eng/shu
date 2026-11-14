@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, ListChecks, BarChart3, Heart, UserRound, Store, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/auth/user-roles";
+import { getAdminStatus } from "@/lib/admin/is-admin";
 import { signOutAction } from "@/lib/auth/actions";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { LegalLinks } from "@/components/legal/legal-links";
@@ -35,8 +36,13 @@ export default async function Home() {
   // hasStylist/hasSalonをこの単一role値から導出する（以降のJSX・デザインは
   // 一切変更していない）。
   const role = user ? await getUserRole(supabase, user.id) : null;
-  const hasStylist = role === "stylist";
-  const hasSalon = role === "salon";
+  // ★運営者かどうかは is_platform_admin()（確認できなかったときは "error"）。運営者は美容師・サロンのマイページへ
+  // 誘導せず、共通の「マイページ」（/mypage）から /admin へ進める。確認できないときは role の導線を出さず、再読み込みを案内する。
+  const adminStatus = user ? await getAdminStatus(supabase) : "not_admin";
+  const isAdmin = adminStatus === "admin";
+  const adminCheckFailed = adminStatus === "error";
+  const hasStylist = role === "stylist" && !isAdmin && !adminCheckFailed;
+  const hasSalon = role === "salon" && !isAdmin && !adminCheckFailed;
 
   // ★確定デザイン仕様（Claude指示用.png）に忠実に実装した一般TOP。
   // ★レスポンシブ: lg（1024px）以上はブランド訴求(左)＋キャラクター領域(右)の
@@ -72,6 +78,15 @@ export default async function Home() {
           実装・ログアウト機能自体は変更していない）。 */}
       {user && (
         <div className="absolute right-5 top-4 z-10 flex flex-wrap items-center justify-end gap-2 text-[11px] sm:right-6 sm:top-5 md:right-10 lg:right-10 lg:top-5 lg:text-[12.5px]">
+          {adminCheckFailed ? (
+            <Link href="/" className="inline-flex min-h-[44px] items-center rounded-full border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-sub lg:text-[12.5px]">
+              権限を確認できませんでした（再読み込み）
+            </Link>
+          ) : (
+            <Link href="/mypage" className="inline-flex min-h-[44px] items-center rounded-full border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-ink lg:text-[12.5px]">
+              {isAdmin ? "マイページ（管理画面へ）" : "マイページ"}
+            </Link>
+          )}
           <form action={signOutAction}>
             <SubmitButton pendingText="...">
               <span className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-sub underline lg:text-[12.5px]">
@@ -248,7 +263,7 @@ export default async function Home() {
                 // middlewareのGUEST_ONLY_PATHSにより押しても/へ戻されて
                 // しまうため表示しない。非クリックの案内表示にとどめる。
                 <p className="mt-3 rounded-full border border-line bg-surface px-6 py-3.5 text-center text-[13px] text-sub lg:mt-2.5 lg:py-2.5">
-                  美容師アカウントでログインするとご利用いただけます
+                  {isAdmin ? "運営アカウントです。上の「マイページ」から管理画面へ進めます" : adminCheckFailed ? "権限を確認できませんでした。再読み込みしてください" : "美容師アカウントでログインするとご利用いただけます"}
                 </p>
               ) : (
                 <Link
@@ -307,7 +322,7 @@ export default async function Home() {
                 // 導線はmiddlewareのGUEST_ONLY_PATHSにより押しても/へ戻されて
                 // しまうため表示しない。非クリックの案内表示にとどめる。
                 <p className="mt-3 rounded-full border border-line bg-surface px-6 py-3.5 text-center text-[13px] text-sub lg:mt-2.5 lg:py-2.5">
-                  サロンアカウントでログインするとご利用いただけます
+                  {isAdmin ? "運営アカウントです。上の「マイページ」から管理画面へ進めます" : adminCheckFailed ? "権限を確認できませんでした。再読み込みしてください" : "サロンアカウントでログインするとご利用いただけます"}
                 </p>
               ) : (
                 <>

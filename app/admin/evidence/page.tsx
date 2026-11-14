@@ -20,7 +20,7 @@ export default async function AdminEvidencePage() {
     <h1 className="font-serif text-2xl font-bold text-ink">実績資料の確認</h1>
     <p className="mt-2 text-[12.5px] leading-relaxed text-sub">資料と申告数字の一致を確認します。原本の真正性を保証する判定ではありません。表示URLは15分で失効します。</p>
     <div className="mt-8 space-y-5">{items.length > 0 ? items.map((item) => <EvidenceReviewCard key={item.id} item={item} />) : <p className="rounded-2xl border border-line bg-surface p-8 text-center text-[13px] text-sub">提出資料はありません。</p>}</div>
-    <Link href="/mypage" className="mt-7 block text-center text-[13px] text-sub underline">マイページへ戻る</Link>
+    <Link href="/admin" className="mt-7 block text-center text-[13px] text-sub underline">管理画面へ戻る</Link>
   </main>;
 }
 
