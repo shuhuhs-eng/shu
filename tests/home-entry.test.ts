@@ -74,10 +74,12 @@ test("表示文言: トップの美容師ログインは「ログイン」、サ
   assert.match(h, /href="\/admin\/login"[\s\S]{0,120}管理者の方はこちら/);
 });
 
-test("PC: イラストとサロン入口が重ならない配置（イラスト下端を上げ、入口はカード行の右端・下揃え）", () => {
+test("PC: 大きなイラスト(xl)＋サロン入口は左下の小さな枠、lgは縮小イラスト＋右端", () => {
   const c = src("components/home/hero-character.tsx");
-  assert.match(c, /bottom-\[-31px\]/); assert.match(c, /h-\[375px\]/);
-  assert.doesNotMatch(c, /bottom-\[-125px\]|h-\[470px\]/);
-  assert.match(src("app/page.tsx"), /lg:self-end/);
-  assert.match(src("app/page.tsx"), /lg:whitespace-nowrap/);   // 狭いPC幅でも「サロンログイン」が1行
+  assert.match(c, /h-\[375px\]/); assert.match(c, /xl:h-\[470px\]/);
+  assert.match(c, /xl:bottom-\[-125px\]/);
+  const p = src("app/page.tsx");
+  assert.match(p, /xl:ml-0/);
+  assert.match(p, /xl:basis-\[calc\(21%/);
+  assert.match(p, /lg:whitespace-nowrap/);   // 狭いPC幅でも「サロンログイン」が1行
 });

@@ -292,7 +292,7 @@ export default async function Home() {
               ログイン（既存サロン）と新規登録（初めてのサロン）は別の導線として分けて表示する。 */}
           <aside
             aria-label="サロンの方の入口"
-            className="rounded-2xl border border-line bg-surface p-3 sm:ml-auto sm:flex sm:flex-none sm:basis-[calc(25%-0.3125rem)] sm:flex-col sm:self-center lg:basis-[calc(25%-0.375rem)] lg:self-end"
+            className="rounded-2xl border border-line bg-surface p-3 sm:ml-auto sm:flex sm:flex-none sm:basis-[calc(25%-0.3125rem)] sm:flex-col sm:self-center lg:basis-[calc(25%-0.375rem)] xl:ml-0 xl:basis-[calc(21%-0.375rem)] lg:self-end"
           >
             {hasSalon ? (
               <Link
