@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfileFormInitialValues } from "@/lib/profile/get-initial-values";
 import { StylistOnboardingWizard } from "@/components/profile/stylist-onboarding-wizard";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
+import { isPlatformAdmin } from "@/lib/admin/is-admin";
 
 export default async function OnboardingPage() {
   const supabase = await createClient();
@@ -14,6 +15,11 @@ export default async function OnboardingPage() {
   // middleware でも保護しているが、直接アクセスされた場合の保険として二重チェックする。
   if (!user) {
     redirect("/login?next=/onboarding");
+  }
+
+  // 運営者には、サロン名・店舗の登録（オンボーディング）を求めない。
+  if (await isPlatformAdmin(supabase)) {
+    redirect("/admin");
   }
 
   // ★バグ修正: 以前はこのページ自体には完了済みかどうかのチェックが無く、

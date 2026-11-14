@@ -2,6 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { isOnboardingComplete } from "@/lib/auth/onboarding";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
+import { isPlatformAdmin } from "@/lib/admin/is-admin";
+
+/** 運営者のログイン後の行き先。サロン名・店舗登録（オンボーディング）へは進ませない。 */
+export const ADMIN_HOME_PATH = "/admin";
 
 /**
  * ログイン直後・メール確認直後の行き先を決定する唯一の場所。
@@ -21,6 +25,7 @@ export async function determinePostAuthPath(
   supabase: SupabaseClient<Database>,
   userId: string,
 ): Promise<string> {
+  if (await isPlatformAdmin(supabase)) return ADMIN_HOME_PATH;
   const { data: profile } = await supabase
     .from("profiles")
     .select("*")
@@ -56,6 +61,7 @@ export async function determineRoleEntryPath(
   userId: string,
   role: "stylist" | "salon",
 ): Promise<string> {
+  if (await isPlatformAdmin(supabase)) return ADMIN_HOME_PATH;
   const has = await hasCompletedRole(supabase, userId, role);
   if (role === "stylist") {
     return has ? "/stylist/mypage" : "/onboarding";

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSalonProfileFormInitialValues } from "@/lib/salon/get-initial-values";
 import { SalonProfileForm } from "@/components/salon-profile/salon-profile-form";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
+import { isPlatformAdmin } from "@/lib/admin/is-admin";
 
 export default async function SalonOnboardingPage() {
   const supabase = await createClient();
@@ -14,6 +15,11 @@ export default async function SalonOnboardingPage() {
   // middleware でも保護しているが、直接アクセスされた場合の保険として二重チェックする。
   if (!user) {
     redirect("/login?next=/onboarding/salon");
+  }
+
+  // 運営者には、サロン名・店舗の登録（オンボーディング）を求めない。
+  if (await isPlatformAdmin(supabase)) {
+    redirect("/admin");
   }
 
   // ★バグ修正: サロンroleを完了済みのユーザーには絶対に登録フォームを見せない。
