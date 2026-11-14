@@ -18,7 +18,10 @@
 | 認証 | `/salon/login`→`determineRoleEntryPath`（user_rolesにsalonが無いと `/onboarding/salon` へ）。ログイン後の行き先は `lib/auth/post-auth-redirect.ts` に集約 | **運営者の分岐をここに足す**（下記4章） |
 
 ## 2. 既存に無いもの（新規が必要）
-- **メール送信基盤が存在しない**（resend/SMTP等の利用なし）。連絡通知・招待メールは外部設定が必要（9章）。
+- **メールは2種類に分けて考える。**
+  - (a) **Supabase Auth のメール（確認メール・パスワード再設定）: 既にコードから使っている。** `signUp`（`emailRedirectTo` つき）と `resetPasswordForEmail` を呼んでおり、送信そのものはSupabase側の設定（SMTP・テンプレート・リダイレクトURL）に依存する。リポジトリ内には `supabase/config.toml` もテンプレートも無く、**ダッシュボード側の現在の設定は未確認**。作り直さず、現状を運営に確認してから使う。
+  - (b) **アプリからの業務通知（連絡の新着・見学調整・請求のお知らせ等）: 存在しない。** コード内に送信サービス（Resend/SendGrid/nodemailer等）の利用は無い。新規の外部設定が必要（9章）。
+  - 招待メールは (a) の仕組み（Supabase Authの招待）を使う想定。文面・送信元・リダイレクトも (a) の設定に依存するため、同じ確認が先に必要。
 - 連絡スレッド（運営→相手、相手の返信、対応状況、内部メモ、メール送信結果）。
 - 見学の受付〜実施確認〜請求の案件管理、新料金区分（登録手数料・見学料・採用料の2種）。
 - サロンのアカウント招待（招待状態・再送履歴）。
@@ -59,7 +62,7 @@
 一般向け「サロン登録」は、会社名・担当者名・電話・メールの問い合わせ受付に変更。送信先メールは未確定（環境変数 `INQUIRY_TO_EMAIL` を空で置き、未設定なら受付内容をDBに保存するだけ。推測値は入れない）。
 
 ## 9. 外部設定（運営が用意するもの。未設定のまま進める）
-1. メール送信（SMTPまたは送信サービス）と送信元ドメイン認証。2. Supabase Auth の招待メール文面・リダイレクトURL。3. 問い合わせ受付の送信先メール（未確定）。4. 運営者 `admin@beautyreach.jp` の platform_admins 登録（本番で人が実施）。5. Stripe: 新料金区分の商品/税設定（既存の設定を確認のうえ）。
+1. 業務通知用のメール送信（送信サービスと送信元ドメイン認証）。2. 【先に確認】Supabase Auth の現在のメール設定（SMTP・送信元・確認/再設定/招待のテンプレート・リダイレクトURL）。未調査のまま変更しない。3. 問い合わせ受付の送信先メール（未確定）。4. 運営者 `admin@beautyreach.jp` の platform_admins 登録（本番で人が実施）。5. Stripe: 新料金区分の商品/税設定（既存の設定を確認のうえ）。
 
 ## 10. DB変更案（レビュー用・未作成）
 新規: `admin_audit_events`, `admin_threads`, `admin_messages`, `admin_message_notifications`, `admin_visit_cases`, `admin_invoices`＋明細, `account_invitations`, `salon_inquiries`、会社の所在地列（任意）。いずれもRLSで一般利用者から直接参照不可、操作は SECURITY DEFINER RPC のみ。**この差分はSQL草案として別途提示し、承認前に適用しません。**
