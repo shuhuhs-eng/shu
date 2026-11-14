@@ -157,8 +157,8 @@ test("プレビュー画面の表示: 見出し・店舗名・導線・未保存
 
 test("RLS・公開範囲は変更していない: 新しいmigrationを追加していない", () => {
   const files = readdirSync("supabase/migrations").filter((f: string) => f.endsWith(".sql")).sort();
-  // 0057は未承認のレビュー用ドラフト（適用・コミット前）。承認前に増えていないことは別途確認する。
-  assert.ok(["0056", "0057"].includes(files[files.length - 1].slice(0, 4)));
+  // 0057は未承認のレビュー用ドラフト（適用・コミット前）。0060は運営一覧RPC（承認済み・読み取り専用）。承認なしに増えていないことは別途確認する。
+  assert.ok(["0056", "0057", "0060"].includes(files[files.length - 1].slice(0, 4)));
 });
 
 test("サロンマイページ: プロフィール概要に入口を置き、店舗ごとの別URLへ（取得失敗は別表示）", () => {
