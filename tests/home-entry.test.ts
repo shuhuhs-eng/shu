@@ -39,7 +39,7 @@ test("トップ: 「あなたのタイプ」見出し・30問診断の導線を�
   const h = strip(src("app/page.tsx"));
   assert.match(h, />あなたのタイプ<\/h2>/); assert.doesNotMatch(h, />美容師の方<\/h2>/);
   assert.match(h, /30問で[\s\S]{0,12}診断する/); assert.match(h, /href="\/stylist\/login"/);
-  assert.match(h, /サロンの方のログインはこちら/); assert.match(h, /href="\/salon\/login"/);
+  assert.match(h, />\s*サロンログイン\s*</); assert.doesNotMatch(h, /美容師としてログイン|サロンとしてログイン|サロンの方のログインはこちら/); assert.match(h, /href="\/salon\/login"/);
   assert.match(h, /href="\/signup\/salon"[\s\S]{0,120}新規登録（受付）/);   // 新規受付は別の導線
   assert.match(h, /href="\/admin\/login"[\s\S]{0,120}管理者の方はこちら/);
   assert.doesNotMatch(h, /サロンの方<\/h2>/);
@@ -60,4 +60,24 @@ test("アクセス制御は画面の表示だけに頼らない（/admin 配下�
   assert.match(src("app/admin/layout.tsx"), /is_platform_admin/);
   assert.match(src("lib/admin/guard.ts"), /isPlatformAdmin/);
   assert.match(src("app/admin/page.tsx"), /if \(!isAdmin\) redirect\("\/mypage"\)/);
+});
+
+test("表示文言: トップの美容師ログインは「ログイン」、サロン入口は「サロンログイン」。ログイン画面の見出しも同様。管理者ログインは変更しない", () => {
+  const h = strip(src("app/page.tsx"));
+  assert.match(h, /href="\/stylist\/login"[\s\S]{0,400}?>\s*ログイン\s*<ArrowRight/);
+  assert.match(h, /href="\/salon\/login"[\s\S]{0,400}?>\s*サロンログイン\s*<ArrowRight/);
+  const f = src("app/(auth)/login/login-form.tsx");
+  assert.match(f, /stylist: \{\s*heading: "ログイン"/); assert.match(f, /salon: \{\s*heading: "サロンログイン"/);
+  assert.match(f, /heading: "管理者ログイン"/);
+  assert.match(f, /heading: copy\?\.heading \?\? "ログイン"|\{copy\?\.heading \?\? "ログイン"\}/);
+  for (const t of [h, strip(f), strip(src("app/stylist/login/page.tsx")), strip(src("app/salon/login/page.tsx")), strip(src("app/stylist/login/layout.tsx")), strip(src("app/salon/login/layout.tsx"))]) assert.doesNotMatch(t, /美容師としてログイン|サロンとしてログイン/);
+  assert.match(h, /href="\/admin\/login"[\s\S]{0,120}管理者の方はこちら/);
+});
+
+test("PC: イラストとサロン入口が重ならない配置（イラスト下端を上げ、入口はカード行の右端・下揃え）", () => {
+  const c = src("components/home/hero-character.tsx");
+  assert.match(c, /bottom-\[-31px\]/); assert.match(c, /h-\[375px\]/);
+  assert.doesNotMatch(c, /bottom-\[-125px\]|h-\[470px\]/);
+  assert.match(src("app/page.tsx"), /lg:self-end/);
+  assert.match(src("app/page.tsx"), /lg:whitespace-nowrap/);   // 狭いPC幅でも「サロンログイン」が1行
 });

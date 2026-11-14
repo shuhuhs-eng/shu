@@ -276,7 +276,7 @@ export default async function Home() {
                   className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full px-6 py-3.5 text-[14.5px] font-semibold text-surface lg:mt-2.5 lg:py-2.5 lg:text-[13.5px]"
                   style={{ backgroundColor: "#6E4AA6" }}
                 >
-                  美容師としてログイン
+                  ログイン
                   <ArrowRight size={15} />
                 </Link>
               )}
@@ -292,7 +292,7 @@ export default async function Home() {
               ログイン（既存サロン）と新規登録（初めてのサロン）は別の導線として分けて表示する。 */}
           <aside
             aria-label="サロンの方の入口"
-            className="rounded-2xl border border-line bg-surface p-3 sm:ml-auto sm:flex sm:flex-none sm:basis-[calc(25%-0.3125rem)] sm:flex-col sm:self-center lg:basis-[calc(25%-0.375rem)]"
+            className="rounded-2xl border border-line bg-surface p-3 sm:ml-auto sm:flex sm:flex-none sm:basis-[calc(25%-0.3125rem)] sm:flex-col sm:self-center lg:basis-[calc(25%-0.375rem)] lg:self-end"
           >
             {hasSalon ? (
               <Link
@@ -313,10 +313,10 @@ export default async function Home() {
               <>
                 <Link
                   href="/salon/login"
-                  className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-full border px-3 py-2 text-center text-[12.5px] font-semibold leading-tight lg:text-[12px]"
+                  className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-full border px-2 py-2 text-center text-[12.5px] font-semibold leading-tight lg:whitespace-nowrap lg:text-[11.5px] xl:text-[12px]"
                   style={{ borderColor: "#2E8B7F", backgroundColor: "#EAF3EC", color: "#2E8B7F" }}
                 >
-                  サロンの方のログインはこちら
+                  サロンログイン
                   <ArrowRight size={13} className="shrink-0" />
                 </Link>
                 <p className="mt-2 text-center text-[11px] leading-snug text-sub">

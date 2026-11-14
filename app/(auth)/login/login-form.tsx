@@ -25,7 +25,7 @@ type Props = {
 
 const COPY = {
   stylist: {
-    heading: "美容師としてログイン",
+    heading: "ログイン",
     subtext: "診断・プロフィール・スカウトを利用する",
     // 美容師ログイン画面には新規登録・診断への案内を置かない（登録画面 /signup 自体は残る）。
     signupHref: null,
@@ -34,7 +34,7 @@ const COPY = {
     crossLinkLabel: "サロンの方はこちら",
   },
   salon: {
-    heading: "サロンとしてログイン",
+    heading: "サロンログイン",
     subtext: "採用・サロンらしさ・マッチングを利用する",
     signupHref: "/signup/salon",
     signupLabel: "新規登録はこちら",

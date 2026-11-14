@@ -36,9 +36,9 @@ type Props = {
  *     十分下（目安y=69、約18pxの余白）に、下端は下部カード領域へ
  *     意図的に約110px潜り込ませている（「カードの後ろに潜り込むような
  *     見え方でも可」という指示に基づく）。
- *   ・高さ h-[470px]（460〜490pxの目安レンジ内）、
+ *   ・高さ h-[375px]（サロン入口と重ならないよう縮小）、
  *     right-[65px]（50〜80pxの目安レンジ内、画面右端には張り付かせない）、
- *     bottom-[-125px]（Hero行の下端から125px外側＝下へシフト）。
+ *     bottom-[-31px]（Hero行の下端から31px外側。サロン入口との間に12〜16pxの余白）。
  *   ・z-index: キャラクターは z-[1]（低め）。右上ログインUI（z-10）・
  *     下部カード行（app/page.tsx側で relative z-10 を付与）の両方より
  *     必ず背面に描画されるようにしている。これにより、キャラクターの
@@ -47,7 +47,7 @@ type Props = {
  *
  * ★正直な注記: このサンドボックスには実ブラウザが無く、モックアップでの
  * 検証にとどまる。実際の画像の縦横比・透過マージンによって見え方は
- * 変わるため、実機確認の上、必要であればこの h-[470px] / bottom-[-125px] /
+ * 変わるため、実機確認の上、必要であればこの h-[375px] / bottom-[-31px] /
  * right-[65px] の数値だけを微調整してほしい。
  *
  * ── スマホ用表示（新規追加分） ──────────────────────────────
@@ -86,15 +86,17 @@ export function HeroCharacter({ src, alt }: Props) {
         />
       </div>
 
-      {/* PC用: 既存のabsolute配置（Hero行からの視覚的なはみ出し）。数値は
-          前回から一切変更していない。 */}
-      <div className="pointer-events-none absolute right-[65px] bottom-[-125px] z-[1] hidden lg:block">
+      {/* PC用: absolute配置（Hero行からの視覚的なはみ出し）。
+          ★サロンの方の入口（カード行の右端・下揃え）と重ならないよう、下端を上げ（bottom -125→-31px）、
+          その分だけ高さを縮めた（470→375px。上端はログインUIの下 y≒70 のまま）。
+          画像の下端がカード行へ入り込むのは約15px以内で、右端の入口の上端より上に収まる。 */}
+      <div className="pointer-events-none absolute right-[65px] bottom-[-31px] z-[1] hidden lg:block">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
           alt={alt}
           onError={() => setFailed(true)}
-          className="h-[470px] w-auto max-w-none object-contain object-bottom"
+          className="h-[375px] w-auto max-w-none object-contain object-bottom"
         />
       </div>
     </>
