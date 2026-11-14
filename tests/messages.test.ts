@@ -110,3 +110,28 @@ test("宛先が権限を失った場合も運営は閲覧でき、表示で区�
 test("本文はHTMLとして解釈しない（dangerouslySetInnerHTMLを使わない）", () => {
   assert.doesNotMatch(src("components/messages/thread-view.tsx"), /dangerouslySetInnerHTML/);
 });
+
+test("Server→Clientで関数を渡さない（連絡作成画面が「一時的に表示できません」になった原因の再発防止）", () => {
+  const form = src("components/messages/message-form.tsx");
+  assert.doesNotMatch(form, /goToThread|newRequestId/);
+  assert.match(form, /threadPathPrefix\?: string/);
+  for (const f of ["app/admin/messages/new/page.tsx", "app/admin/messages/[threadId]/page.tsx", "app/messages/[threadId]/page.tsx"]) {
+    const m = src(f).match(/<MessageForm[\s\S]*?\/>/);
+    assert.ok(m, f);
+    assert.doesNotMatch(m![0], /=\{\s*\(?\w*\)?\s*=>/, `${f}: MessageFormに関数propを渡していない`);
+  }
+});
+
+test("管理画面のエラーは「管理画面へ戻る」→/admin、一般画面は従来どおり「トップへ戻る」→/、ナビに「サイトのホームへ」→/", () => {
+  const ae = src("app/admin/error.tsx");
+  assert.match(ae, /homeHref="\/admin"/); assert.match(ae, /管理画面へ戻る/);
+  assert.match(src("components/error-panel.tsx"), /homeHref = "\/"/); assert.match(src("components/error-panel.tsx"), /トップへ戻る/);
+  assert.doesNotMatch(src("app/error.tsx"), /homeHref/);
+  assert.match(src("components/admin/admin-nav.tsx"), /href: "\/", label: "サイトのホームへ"/);
+});
+
+test("権限確認は維持: エラー画面・ナビの変更で管理画面の入口の確認は外れていない", () => {
+  assert.match(src("app/admin/layout.tsx"), /is_platform_admin/);
+  assert.match(src("lib/admin/guard.ts"), /isPlatformAdmin/);
+  assert.match(src("app/admin/messages/new/page.tsx"), /requireAdminPage/);
+});

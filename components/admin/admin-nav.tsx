@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 const ITEMS = [
+  // 一般向けサイトのホーム（エラー画面の「管理画面へ戻る」→/admin とは行き先を分けている）。スマホでも先頭で見えるよう最初に置く。
+  { href: "/", label: "サイトのホームへ" },
   { href: "/admin", label: "運営トップ" },
   { href: "/admin/salons", label: "会社・店舗" },
   { href: "/admin/stylists", label: "美容師" },

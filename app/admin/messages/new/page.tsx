@@ -36,7 +36,7 @@ export default async function NewThreadPage({ searchParams }: { searchParams: SP
           <p className="mt-1 text-[11.5px] leading-relaxed text-sub">サロン宛は、その会社（店舗を選んだ場合はその店舗）の連絡を見られる担当者に届きます。閲覧できるのは、会社のオーナー・管理者・採用管理者、または店舗の店長・採用担当です。閲覧のみの担当者は見られません。</p>
           <MessageForm action={createThreadAction} initialRequestId={rid} withSubject submitLabel="連絡を作成する" placeholder="本文"
             hidden={{ audience, ...(audience === "salon" ? { organization_id: org, ...(isUuid(store) ? { store_id: store } : {}) } : { recipient_user_id: rcp }) }}
-            goToThread={(id) => `/admin/messages/${id}`} note="二重に押しても、同じ内容は1件だけ作成されます。通知メールは送信されません。" />
+            threadPathPrefix="/admin/messages/" note="二重に押しても、同じ内容は1件だけ作成されます。通知メールは送信されません。" />
         </>
       )}
     </main>

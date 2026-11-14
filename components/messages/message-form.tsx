@@ -18,7 +18,8 @@ const field = "w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-
 export function MessageForm(props: {
   action: FormAction; initialRequestId: string; hidden: Record<string, string>;
   withSubject?: boolean; kinds?: { value: string; label: string }[]; submitLabel: string; placeholder?: string; note?: string;
-  newRequestId?: () => string; goToThread?: (id: string) => string;
+  /** 作成成功後の移動先の前半（例 "/admin/messages/"）。★関数は Server→Client で渡せないため文字列で受ける。 */
+  threadPathPrefix?: string;
 }) {
   const router = useRouter();
   const [rid, setRid] = useState(props.initialRequestId);
@@ -44,9 +45,9 @@ export function MessageForm(props: {
       try { res = await props.action(fd); }
       catch { setUnknown(true); setError(UNKNOWN_RESULT_MESSAGE); return; }   // 結果不明: 送信IDも入力も保持
       if (!res.ok) { setError(res.error); return; }                          // 保存されていない（または既存の同じ送信）: 入力と送信IDを保持
-      setRid((props.newRequestId ?? (() => crypto.randomUUID()))());           // 成功を確認: 次の投稿は新しい送信ID
+      setRid(crypto.randomUUID());           // 成功を確認: 次の投稿は新しい送信ID
       setSubject(""); setBody(""); setDone(true);
-      if (res.threadId && props.goToThread) router.push(props.goToThread(res.threadId)); else router.refresh();
+      if (res.threadId && props.threadPathPrefix) router.push(`${props.threadPathPrefix}${res.threadId}`); else router.refresh();
     });
   }
 
