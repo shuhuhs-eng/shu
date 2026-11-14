@@ -2,7 +2,9 @@ import Link from "next/link";
 
 const ITEMS = [
   { href: "/admin", label: "運営トップ" },
-  { href: "/admin/companies", label: "会社" },
+  { href: "/admin/salons", label: "会社・店舗" },
+  { href: "/admin/stylists", label: "美容師" },
+  { href: "/admin/companies", label: "会社（採用・請求）" },
   { href: "/admin/contracts", label: "契約" },
   { href: "/admin/success-fees", label: "成功報酬・請求" },
   { href: "/admin/stripe", label: "カード決済" },
@@ -19,7 +21,7 @@ export function AdminNav() {
       <ul className="mx-auto flex max-w-[900px] gap-1 overflow-x-auto px-5 py-2 text-[12px] font-semibold">
         {ITEMS.map((i) => (
           <li key={i.href} className="shrink-0">
-            <Link href={i.href} className="rounded-full px-3 py-1.5 text-charcoal hover:bg-surface2">{i.label}</Link>
+            <Link href={i.href} className="inline-flex min-h-[44px] items-center rounded-full px-3 text-charcoal hover:bg-surface2">{i.label}</Link>
           </li>
         ))}
       </ul>
