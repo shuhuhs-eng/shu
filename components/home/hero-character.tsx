@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+const BACKDROP_SRC = "/images/hero-backdrop.webp";
+
 type Props = {
   src: string;
   alt: string;
@@ -77,13 +79,23 @@ export function HeroCharacter({ src, alt }: Props) {
       {/* スマホ用: 通常フロー内、説明文とCTAの間。案内役として認識できる
           サイズにとどめ、無理に大きくしない。 */}
       <div className="mt-6 flex justify-center lg:hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={src}
-          alt={alt}
-          onError={() => setFailed(true)}
-          className="h-[230px] w-auto object-contain"
-        />
+        <div className="relative">
+          {/* 静止の背景（クリーム＋ゴールドのアーチ）。人物の後ろに置くだけで、動かない。 */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={BACKDROP_SRC}
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-[-6px] left-1/2 h-[308px] w-[231px] max-w-none -translate-x-1/2 select-none"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src}
+            alt={alt}
+            onError={() => setFailed(true)}
+            className="relative h-[230px] w-auto object-contain"
+          />
+        </div>
       </div>
 
       {/* PC用: absolute配置（Hero行からの視覚的なはみ出し）。
@@ -91,12 +103,21 @@ export function HeroCharacter({ src, alt }: Props) {
           その分だけ高さを縮めた（470→375px。上端はログインUIの下 y≒70 のまま）。
           画像の下端がカード行へ入り込むのは約15px以内で、右端の入口の上端より上に収まる。 */}
       <div className="pointer-events-none absolute right-[65px] bottom-[-31px] z-[1] hidden lg:block xl:bottom-[-125px]">
+        {/* 静止の背景（クリーム＋ゴールドのアーチ）。人物の後ろ・下端そろえ。レイアウトには影響しない。
+            xl（1280px以上）のみ表示：lg幅では人物の左側が診断ボタンの右端に重なるため、背景は出さない。 */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={BACKDROP_SRC}
+          alt=""
+          aria-hidden="true"
+          className="absolute bottom-[-14px] left-1/2 hidden h-[510px] w-[383px] max-w-none -translate-x-1/2 select-none xl:block"
+        />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
           alt={alt}
           onError={() => setFailed(true)}
-          className="h-[375px] w-auto max-w-none xl:h-[470px] object-contain object-bottom"
+          className="relative h-[375px] w-auto max-w-none xl:h-[470px] object-contain object-bottom"
         />
       </div>
     </>
