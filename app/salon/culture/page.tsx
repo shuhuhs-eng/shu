@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SalonCultureWizard } from "@/components/salon-culture/salon-culture-wizard";
+import { CultureResultLoadError } from "@/components/salon-culture/culture-result-load-error";
+import { loadCultureEditState } from "@/lib/salon-culture/load-edit-state";
 
 export default async function SalonCulturePage({
   searchParams,
@@ -25,14 +27,11 @@ export default async function SalonCulturePage({
     redirect("/stylist/mypage");
   }
 
-  const { data: cultureProfile } = await supabase
-    .from("salon_culture_profiles")
-    .select("*")
-    .eq("salon_user_id", user.id)
-    .maybeSingle();
+  const st = await loadCultureEditState(supabase, user.id, null);
+  if (st.loadError) return <CultureResultLoadError retryHref="/salon/culture" backHref="/salon/mypage" />;
 
-  // 既に完了済みで、明示的な「見直す」（?edit=1）でない場合は結果画面へ誘導する。
-  if (cultureProfile?.status === "completed" && edit !== "1") {
+  // 既に確定済みで、明示的な「見直す」（?edit=1）でない場合は結果画面へ誘導する。
+  if (st.hasPublished && edit !== "1") {
     redirect("/salon/culture/result");
   }
 
@@ -49,11 +48,18 @@ export default async function SalonCulturePage({
       </p>
 
       <div className="mt-7">
-        <SalonCultureWizard initialProfile={cultureProfile ?? null} />
+        <SalonCultureWizard
+          initial={st.initial}
+          initialRev={st.initialRev}
+          hasPublished={st.hasPublished}
+          publishedAnswers={st.publishedAnswers}
+          publishedExtra={st.publishedExtra}
+          limitStatus={st.limitStatus}
+        />
       </div>
 
       <Link href="/salon/mypage" className="mt-6 block text-center text-[13px] text-sub underline">
-        マイページに戻る（回答内容は保存されています）
+        マイページに戻る（回答は下書きとして保存されています）
       </Link>
     </main>
   );

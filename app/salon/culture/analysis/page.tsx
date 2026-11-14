@@ -2,14 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
-import { logError } from "@/lib/security/log";
 import { AnalysisForm } from "@/components/salon-culture/analysis-form";
 import { CultureResultLoadError } from "@/components/salon-culture/culture-result-load-error";
-import { saveSalonCultureAnalysis } from "@/lib/salon-culture/analysis/actions";
+import { saveExtraAndConfirmAction } from "@/lib/salon-culture/draft-actions";
+import { loadCultureEditState } from "@/lib/salon-culture/load-edit-state";
+import { answersSameAsPublished } from "@/lib/salon-culture/draft";
+import { extraNotice } from "@/lib/diagnosis-limit/messages";
 import {
-  ANALYSIS_VERSION,
   extractBaseAnswers,
-  extractSupplementAnswers,
   type BaseAnswers,
   type SupplementAnswers,
 } from "@/lib/salon-culture/analysis/v1";
@@ -26,35 +26,22 @@ export default async function SalonCultureAnalysisPage() {
   if (!user) redirect("/login?next=/salon/culture/analysis");
   if (!(await hasCompletedRole(supabase, user.id, "salon"))) redirect("/onboarding/salon");
 
-  const { data: culture, error } = await supabase
-    .from("salon_culture_profiles")
-    .select("status, answers")
-    .eq("salon_user_id", user.id)
-    .maybeSingle();
-  if (error) {
-    logError("salonCultureAnalysisPage", error);
-    return <CultureResultLoadError retryHref="/salon/culture/analysis" backHref="/salon/mypage" />;
-  }
-  const base = culture?.status === "completed" ? extractBaseAnswers(culture.answers) : null;
+  const st = await loadCultureEditState(supabase, user.id, null);
+  if (st.loadError) return <CultureResultLoadError retryHref="/salon/culture/analysis" backHref="/salon/mypage" />;
+  // 12問の出発点は、下書きがあれば下書き、なければ公開中の結果。12問が確定していなければ先に12問へ。
+  const base = st.hasPublished ? extractBaseAnswers(st.initial.answers) : null;
   if (!base) redirect("/salon/culture");
-
-  const { data: row, error: rowError } = await supabase
-    .from("salon_culture_analysis_answers")
-    .select("answers")
-    .eq("salon_user_id", user.id)
-    .eq("analysis_version", ANALYSIS_VERSION)
-    .maybeSingle();
-  if (rowError) {
-    logError("salonCultureAnalysisPage.row", rowError);
-    return <CultureResultLoadError retryHref="/salon/culture/analysis" backHref="/salon/mypage" />;
-  }
-  const initial = row ? extractSupplementAnswers(row.answers) : null;
+  const initial = st.initial.extra;
+  const notices = extraNotice(st.limitStatus, {
+    hadExtra: st.publishedExtra != null,
+    pendingTwelveChange: st.hasDraft && !answersSameAsPublished(st.initial.answers, st.publishedAnswers),
+  });
 
   const { data: salon } = await supabase.from("salon_profiles").select("salon_name").eq("user_id", user.id).maybeSingle();
 
-  async function save(answers: SupplementAnswers, expectedBase: BaseAnswers) {
+  async function save(answers: SupplementAnswers, expectedBase: BaseAnswers, requestId: string) {
     "use server";
-    return saveSalonCultureAnalysis({ answers, expectedBase });
+    return saveExtraAndConfirmAction(null, answers, expectedBase, requestId);
   }
 
   return (
@@ -70,6 +57,7 @@ export default async function SalonCultureAnalysisPage() {
         expectedBase={base}
         initial={initial}
         save={save}
+        notices={notices}
         doneHref="/salon/mypage"
         cancelHref="/salon/mypage"
       />

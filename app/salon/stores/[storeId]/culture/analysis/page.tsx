@@ -4,11 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/security/log";
 import { AnalysisForm } from "@/components/salon-culture/analysis-form";
 import { CultureResultLoadError } from "@/components/salon-culture/culture-result-load-error";
-import { saveSalonStoreCultureAnalysis } from "@/lib/salon-culture/analysis/actions";
+import { saveExtraAndConfirmAction } from "@/lib/salon-culture/draft-actions";
+import { loadCultureEditState } from "@/lib/salon-culture/load-edit-state";
+import { answersSameAsPublished } from "@/lib/salon-culture/draft";
+import { extraNotice } from "@/lib/diagnosis-limit/messages";
 import {
-  ANALYSIS_VERSION,
   extractBaseAnswers,
-  extractSupplementAnswers,
   type BaseAnswers,
   type SupplementAnswers,
 } from "@/lib/salon-culture/analysis/v1";
@@ -23,6 +24,10 @@ type Props = { params: Promise<{ storeId: string }> };
 export default async function SalonStoreCultureAnalysisPage({ params }: Props) {
   const { storeId } = await params;
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect(`/login?next=/salon/stores/${storeId}/culture/analysis`);
   const backHref = `/salon/stores/${storeId}`;
   const resultHref = `/salon/stores/${storeId}/culture/result`;
 
@@ -45,35 +50,21 @@ export default async function SalonStoreCultureAnalysisPage({ params }: Props) {
     );
   }
 
-  const { data: culture, error } = await supabase
-    .from("salon_store_culture_profiles")
-    .select("status, answers")
-    .eq("store_id", storeId)
-    .maybeSingle();
-  if (error) {
-    logError("salonStoreCultureAnalysisPage", error);
-    return <CultureResultLoadError retryHref={`/salon/stores/${storeId}/culture/analysis`} backHref={backHref} />;
-  }
-  const base = culture?.status === "completed" ? extractBaseAnswers(culture.answers) : null;
+  const st = await loadCultureEditState(supabase, user.id, storeId);
+  if (st.loadError) return <CultureResultLoadError retryHref={`/salon/stores/${storeId}/culture/analysis`} backHref={backHref} />;
+  const base = st.hasPublished ? extractBaseAnswers(st.initial.answers) : null;
   if (!base) redirect(`/salon/stores/${storeId}/culture`);
-
-  const { data: row, error: rowError } = await supabase
-    .from("salon_culture_analysis_answers")
-    .select("answers")
-    .eq("store_id", storeId)
-    .eq("analysis_version", ANALYSIS_VERSION)
-    .maybeSingle();
-  if (rowError) {
-    logError("salonStoreCultureAnalysisPage.row", rowError);
-    return <CultureResultLoadError retryHref={`/salon/stores/${storeId}/culture/analysis`} backHref={backHref} />;
-  }
-  const initial = row ? extractSupplementAnswers(row.answers) : null;
+  const initial = st.initial.extra;
+  const notices = extraNotice(st.limitStatus, {
+    hadExtra: st.publishedExtra != null,
+    pendingTwelveChange: st.hasDraft && !answersSameAsPublished(st.initial.answers, st.publishedAnswers),
+  });
 
   const { data: store } = await supabase.from("salon_stores").select("store_name").eq("id", storeId).maybeSingle();
 
-  async function save(answers: SupplementAnswers, expectedBase: BaseAnswers) {
+  async function save(answers: SupplementAnswers, expectedBase: BaseAnswers, requestId: string) {
     "use server";
-    return saveSalonStoreCultureAnalysis({ storeId, answers, expectedBase });
+    return saveExtraAndConfirmAction(storeId, answers, expectedBase, requestId);
   }
 
   return (
@@ -89,6 +80,7 @@ export default async function SalonStoreCultureAnalysisPage({ params }: Props) {
         expectedBase={base}
         initial={initial}
         save={save}
+        notices={notices}
         doneHref={resultHref}
         cancelHref={resultHref}
       />

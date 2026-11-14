@@ -70,11 +70,15 @@ test("制限エラーの表示: DBのエラーを利用者向けの文言に直�
   assert.equal(mapLimitError(null).code, "unknown");
 });
 
-test("関数が無い（0058未適用）エラーの判定", () => {
-  assert.equal(isMissingFunctionError({ code: "PGRST202" }), true);
-  assert.equal(isMissingFunctionError({ code: "42883" }), true);
-  assert.equal(isMissingFunctionError({ message: "Could not find the function public.commit_diagnosis_result(...) in the schema cache" }), true);
-  assert.equal(isMissingFunctionError({ message: "diagnosis_change_locked" }), false, "制限エラーはフォールバックしない");
-  assert.equal(isMissingFunctionError({ message: "diagnosis_already_saved", code: "P0001" }), false);
+test("関数が無い（0058未適用）エラーの判定は、この関数の欠落だけ", () => {
+  const name = "commit_diagnosis_result";
+  assert.equal(isMissingFunctionError({ code: "PGRST202", message: `Could not find the function public.${name}(p_user_id) in the schema cache` }), true);
+  assert.equal(isMissingFunctionError({ code: "42883", message: `function public.${name}(uuid) does not exist` }), true);
+  // 関数名だけ・コードだけでは真にならない
+  assert.equal(isMissingFunctionError({ message: `Could not find the function public.${name}` }), false);
+  assert.equal(isMissingFunctionError({ code: "PGRST202", message: "Could not find the function public.other_fn(x)" }), false, "別の関数の欠落");
+  assert.equal(isMissingFunctionError({ code: "42501", message: `permission denied for function ${name}` }), false, "権限エラー");
+  assert.equal(isMissingFunctionError({ message: "diagnosis_change_locked", code: "P0001" }), false);
+  assert.equal(isMissingFunctionError({ message: "fetch failed" }), false, "通信失敗");
   assert.equal(isMissingFunctionError(null), false);
 });

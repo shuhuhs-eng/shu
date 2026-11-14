@@ -1,12 +1,15 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { saveSalonCultureStep } from "@/lib/salon-culture/actions";
 import { FivePointScale } from "@/components/shared/five-point-scale";
 import { ValuePrioritySelector } from "@/components/profile/value-priority-selector";
 import { TextareaField } from "@/components/profile/textarea-field";
 import { SALON_VALUE_PRIORITY_OPTIONS } from "@/lib/validation/profile-options";
+import { useCultureDraft } from "@/components/salon-culture/use-culture-draft";
+import { CultureReview } from "@/components/salon-culture/culture-review";
+import { ChangeLimitBanner } from "@/components/salon-culture/change-limit-banner";
+import type { DraftState } from "@/lib/salon-culture/draft";
+import type { LimitStatus } from "@/lib/diagnosis-limit/messages";
+import type { SupplementAnswers } from "@/lib/salon-culture/analysis/v1";
 import type { Database } from "@/types/database";
 
 /**
@@ -32,10 +35,15 @@ type Answers = {
   q12_hierarchy_flatness?: number;
 };
 
-type RespondentRole = Database["public"]["Enums"]["salon_culture_respondent_role"];
 
 type Props = {
-  initialProfile: Database["public"]["Tables"]["salon_culture_profiles"]["Row"] | null;
+  /** 編集の出発点: 下書きがあれば下書き、なければ公開中の結果。 */
+  initial: DraftState;
+  initialRev: number | null;
+  hasPublished: boolean;
+  publishedAnswers: unknown;
+  publishedExtra: SupplementAnswers | null;
+  limitStatus: LimitStatus;
 };
 
 // ★回答者選択ステップは廃止した（新12問はいずれも回答者による文言分岐が
@@ -43,7 +51,6 @@ type Props = {
 // 余計な1ステップになっていた）。DB・RPCのスキーマ（respondent_role列・
 // p_respondent_roleパラメータ）自体は変更しないため、固定値を自動的に
 // 送信する（ユーザーへは表示・選択させない）。
-const DEFAULT_RESPONDENT_ROLE: RespondentRole = "owner_representative";
 
 /**
  * 12問の定義。answersKeyでAnswers型のキーと1:1対応させる。
@@ -139,55 +146,27 @@ const COMMENT_STEP = VALUE_PRIORITIES_STEP + 1; // 13
  * 「サロンらしさ」入力ウィザード（0009: 新12問・5段階評価へ再構築）。
  *
  * ★診断クイズ・美容師オンボーディングとは異なり、各ステップの遷移時に
- * saveSalonCultureStep()を直接呼び、都度DBへ保存する（true partial save）。
+ * 各ステップで「下書き」に保存する（途中離脱しても回答は失われない）。公開中の結果が変わるのは、確認画面で確定したときだけ。
  * これにより、途中で離脱してもブラウザを閉じても回答内容が失われない。
  *
  * 質問はすべて「今、実際にどうしているか」（current_culture）のみで構成し、
  * 理想・将来像（aspired_culture）は今回実装しない。
  */
-export function SalonCultureWizard({ initialProfile }: Props) {
-  const router = useRouter();
-  // ★原因Cの修正: 新12問への再構築でステップ番号の意味が変わったため、
-  // 旧フロー時代（?edit=1でアクセスされる既存ユーザーを含む）に保存された
-  // current_stepの値を、そのまま新しいステップ番号として使うと、質問が
-  // 途中から始まってしまい一部の質問が一度も表示・回答されないまま
-  // 「完了する」まで進めてしまう不具合があった。常に0（Q1）から開始する
-  // ことで、この不整合を避ける。既に回答済みの内容自体は下記のとおり
-  // answers/valuePriorities/commentのstateとして正しく復元されるため、
-  // 既回答の質問は選択済み状態で表示され、ユーザーは「次へ」で素早く
-  // 進められる。
-  const [step, setStep] = useState(0);
-  // ★回答者選択ステップは廃止したため、respondentRoleは固定値を自動的に
-  // 保持する（DB・RPCのスキーマは変更していないため、有効な値を送り続ける
-  // 必要がある）。
-  const [respondentRole] = useState<RespondentRole>(
-    initialProfile?.respondent_role ?? DEFAULT_RESPONDENT_ROLE,
-  );
-  const [answers, setAnswers] = useState<Answers>((initialProfile?.answers as Answers) ?? {});
-  const [valuePriorities, setValuePriorities] = useState<string[]>(initialProfile?.value_priorities ?? []);
-  const [comment, setComment] = useState(initialProfile?.comment ?? "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function persist(status: "draft" | "completed", nextStep: number) {
-    setSaving(true);
-    setError(null);
-    const result = await saveSalonCultureStep({
-      status,
-      respondentRole,
-      currentStep: nextStep,
-      answers,
-      valuePriorities,
-      comment,
-    });
-    setSaving(false);
-
-    if (!result.success) {
-      setError(result.error);
-      return false;
-    }
-    return true;
-  }
+export function SalonCultureWizard({ initial, initialRev, hasPublished, publishedAnswers, publishedExtra, limitStatus }: Props) {
+  // ステップごとの回答は「下書き」にだけ保存する。公開中の結果が変わるのは、確認画面で「確定する」を押したときだけ（0058）。
+  // 常に0（Q1）から始める（既回答は選択済みで表示される）。
+  const d = useCultureDraft({
+    storeId: null,
+    initial,
+    initialRev,
+    resultHref: "/salon/culture/result",
+    hasPublished,
+    publishedAnswers,
+    publishedExtra,
+    limitStatus,
+  });
+  const { answers, setAnswers, valuePriorities, setValuePriorities, comment, setComment, step, setStep, saving, error, setError } = d;
+  const analysisHref = "/salon/culture/analysis";
 
   // 0〜11がQ1〜Q12に対応（回答者選択ステップを廃止したため、stepとQUESTIONSの
   // インデックスがそのまま一致する）。
@@ -206,7 +185,7 @@ export function SalonCultureWizard({ initialProfile }: Props) {
     }
 
     const nextStep = Math.min(step + 1, TOTAL_STEPS - 1);
-    const ok = await persist("draft", nextStep);
+    const ok = await d.saveDraft(nextStep);
     if (ok) setStep(nextStep);
   }
 
@@ -215,13 +194,43 @@ export function SalonCultureWizard({ initialProfile }: Props) {
     setStep((s) => Math.max(s - 1, 0));
   }
 
-  async function handleComplete() {
-    const ok = await persist("completed", step);
-    if (ok) router.push("/salon/culture/result");
+  // 最後のステップのあと、下書きを保存して確認画面へ（ここではまだ公開結果は変わらない）。
+  async function handleToReview() {
+    await d.startReview(step);
+  }
+
+  // 確認画面の「直す」: 該当のステップへ戻り、直したら次へ進んで確認画面に戻る。
+  function handleEdit(stepIndex: number) {
+    d.setReviewing(false);
+    setError(null);
+    setStep(stepIndex);
+  }
+
+  if (d.reviewing) {
+    return (
+      <CultureReview
+        questions={QUESTIONS}
+        answers={answers}
+        valuePriorities={valuePriorities}
+        comment={comment}
+        notice={d.notice}
+        extraRequired={d.preview.extraRequired}
+        analysisHref={analysisHref}
+        error={error}
+        errorCode={d.errorCode}
+        saving={saving}
+        blocked={d.blocked}
+        onEdit={handleEdit}
+        onConfirm={d.confirm}
+        onBack={() => d.setReviewing(false)}
+        onReload={d.refresh}
+      />
+    );
   }
 
   return (
     <div className="space-y-6">
+      <ChangeLimitBanner status={limitStatus} hasPublished={hasPublished} />
       <div>
         <div className="mb-2 flex items-center justify-between">
           <span className="eyebrow">
@@ -239,6 +248,11 @@ export function SalonCultureWizard({ initialProfile }: Props) {
       {error && (
         <p role="alert" className="rounded-xl border border-[#C24545]/30 bg-[#C24545]/10 px-4 py-3 text-[13px] text-[#8A2E2E]">
           {error}
+          {d.errorCode === "draft_changed" && (
+            <button type="button" onClick={d.refresh} className="mt-2 flex min-h-[44px] items-center font-semibold underline">
+              画面を読み込み直す
+            </button>
+          )}
         </p>
       )}
 
@@ -297,7 +311,7 @@ export function SalonCultureWizard({ initialProfile }: Props) {
           type="button"
           onClick={handleBack}
           disabled={step === 0 || saving}
-          className="text-[13px] font-semibold text-sub underline disabled:opacity-0"
+          className="inline-flex min-h-[44px] items-center text-[13px] font-semibold text-sub underline disabled:opacity-0"
         >
           戻る
         </button>
@@ -307,18 +321,18 @@ export function SalonCultureWizard({ initialProfile }: Props) {
             type="button"
             onClick={handleNext}
             disabled={saving}
-            className="flex items-center justify-center rounded-full bg-ink px-8 py-3 text-[14px] font-semibold text-surface disabled:opacity-60"
+            className="flex min-h-[44px] items-center justify-center rounded-full bg-ink px-8 py-3 text-[14px] font-semibold text-surface disabled:opacity-60"
           >
             {saving ? "保存中..." : "次へ"}
           </button>
         ) : (
           <button
             type="button"
-            onClick={handleComplete}
+            onClick={handleToReview}
             disabled={saving}
-            className="flex items-center justify-center rounded-full bg-ink px-8 py-3 text-[14px] font-semibold text-surface disabled:opacity-60"
+            className="flex min-h-[44px] items-center justify-center rounded-full bg-ink px-8 py-3 text-[14px] font-semibold text-surface disabled:opacity-60"
           >
-            {saving ? "保存中..." : "完了する"}
+            {saving ? "保存中..." : "確認する"}
           </button>
         )}
       </div>

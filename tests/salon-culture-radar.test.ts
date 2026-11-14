@@ -173,16 +173,25 @@ test("サロンマイページ: 14問診断の表示・受診ボタンを持た�
 
 test("個人と店舗は別々に読む: 個人の画面は店舗の追加回答を、店舗の画面は個人の追加回答を読まない", () => {
   const strip = (f: string) => readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-  for (const f of ["app/salon/mypage/page.tsx", "app/salon/culture/result/page.tsx", "app/salon/culture/analysis/page.tsx"]) {
+  // 結果・マイページは、これまでどおり画面内で絞り込む
+  for (const f of ["app/salon/mypage/page.tsx", "app/salon/culture/result/page.tsx"]) {
     const c = strip(f);
     assert.match(c, /\.eq\("salon_user_id", user\.id\)/, f);
     assert.ok(!/\.eq\("store_id"/.test(c.slice(c.indexOf("salon_culture_analysis_answers"))), f);
   }
-  for (const f of ["app/salon/stores/[storeId]/culture/result/page.tsx", "app/salon/stores/[storeId]/culture/analysis/page.tsx"]) {
-    const c = strip(f);
-    assert.match(c, /\.eq\("store_id", storeId\)/, f);
-    assert.ok(!/salon_user_id/.test(c.slice(c.indexOf("salon_culture_analysis_answers"))), f);
-  }
+  assert.match(strip("app/salon/stores/[storeId]/culture/result/page.tsx"), /\.eq\("store_id", storeId\)/);
+  // 追加回答の画面は、共通の読み込み（loadCultureEditState）に「本人=null／店舗=店舗ID」を渡して分ける
+  assert.match(strip("app/salon/culture/analysis/page.tsx"), /loadCultureEditState\(supabase, user\.id, null\)/);
+  assert.match(strip("app/salon/stores/[storeId]/culture/analysis/page.tsx"), /loadCultureEditState\(supabase, user\.id, storeId\)/);
+  const loader = strip("lib/salon-culture/load-edit-state.ts");
+  assert.match(loader, /storeId \? "salon_store_culture_profiles" : "salon_culture_profiles"/);
+  assert.match(loader, /storeId \? "store_id" : "salon_user_id"/);
+  assert.match(loader, /storeId \?\? userId/, "本人用は本人のIDだけで読む（店舗IDを混ぜない）");
+  // 保存側も、本人=null／店舗=店舗ID で分かれる
+  const act = strip("lib/salon-culture/draft-actions.ts");
+  assert.match(act, /storeId \? "salon_store_culture_profiles" : "salon_culture_profiles"|salon_store_culture_profiles/, "本人用と店舗用を保存先で分ける");
+  assert.match(strip("app/salon/culture/analysis/page.tsx"), /saveExtraAndConfirmAction\(null,/);
+  assert.match(strip("app/salon/stores/[storeId]/culture/analysis/page.tsx"), /saveExtraAndConfirmAction\(storeId,/);
 });
 
 test("店舗の追加回答画面: 保存権限が無ければフォームを出さない（権限はRPC can_edit_store_culture_analysis）", () => {

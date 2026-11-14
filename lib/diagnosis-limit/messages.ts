@@ -56,7 +56,22 @@ export function addThreeMonthsJst(from: Date): Date {
 }
 
 /** 確認画面（保存前）に出す、回数の案内。 */
-export function confirmNotice(status: LimitStatus, now: Date = new Date()): { lines: string[]; blocking: boolean } {
+export function confirmNotice(
+  status: LimitStatus,
+  now: Date = new Date(),
+  opts: { unchanged?: boolean; extraFirst?: boolean } = {},
+): { lines: string[]; blocking: boolean } {
+  // サロン: 公開中の結果と回答が同じ、または未回答だった追加5問を初めて完成させるだけなら、変更として数えない（ロック中でも確定できる）
+  if (status.state !== "none" && status.state !== "unknown" && (opts.unchanged || opts.extraFirst)) {
+    return {
+      lines: [
+        opts.extraFirst
+          ? "追加の5問を初めて回答するだけなので、変更として数えません。ロック中でも保存できます。"
+          : "回答は公開中の結果と同じなので、変更として数えません。",
+      ],
+      blocking: false,
+    };
+  }
   if (status.state === "locked" && status.lockedUntil) {
     return { lines: [`次に変更できるのは ${formatJstDateTime(status.lockedUntil)} 以降です。それまでは結果を変更できません。`], blocking: true };
   }
@@ -129,4 +144,24 @@ export function mapLimitError(err: { message?: string | null; details?: string |
   if (msg.includes("not authenticated"))
     return { code: "not_authenticated", lockedUntil: null, message: "ログインの有効期限が切れました。ログインし直してください。" };
   return { code: "unknown", lockedUntil: null, message: `結果の保存に失敗しました。${NOT_COUNTED}もう一度お試しください。` };
+}
+
+/** 追加5問の回答画面に出す、回数の案内（保存前）。判定は保存時にDB。 */
+export function extraNotice(
+  status: LimitStatus,
+  o: { hadExtra: boolean; pendingTwelveChange: boolean },
+  now: Date = new Date(),
+): string[] {
+  const lines: string[] = [];
+  if (o.pendingTwelveChange) lines.push("未確定の12問の変更があります。この保存で、12問の変更とあわせて確定します。");
+  if (!o.hadExtra && !o.pendingTwelveChange) {
+    lines.push("追加の5問を初めて回答する場合は、変更として数えません。");
+    return lines;
+  }
+  if (status.state === "locked" && status.lockedUntil) {
+    lines.push(`次に変更できるのは ${formatJstDateTime(status.lockedUntil)} 以降です。それまでは、前回と同じ回答のままなら保存できますが、回答を変える保存はできません。`);
+  } else if (status.state === "can_change") {
+    lines.push(`前回の回答から変える場合は、変更として数えます。保存すると、${formatJstDate(addThreeMonthsJst(now))} 以降まで変更できなくなります（日本時間で3か月）。`);
+  }
+  return lines;
 }

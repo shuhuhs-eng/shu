@@ -1,12 +1,15 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { saveSalonStoreCultureStep } from "@/lib/salon-culture/store-actions";
 import { FivePointScale } from "@/components/shared/five-point-scale";
 import { ValuePrioritySelector } from "@/components/profile/value-priority-selector";
 import { TextareaField } from "@/components/profile/textarea-field";
 import { SALON_VALUE_PRIORITY_OPTIONS } from "@/lib/validation/profile-options";
+import { useCultureDraft } from "@/components/salon-culture/use-culture-draft";
+import { CultureReview } from "@/components/salon-culture/culture-review";
+import { ChangeLimitBanner } from "@/components/salon-culture/change-limit-banner";
+import type { DraftState } from "@/lib/salon-culture/draft";
+import type { LimitStatus } from "@/lib/diagnosis-limit/messages";
+import type { SupplementAnswers } from "@/lib/salon-culture/analysis/v1";
 import type { Database } from "@/types/database";
 
 /**
@@ -15,7 +18,7 @@ import type { Database } from "@/types/database";
  * ★既存components/salon-culture/salon-culture-wizard.tsxの質問文・5段階
  * UI・ステップ構成・バリデーション挙動を変更せずそのまま再現している
  * （既存コンポーネント自体は一切変更していない。保存先のみ
- * saveSalonStoreCultureStep()（store_id指定）に差し替えた別コンポーネント
+ * useCultureDraft（下書き保存＋確認画面＋確定。store_id指定）に差し替えた別コンポーネント
  * として新設した）。
  */
 type Answers = {
@@ -33,14 +36,18 @@ type Answers = {
   q12_hierarchy_flatness?: number;
 };
 
-type RespondentRole = Database["public"]["Enums"]["salon_culture_respondent_role"];
 
 type Props = {
   storeId: string;
-  initialProfile: Database["public"]["Tables"]["salon_store_culture_profiles"]["Row"] | null;
+  /** 編集の出発点: 下書きがあれば下書き、なければ公開中の結果。 */
+  initial: DraftState;
+  initialRev: number | null;
+  hasPublished: boolean;
+  publishedAnswers: unknown;
+  publishedExtra: SupplementAnswers | null;
+  limitStatus: LimitStatus;
 };
 
-const DEFAULT_RESPONDENT_ROLE: RespondentRole = "owner_representative";
 
 const QUESTIONS: {
   key: keyof Answers;
@@ -126,37 +133,21 @@ const TOTAL_STEPS = QUESTIONS.length + 2;
 const VALUE_PRIORITIES_STEP = QUESTIONS.length;
 const COMMENT_STEP = VALUE_PRIORITIES_STEP + 1;
 
-export function SalonStoreCultureWizard({ storeId, initialProfile }: Props) {
-  const router = useRouter();
-  const [step, setStep] = useState(0);
-  const [respondentRole] = useState<RespondentRole>(
-    initialProfile?.respondent_role ?? DEFAULT_RESPONDENT_ROLE,
-  );
-  const [answers, setAnswers] = useState<Answers>((initialProfile?.answers as Answers) ?? {});
-  const [valuePriorities, setValuePriorities] = useState<string[]>(initialProfile?.value_priorities ?? []);
-  const [comment, setComment] = useState(initialProfile?.comment ?? "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function persist(status: "draft" | "completed", nextStep: number) {
-    setSaving(true);
-    setError(null);
-    const result = await saveSalonStoreCultureStep(storeId, {
-      status,
-      respondentRole,
-      currentStep: nextStep,
-      answers,
-      valuePriorities,
-      comment,
-    });
-    setSaving(false);
-
-    if (!result.success) {
-      setError(result.error);
-      return false;
-    }
-    return true;
-  }
+export function SalonStoreCultureWizard({ storeId, initial, initialRev, hasPublished, publishedAnswers, publishedExtra, limitStatus }: Props) {
+  // ステップごとの回答は「下書き」にだけ保存する。公開中の結果が変わるのは、確認画面で「確定する」を押したときだけ（0058）。
+  // 常に0（Q1）から始める（既回答は選択済みで表示される）。
+  const d = useCultureDraft({
+    storeId: storeId,
+    initial,
+    initialRev,
+    resultHref: `/salon/stores/${storeId}/culture/result`,
+    hasPublished,
+    publishedAnswers,
+    publishedExtra,
+    limitStatus,
+  });
+  const { answers, setAnswers, valuePriorities, setValuePriorities, comment, setComment, step, setStep, saving, error, setError } = d;
+  const analysisHref = `/salon/stores/${storeId}/culture/analysis`;
 
   const isQuestionStep = step >= 0 && step < QUESTIONS.length;
   const currentQuestion = isQuestionStep ? QUESTIONS[step] : null;
@@ -172,7 +163,7 @@ export function SalonStoreCultureWizard({ storeId, initialProfile }: Props) {
     }
 
     const nextStep = Math.min(step + 1, TOTAL_STEPS - 1);
-    const ok = await persist("draft", nextStep);
+    const ok = await d.saveDraft(nextStep);
     if (ok) setStep(nextStep);
   }
 
@@ -181,13 +172,43 @@ export function SalonStoreCultureWizard({ storeId, initialProfile }: Props) {
     setStep((s) => Math.max(s - 1, 0));
   }
 
-  async function handleComplete() {
-    const ok = await persist("completed", step);
-    if (ok) router.push(`/salon/stores/${storeId}/culture/result`);
+  // 最後のステップのあと、下書きを保存して確認画面へ（ここではまだ公開結果は変わらない）。
+  async function handleToReview() {
+    await d.startReview(step);
+  }
+
+  // 確認画面の「直す」: 該当のステップへ戻り、直したら次へ進んで確認画面に戻る。
+  function handleEdit(stepIndex: number) {
+    d.setReviewing(false);
+    setError(null);
+    setStep(stepIndex);
+  }
+
+  if (d.reviewing) {
+    return (
+      <CultureReview
+        questions={QUESTIONS}
+        answers={answers}
+        valuePriorities={valuePriorities}
+        comment={comment}
+        notice={d.notice}
+        extraRequired={d.preview.extraRequired}
+        analysisHref={analysisHref}
+        error={error}
+        errorCode={d.errorCode}
+        saving={saving}
+        blocked={d.blocked}
+        onEdit={handleEdit}
+        onConfirm={d.confirm}
+        onBack={() => d.setReviewing(false)}
+        onReload={d.refresh}
+      />
+    );
   }
 
   return (
     <div className="space-y-6">
+      <ChangeLimitBanner status={limitStatus} hasPublished={hasPublished} />
       <div>
         <div className="mb-2 flex items-center justify-between">
           <span className="eyebrow">
@@ -205,6 +226,11 @@ export function SalonStoreCultureWizard({ storeId, initialProfile }: Props) {
       {error && (
         <p role="alert" className="rounded-xl border border-[#C24545]/30 bg-[#C24545]/10 px-4 py-3 text-[13px] text-[#8A2E2E]">
           {error}
+          {d.errorCode === "draft_changed" && (
+            <button type="button" onClick={d.refresh} className="mt-2 flex min-h-[44px] items-center font-semibold underline">
+              画面を読み込み直す
+            </button>
+          )}
         </p>
       )}
 
@@ -263,7 +289,7 @@ export function SalonStoreCultureWizard({ storeId, initialProfile }: Props) {
           type="button"
           onClick={handleBack}
           disabled={step === 0 || saving}
-          className="text-[13px] font-semibold text-sub underline disabled:opacity-0"
+          className="inline-flex min-h-[44px] items-center text-[13px] font-semibold text-sub underline disabled:opacity-0"
         >
           戻る
         </button>
@@ -273,18 +299,18 @@ export function SalonStoreCultureWizard({ storeId, initialProfile }: Props) {
             type="button"
             onClick={handleNext}
             disabled={saving}
-            className="flex items-center justify-center rounded-full bg-ink px-8 py-3 text-[14px] font-semibold text-surface disabled:opacity-60"
+            className="flex min-h-[44px] items-center justify-center rounded-full bg-ink px-8 py-3 text-[14px] font-semibold text-surface disabled:opacity-60"
           >
             {saving ? "保存中..." : "次へ"}
           </button>
         ) : (
           <button
             type="button"
-            onClick={handleComplete}
+            onClick={handleToReview}
             disabled={saving}
-            className="flex items-center justify-center rounded-full bg-ink px-8 py-3 text-[14px] font-semibold text-surface disabled:opacity-60"
+            className="flex min-h-[44px] items-center justify-center rounded-full bg-ink px-8 py-3 text-[14px] font-semibold text-surface disabled:opacity-60"
           >
-            {saving ? "保存中..." : "完了する"}
+            {saving ? "保存中..." : "確認する"}
           </button>
         )}
       </div>

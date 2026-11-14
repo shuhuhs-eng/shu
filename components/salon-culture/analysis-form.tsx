@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FivePointScale } from "@/components/shared/five-point-scale";
 import { SCENES, SUPPLEMENT_TITLES } from "@/lib/salon-culture/analysis/scenes";
 import { SUPPLEMENT_KEYS, type BaseAnswers, type SupplementAnswers, type SupplementKey, type SupplementValue } from "@/lib/salon-culture/analysis/v1";
-import type { SaveAnalysisResult } from "@/lib/salon-culture/analysis/actions";
+import type { SaveExtraResult } from "@/lib/salon-culture/draft-actions";
 
 type Props = {
   /** 回答の対象（例: サロン名・店舗名）。保存先と同じものを画面に出す。 */
@@ -16,7 +16,10 @@ type Props = {
   expectedBase: BaseAnswers;
   initial: Partial<SupplementAnswers> | null;
   /** 保存処理（Server Action を呼ぶ薄い関数）。 */
-  save: (answers: SupplementAnswers, expectedBase: BaseAnswers) => Promise<SaveAnalysisResult>;
+  /** 追加5問を保存して確定する（requestIdは同じ内容の再送で同じ値）。 */
+  save: (answers: SupplementAnswers, expectedBase: BaseAnswers, requestId: string) => Promise<SaveExtraResult>;
+  /** 保存前の回数の案内（表示専用。判定は保存時にDB）。 */
+  notices?: string[];
   doneHref: string;
   cancelHref: string;
 };
@@ -25,11 +28,14 @@ type Props = {
  * サロンらしさ 追加5問の回答フォーム。回答を促すが強制はしない（既存機能は回答なしでも使える）。
  * 「当てはまらない」は数値で埋めず、そのまま保存する。
  */
-export function AnalysisForm({ targetName, targetKind, expectedBase, initial, save, doneHref, cancelHref }: Props) {
+export function AnalysisForm({ targetName, targetKind, expectedBase, initial, save, notices = [], doneHref, cancelHref }: Props) {
   const router = useRouter();
   const [values, setValues] = useState<Partial<SupplementAnswers>>(initial ?? {});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
+  // 保存の識別子。同じ回答の再送では同じ値（二重に数えない）、回答を変えたら作り直す。
+  const requestRef = useRef<{ id: string; key: string } | null>(null);
+  const inFlight = useRef(false);
 
   const complete = SUPPLEMENT_KEYS.every((k) => values[k] != null);
 
@@ -38,17 +44,26 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
   }
 
   async function handleSave() {
-    if (!complete || saving) return;
+    if (!complete || saving || inFlight.current) return;
+    inFlight.current = true;
     setSaving(true);
     setError(null);
-    const result = await save(values as SupplementAnswers, expectedBase);
-    setSaving(false);
-    if (!result.success) {
-      setError({ code: result.code, message: result.error });
-      return;
+    try {
+      const key = JSON.stringify(values);
+      if (!requestRef.current || requestRef.current.key !== key) requestRef.current = { id: crypto.randomUUID(), key };
+      const result = await save(values as SupplementAnswers, expectedBase, requestRef.current.id);
+      if (!result.success) {
+        setError({ code: result.code, message: result.error });
+        return;
+      }
+      router.push(doneHref);
+      router.refresh();
+    } catch {
+      setError({ code: "unknown", message: "保存に失敗しました。通信状況を確認して、もう一度お試しください。同じ内容の再送は、二重には数えません。結果と回数は変わっていません。" });
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
     }
-    router.push(doneHref);
-    router.refresh();
   }
 
   return (
@@ -62,6 +77,14 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
             : "この回答は、あなた個人の「サロンらしさ」に保存されます。店舗の回答とは、自動では共有されません。"}
         </p>
       </section>
+
+      {notices.length > 0 && (
+        <div className="rounded-2xl border border-line bg-surface2 px-4 py-3 text-[13.5px] leading-relaxed text-charcoal">
+          {notices.map((l) => (
+            <p key={l} className="mt-1 first:mt-0">{l}</p>
+          ))}
+        </div>
+      )}
 
       <p className="text-[13px] leading-relaxed text-charcoal">
         サロンらしさを、5つの観点でくわしく見るための追加の質問です。「今、実際にどうしているか」でお答えください。
@@ -89,7 +112,7 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
                 disabled={saving}
                 aria-pressed={isNa}
                 onClick={() => set(key, "na")}
-                className={`mt-4 w-full rounded-full border px-4 py-2.5 text-[13px] font-semibold disabled:opacity-60 ${
+                className={`mt-4 min-h-[44px] w-full rounded-full border px-4 py-2.5 text-[13px] font-semibold disabled:opacity-60 ${
                   isNa ? "border-ink bg-ink text-surface" : "border-line bg-surface text-charcoal"
                 }`}
               >
@@ -107,7 +130,7 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
             <button
               type="button"
               onClick={() => router.refresh()}
-              className="mt-3 rounded-full border border-line bg-surface px-4 py-2 text-[13px] font-semibold"
+              className="mt-3 min-h-[44px] rounded-full border border-line bg-surface px-4 py-2 text-[13px] font-semibold"
             >
               画面を読み込み直す
             </button>
@@ -125,7 +148,7 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
           {saving ? "保存しています…" : "回答を保存する"}
         </button>
         {!complete && <p className="text-[12px] text-sub">すべての質問に回答すると保存できます。</p>}
-        <Link href={cancelHref} className="text-[13px] text-sub underline">
+        <Link href={cancelHref} className="inline-flex min-h-[44px] items-center text-[13px] text-sub underline">
           あとで回答する
         </Link>
       </div>

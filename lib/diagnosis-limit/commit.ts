@@ -20,45 +20,76 @@ export type CommitArgs = {
   createdAt?: string | null;
 };
 
-export type CommitOk = { ok: true; resultId: string; action: string; replay: boolean; lockedUntil: string | null; legacy: boolean };
+export type CommitOk = {
+  ok: true;
+  resultId: string;
+  action: string;
+  replay: boolean;
+  lockedUntil: string | null;
+  legacy: boolean;
+};
 export type CommitErr = { ok: false; error: LimitError };
 
 /** 0058の新関数は型定義（自動生成）にまだ無いため、必要な形だけを受け取る。呼び出し側は `as unknown as CommitClient` で渡す。 */
 export type CommitClient = {
-  rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ data: Record<string, unknown> | null; error: { message?: string; details?: string; code?: string } | null }>;
+  rpc: (
+    name: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<{
+    data: Record<string, unknown> | null;
+    error: { message?: string; details?: string; code?: string } | null;
+  }>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   from: (table: string) => any; // 0058未適用時のフォールバック（直接INSERT）専用
 };
 
-/** 関数が存在しない（0058未適用）ときのエラーかどうか。PostgREST: PGRST202 / Postgres: 42883。 */
-export function isMissingFunctionError(err: { message?: string; code?: string } | null | undefined): boolean {
+/**
+ * 「commit_diagnosis_result が存在しない」（0058未適用）ときのエラーだけを真にする。
+ * PostgREST: PGRST202 / Postgres: 42883、かつメッセージにこの関数名を含むこと。
+ * 回数制限・権限（42501など）・通信失敗・タイムアウト・サーバーエラー・他の関数の欠落は、すべて偽（旧保存へ戻らない）。
+ * ※PGRST202は「引数の組が合わない」ときにも返るため、関数名の一致を必須にしている。仮に誤って旧保存へ進んでも、
+ *   0058適用済みなら diagnosis_results のトリガーが同じ規則で拒否する（直接INSERTは迂回路にならない）。
+ */
+export function isMissingFunctionError(
+  err: { message?: string; code?: string } | null | undefined,
+): boolean {
   if (!err) return false;
-  if (err.code === "PGRST202" || err.code === "42883") return true;
-  return /could not find the function|function .* does not exist/i.test(err.message ?? "");
+  if (err.code !== "PGRST202" && err.code !== "42883") return false;
+  return (err.message ?? "").includes("commit_diagnosis_result");
 }
 
-export async function commitDiagnosisResult(client: CommitClient, a: CommitArgs): Promise<CommitOk | CommitErr> {
+export async function commitDiagnosisResult(
+  client: CommitClient,
+  a: CommitArgs,
+): Promise<CommitOk | CommitErr> {
   const c = a.computed;
-  const { data, error } = await client.rpc("commit_diagnosis_result", {
-    p_user_id: a.userId,
-    p_request_id: a.requestId,
-    p_allow_change: a.allowChange,
-    p_diagnosis_version: c.diagnosisVersion,
-    p_mode: c.mode,
-    p_answers: a.answers,
-    p_craft: c.scores.T,
-    p_sense: c.scores.S,
-    p_hospitality: c.scores.H,
-    p_brand: c.scores.B,
-    p_drive: c.scores.A,
-    p_mentor: c.scores.M,
-    p_type_id: c.typeId,
-    p_type_name: c.typeName,
-    p_market_value: c.marketValueScore,
-    p_salary_band: c.salaryBand,
-    p_source_pending_id: a.sourcePendingId ?? null,
-    p_created_at: a.createdAt ?? null,
-  });
+  let rpc: Awaited<ReturnType<CommitClient["rpc"]>>;
+  try {
+    rpc = await client.rpc("commit_diagnosis_result", {
+      p_user_id: a.userId,
+      p_request_id: a.requestId,
+      p_allow_change: a.allowChange,
+      p_diagnosis_version: c.diagnosisVersion,
+      p_mode: c.mode,
+      p_answers: a.answers,
+      p_craft: c.scores.T,
+      p_sense: c.scores.S,
+      p_hospitality: c.scores.H,
+      p_brand: c.scores.B,
+      p_drive: c.scores.A,
+      p_mentor: c.scores.M,
+      p_type_id: c.typeId,
+      p_type_name: c.typeName,
+      p_market_value: c.marketValueScore,
+      p_salary_band: c.salaryBand,
+      p_source_pending_id: a.sourcePendingId ?? null,
+      p_created_at: a.createdAt ?? null,
+    });
+  } catch {
+    // 通信の失敗・例外。旧保存へは戻らない（保存されたかどうか不明のまま二重に書かない）。同じrequest_idで再送できる。
+    return { ok: false, error: mapLimitError(null) };
+  }
+  const { data, error } = rpc;
 
   if (!error && data && typeof data === "object" && data.result_id) {
     return {
@@ -66,7 +97,8 @@ export async function commitDiagnosisResult(client: CommitClient, a: CommitArgs)
       resultId: String(data.result_id),
       action: String(data.action ?? ""),
       replay: data.replay === true,
-      lockedUntil: typeof data.locked_until === "string" ? data.locked_until : null,
+      lockedUntil:
+        typeof data.locked_until === "string" ? data.locked_until : null,
       legacy: false,
     };
   }
@@ -94,8 +126,16 @@ export async function commitDiagnosisResult(client: CommitClient, a: CommitArgs)
       })
       .select("*")
       .single();
-    if (ins.error || !ins.data) return { ok: false, error: mapLimitError(ins.error) };
-    return { ok: true, resultId: ins.data.id, action: "legacy", replay: false, lockedUntil: null, legacy: true };
+    if (ins.error || !ins.data)
+      return { ok: false, error: mapLimitError(ins.error) };
+    return {
+      ok: true,
+      resultId: ins.data.id,
+      action: "legacy",
+      replay: false,
+      lockedUntil: null,
+      legacy: true,
+    };
   }
 
   return { ok: false, error: mapLimitError(error) };
