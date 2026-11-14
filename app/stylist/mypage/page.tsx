@@ -279,6 +279,10 @@ export default async function StylistMyPage() {
       </section>
 
       {/* ★届いたスカウト／オファー。店舗単位の専用画面への導線と件数。 */}
+      <Link href="/messages" className="mt-4 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-3.5 text-[14px] font-semibold text-ink">
+        運営からの連絡
+      </Link>
+
       <section className="mt-4 space-y-3">
         <Link
           href="/stylist/scouts"

@@ -18,6 +18,7 @@ export default async function AdminStylistDetailPage({ params }: { params: Promi
         return (
           <>
             <h1 className="mt-4 break-words font-serif text-2xl font-bold text-ink">{d.public_name ?? "（公開名未設定）"}</h1>
+            <p className="mt-3"><Link href={`/admin/messages/new?audience=stylist&recipient=${d.user_id}`} className="inline-flex min-h-[44px] items-center rounded-full bg-ink px-4 text-[12.5px] font-semibold text-white">この美容師に連絡する</Link></p>
             <p className="break-all text-[12px] text-sub">{d.full_name ? `${d.full_name}／` : ""}{d.email}</p>
             <h2 className="mt-6 font-serif text-lg font-bold text-ink">エリア</h2>
             <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-2xl border border-line bg-surface p-4 text-[12.5px]">

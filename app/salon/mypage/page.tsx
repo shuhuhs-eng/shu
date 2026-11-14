@@ -288,6 +288,13 @@ export default async function SalonMyPage() {
           対称する形で追加。既存セクション（サロン概要・興味を送ってくれた
           美容師）の間には一切変更を加えていない。 */}
       <Link
+        href="/messages"
+        className="mt-4 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-3.5 text-[14px] font-semibold text-ink"
+      >
+        運営からの連絡
+      </Link>
+
+      <Link
         href="/salon/stylists"
         className="mt-4 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-3.5 text-[14px] font-semibold text-ink"
       >

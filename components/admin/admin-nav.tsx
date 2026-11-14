@@ -4,6 +4,7 @@ const ITEMS = [
   { href: "/admin", label: "運営トップ" },
   { href: "/admin/salons", label: "会社・店舗" },
   { href: "/admin/stylists", label: "美容師" },
+  { href: "/admin/messages", label: "連絡" },
   { href: "/admin/companies", label: "会社（採用・請求）" },
   { href: "/admin/contracts", label: "契約" },
   { href: "/admin/success-fees", label: "成功報酬・請求" },

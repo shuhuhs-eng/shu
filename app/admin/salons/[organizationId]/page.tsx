@@ -21,6 +21,9 @@ export default async function AdminSalonDetailPage({ params }: { params: Promise
               <dt className="text-sub">状態</dt><dd>{d.organization.status}</dd>
               <dt className="text-sub">採用の進行</dt><dd>{d.hiring_process_count}件</dd>
             </dl>
+            <p className="mt-4 flex flex-wrap gap-2 text-[12.5px] font-semibold">
+              <Link href={`/admin/messages/new?audience=salon&org=${d.organization.id}`} className="inline-flex min-h-[44px] items-center rounded-full bg-ink px-4 text-white">この会社に連絡する</Link>
+            </p>
             <h2 className="mt-8 font-serif text-lg font-bold text-ink">登録担当者（会社の権限）</h2>
             <ul className="mt-2 space-y-2 rounded-2xl border border-line bg-surface p-4">
               {d.members.length === 0 ? <li className="text-[12.5px] text-sub">登録担当者はいません。</li> : d.members.map((m) => <PersonLine key={m.user_id} p={m} />)}
@@ -32,12 +35,13 @@ export default async function AdminSalonDetailPage({ params }: { params: Promise
                   <p className="break-words font-semibold text-ink">{s.name}</p>
                   <p className="mt-1 text-[12.5px]">店舗の所在地: <Where prefecture={s.prefecture} city={s.city} />
                     {s.address_source && <span className="ml-1 text-[11px] text-sub">（{s.address_source === "profile" ? "店舗プロフィールの値" : "店舗登録の値"}）</span>}</p>
+                  <p className="mt-1"><Link href={`/admin/messages/new?audience=salon&org=${d.organization.id}&store=${s.id}`} className="text-[12px] font-semibold underline">この店舗に連絡する</Link></p>
                   <p className="text-[11.5px] text-sub">{s.visibility ? VIS_LABEL[s.visibility] : "公開設定なし"}／{USAGE_LABEL[s.usage_status] ?? s.usage_status}</p>
                   {s.members.length > 0 && <ul className="mt-2 space-y-2 border-t border-line pt-2">{s.members.map((m) => <PersonLine key={m.user_id} p={m} />)}</ul>}
                 </li>
               ))}
             </ul>
-            <p className="mt-8 rounded-xl bg-surface2 p-3 text-[11.5px] leading-relaxed text-sub">見学・採用案件、連絡履歴、請求履歴は、次の段階で追加します（現在はこの画面に出ません）。既存の採用・請求の確認は <Link href="/admin/companies" className="underline">会社（採用・請求）</Link> から。</p>
+            <p className="mt-8 rounded-xl bg-surface2 p-3 text-[11.5px] leading-relaxed text-sub">見学・採用案件、請求履歴は、次の段階で追加します（現在はこの画面に出ません）。既存の採用・請求の確認は <Link href="/admin/companies" className="underline">会社（採用・請求）</Link> から。</p>
           </>
         );
       })()}
