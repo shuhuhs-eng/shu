@@ -39,7 +39,7 @@ test("トップ: 「あなたのタイプ」見出し・30問診断の導線を�
   const h = strip(src("app/page.tsx"));
   assert.match(h, />あなたのタイプ<\/h2>/); assert.doesNotMatch(h, />美容師の方<\/h2>/);
   assert.match(h, /30問で[\s\S]{0,12}診断する/); assert.match(h, /href="\/stylist\/login"/);
-  assert.match(h, />\s*サロンログイン\s*</); assert.doesNotMatch(h, /美容師としてログイン|サロンとしてログイン|サロンの方のログインはこちら/); assert.match(h, /href="\/salon\/login"/);
+  assert.match(h, />\s*サロンの方のログインはこちら\s*</); assert.doesNotMatch(h, /美容師としてログイン|サロンとしてログイン/); assert.match(h, /href="\/salon\/login"/);
   assert.match(h, /href="\/signup\/salon"[\s\S]{0,120}新規登録（受付）/);   // 新規受付は別の導線
   assert.match(h, /href="\/admin\/login"[\s\S]{0,120}管理者の方はこちら/);
   assert.doesNotMatch(h, /サロンの方<\/h2>/);
@@ -62,10 +62,10 @@ test("アクセス制御は画面の表示だけに頼らない（/admin 配下�
   assert.match(src("app/admin/page.tsx"), /if \(!isAdmin\) redirect\("\/mypage"\)/);
 });
 
-test("表示文言: トップの美容師ログインは「ログイン」、サロン入口は「サロンログイン」。ログイン画面の見出しも同様。管理者ログインは変更しない", () => {
+test("表示文言: トップの美容師ログインは「ログイン」、サロン入口は「サロンの方のログインはこちら」。ログイン画面の見出しは「ログイン」「サロンログイン」。管理者ログインは変更しない", () => {
   const h = strip(src("app/page.tsx"));
   assert.match(h, /href="\/stylist\/login"[\s\S]{0,400}?>\s*ログイン\s*<ArrowRight/);
-  assert.match(h, /href="\/salon\/login"[\s\S]{0,400}?>\s*サロンログイン\s*<ArrowRight/);
+  assert.match(h, /href="\/salon\/login"[\s\S]{0,400}?>\s*サロンの方のログインはこちら\s*<ArrowRight/);
   const f = src("app/(auth)/login/login-form.tsx");
   assert.match(f, /stylist: \{\s*heading: "ログイン"/); assert.match(f, /salon: \{\s*heading: "サロンログイン"/);
   assert.match(f, /heading: "管理者ログイン"/);

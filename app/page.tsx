@@ -316,7 +316,7 @@ export default async function Home() {
                   className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-full border px-2 py-2 text-center text-[12.5px] font-semibold leading-tight lg:whitespace-nowrap lg:text-[11.5px] xl:text-[12px]"
                   style={{ borderColor: "#2E8B7F", backgroundColor: "#EAF3EC", color: "#2E8B7F" }}
                 >
-                  サロンログイン
+                  サロンの方のログインはこちら
                   <ArrowRight size={13} className="shrink-0" />
                 </Link>
                 <p className="mt-2 text-center text-[11px] leading-snug text-sub">
