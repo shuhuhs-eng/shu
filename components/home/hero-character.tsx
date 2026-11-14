@@ -78,7 +78,7 @@ export function HeroCharacter({ src, alt }: Props) {
     <>
       {/* スマホ用: 通常フロー内、説明文とCTAの間。案内役として認識できる
           サイズにとどめ、無理に大きくしない。 */}
-      <div className="mt-6 flex justify-center lg:hidden">
+      <div className="mt-10 flex justify-center lg:hidden">
         <div className="relative">
           {/* 静止の背景（クリーム＋ゴールドのアーチ）。人物の後ろに置くだけで、動かない。 */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -86,7 +86,7 @@ export function HeroCharacter({ src, alt }: Props) {
             src={BACKDROP_SRC}
             alt=""
             aria-hidden="true"
-            className="pointer-events-none absolute bottom-[-6px] left-1/2 h-[308px] w-[231px] max-w-none -translate-x-1/2 select-none"
+            className="pointer-events-none absolute bottom-[-6px] left-1/2 h-[270px] w-[202px] max-w-none -translate-x-1/2 select-none"
           />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
