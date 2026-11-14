@@ -11,7 +11,7 @@ import type { StylistCoreType } from "@/types/database";
  * - 上下12px・1往復5秒（globals.css の .cs-* で定義）。
  * - 端末の「動きを減らす」設定では静止（globals.css 側の共通ルール＋.cs-* 側でも静止）。
  * - 画面外・タブが裏のときはアニメーションを止める（IntersectionObserver / visibilitychange）。
- * - 背景つき表示の対象でないタイプ（素材調整中）は、従来どおりの表示のまま。
+ * - 対象外のタイプ（STAGE_TYPES に無いもの）は、従来どおりの表示（legacySrc）のまま。
  */
 
 /** 背景つき表示の対象タイプ（素材が整ったものだけ）。 */
@@ -21,6 +21,9 @@ const STAGE_TYPES: ReadonlySet<StylistCoreType> = new Set<StylistCoreType>([
   "trend_maker",
   "iyashi_charisma",
   "mirai_no_ace",
+  "repeat_king",
+  "brand_builder",
+  "shimei_jishaku",
 ]);
 
 const SPARKLES: ReadonlyArray<readonly [number, number, number, string]> = [
