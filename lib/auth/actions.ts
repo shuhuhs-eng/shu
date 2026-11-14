@@ -11,6 +11,7 @@ import { CAPTCHA_REQUIRED_MESSAGE, requireCaptchaToken } from "@/lib/security/bo
 import { safeInternalPath } from "@/lib/auth/safe-path";
 import { checkSignupRateLimit, signupRateLimitMessage } from "@/lib/auth/signup-rate-limit";
 import { describeAuthError } from "@/lib/auth/errors";
+import { getAdminStatus } from "@/lib/admin/is-admin";
 import { determineAdminEntryPath, determinePostAuthPath, determineRoleEntryPath } from "@/lib/auth/post-auth-redirect";
 import { claimPendingDiagnosisForNewAccount, discardGuestDiagnosisCookie } from "@/lib/diagnosis-handoff/claim";
 import {
@@ -190,10 +191,16 @@ export async function signUpSalonAction(
 // ---------------------------------------------------------------------------
 // ログイン
 // ---------------------------------------------------------------------------
-export async function signInAction(
-  _prevState: AuthActionState,
-  formData: FormData,
-): Promise<AuthActionState> {
+type SignInBase =
+  | { ok: false; state: AuthActionState }
+  | { ok: true; supabase: Awaited<ReturnType<typeof createClient>> };
+
+/**
+ * ログイン入口の共通部分（入力検証・CAPTCHA・レート制限・パスワード認証）。
+ * 入口の種別（一般 / 管理者専用）は、呼び出す Server Action で決まる（signInAction / adminSignInAction）。
+ * フォームの値やURLのパラメーターでは決まらない。
+ */
+async function authenticateWithPassword(formData: FormData): Promise<SignInBase> {
   const parsed = loginSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
@@ -201,15 +208,18 @@ export async function signInAction(
 
   if (!parsed.success) {
     return {
-      error: "入力内容をご確認ください。",
-      fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
+      ok: false,
+      state: {
+        error: "入力内容をご確認ください。",
+        fieldErrors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
+      },
     };
   }
 
   const { email, password } = parsed.data;
 
   const captcha = requireCaptchaToken(formData);
-  if (!captcha.ok) return { error: CAPTCHA_REQUIRED_MESSAGE };
+  if (!captcha.ok) return { ok: false, state: { error: CAPTCHA_REQUIRED_MESSAGE } };
 
   // パスワード総当たりの抑止（IP単位 10分30回 + メール単位 10分10回）。共有（DBベース）のレート制限。
   // 共有NAT（サロンの店内回線）を考慮してIP単位は緩めに設定。
@@ -217,7 +227,7 @@ export async function signInAction(
   const loginLimit = await checkSharedRateLimit(`login:ip:${ip}`, 30, 10 * 60 * 1000);
   const loginEmailLimit = await checkSharedRateLimit(`login:email:${email.toLowerCase()}`, 10, 10 * 60 * 1000);
   if (!loginLimit.allowed || !loginEmailLimit.allowed) {
-    return { error: "ログイン試行が多すぎます。しばらく待ってからお試しください。" };
+    return { ok: false, state: { error: "ログイン試行が多すぎます。しばらく待ってからお試しください。" } };
   }
 
   const supabase = await createClient();
@@ -228,7 +238,7 @@ export async function signInAction(
     options: { captchaToken: captcha.captchaToken },
   });
   if (error) {
-    return { error: describeAuthError("login", error) };
+    return { ok: false, state: { error: describeAuthError("login", error) } };
   }
 
   // ★既存アカウントへのログインでは、未ログイン時に出したゲスト診断を保存しない（取り込まない）。
@@ -236,17 +246,60 @@ export async function signInAction(
   // 同意として扱わない。このブラウザに残っている保留Cookieは、後日の再ログイン・メール確認・別アカウントへの
   // 切り替えで遅れて取り込まれないよう、ここで破棄する。
   await discardGuestDiagnosisCookie();
+  return { ok: true, supabase };
+}
 
-  // 管理者専用入口（/admin/login）: 権限は is_platform_admin() で確認する（メール文字列では判定しない）。
-  // 管理者でないアカウントは、管理画面へ進ませず、この入口で作ったセッションも破棄する。
-  if (formData.get("entryMode") === "admin") {
-    const adminEntry = await determineAdminEntryPath(supabase, safeInternalPath(formData.get("next")));
-    if (adminEntry.ok) redirect(adminEntry.path);
-    if (adminEntry.reason === "not_admin") {
-      await supabase.auth.signOut();
-      return { error: "このアカウントには管理者権限がありません。サロン・美容師の方は、それぞれのログインからお進みください。" };
-    }
-    return { error: "管理者権限を確認できませんでした。時間をおいて、もう一度お試しください。" };
+/** 拒否したログインで作ったセッションだけを破棄する（scope=local：同じアカウントの他の端末のセッションは残す）。 */
+async function discardThisSession(supabase: Awaited<ReturnType<typeof createClient>>) {
+  await supabase.auth.signOut({ scope: "local" });
+}
+
+const ADMIN_USE_ADMIN_LOGIN_MESSAGE = "管理者の方は、管理者ログインをご利用ください。";
+
+/**
+ * 管理者専用ログイン入口（/admin/login）専用の Server Action。
+ * 権限は is_platform_admin() で確認する（メール文字列では判定しない）。管理者でない／確認できない場合は、
+ * この入口で作ったセッションを破棄し、管理画面へは進ませない。
+ */
+export async function adminSignInAction(
+  _prevState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  const base = await authenticateWithPassword(formData);
+  if (!base.ok) return base.state;
+  const { supabase } = base;
+
+  const adminEntry = await determineAdminEntryPath(supabase, safeInternalPath(formData.get("next")));
+  if (adminEntry.ok) redirect(adminEntry.path);
+  await discardThisSession(supabase);
+  if (adminEntry.reason === "not_admin") {
+    return { error: "このアカウントには管理者権限がありません。サロン・美容師の方は、それぞれのログインからお進みください。" };
+  }
+  return { error: "管理者権限を確認できませんでした。時間をおいて、もう一度お試しください。" };
+}
+
+/**
+ * 一般ログイン（共通 /login・美容師・サロン）の Server Action。
+ * ★管理者アカウントはここからは入れない（入口の限定）。管理者は /admin/login（adminSignInAction）を使う。
+ *   entryMode などフォームの値では挙動を切り替えない（偽装で管理者が通れる経路を作らない）。
+ *   管理者の確認ができない場合も安全側（拒否）に倒し、作ったセッションを破棄する。
+ */
+export async function signInAction(
+  _prevState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  const base = await authenticateWithPassword(formData);
+  if (!base.ok) return base.state;
+  const { supabase } = base;
+
+  const adminStatus = await getAdminStatus(supabase);
+  if (adminStatus === "admin") {
+    await discardThisSession(supabase);
+    return { error: ADMIN_USE_ADMIN_LOGIN_MESSAGE };
+  }
+  if (adminStatus === "error") {
+    await discardThisSession(supabase);
+    return { error: "ログインを完了できませんでした。時間をおいて、もう一度お試しください。" };
   }
 
   // 保護ルートから弾かれてログインに来た場合は、元のURLへ戻す（安全なパスのみ）。

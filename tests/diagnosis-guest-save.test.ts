@@ -161,6 +161,7 @@ function fakeSupabase() {
     },
     from: builder,
     rpc: async (name: string, args: any) => {
+      if (name === "is_platform_admin") return { data: false, error: null };   // 一般ログイン（管理者ではない）
       const uid = env.sessionUserId;
       if (!uid) return { data: null, error: { message: "not authenticated" } };
       if (name === "start_pending_diagnosis_claim") {
@@ -771,7 +772,7 @@ test("新規登録の応答が想定と違い、新規作成を確認できな�
 // ------------------------------------------------------------------ 構造・文言
 test("構造: ログイン処理は引き継ぎを呼ばずCookieを破棄する。引き継ぎの呼び出しは新規登録直後とメール確認だけ", () => {
   const actions = readFileSync("lib/auth/actions.ts", "utf8");
-  const signIn = actions.slice(actions.indexOf("export async function signInAction"), actions.indexOf("export async function requestPasswordResetAction"));
+  const signIn = actions.slice(actions.indexOf("async function authenticateWithPassword"), actions.indexOf("export async function requestPasswordResetAction"));
   assert.ok(!signIn.includes("claimPendingDiagnosisForNewAccount"));
   assert.ok(signIn.includes("discardGuestDiagnosisCookie()"));
   const claimCalls = actions.match(/claimPendingDiagnosisForNewAccount\(/g) ?? [];

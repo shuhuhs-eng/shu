@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { signInAction } from "@/lib/auth/actions";
+import { adminSignInAction, signInAction } from "@/lib/auth/actions";
 import { initialAuthActionState } from "@/lib/auth/types";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { PendingFieldset } from "@/components/auth/pending-fieldset";
@@ -56,7 +56,7 @@ export function LoginForm({ mode }: Props) {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") ?? "";
   const resetSuccess = searchParams.get("reset") === "success";
-  const [state, formAction] = useActionState(signInAction, initialAuthActionState);
+  const [state, formAction] = useActionState(mode === "admin" ? adminSignInAction : signInAction, initialAuthActionState);
 
   // ★ログイン失敗時に入力内容が全消去される問題の修正。
   // Reactのform action（<form action={formAction}>）は、action完了後に

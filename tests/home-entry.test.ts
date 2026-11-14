@@ -16,14 +16,25 @@ test("管理者入口: 管理者だけ /admin へ。next は /admin 配下のみ
   assert.doesNotMatch(strip(src("lib/auth/post-auth-redirect.ts")), /email|@beautyreach/i);
 });
 
-test("ログイン処理: 管理者入口は is_platform_admin で判定し、管理者でなければセッションを破棄して管理画面へ進ませない", () => {
+test("ログイン処理: 入口はServer Actionで分ける。一般ログインは管理者を拒否しセッション破棄、管理者入口は is_platform_admin で判定", () => {
   const a = src("lib/auth/actions.ts");
-  const i = a.indexOf('formData.get("entryMode") === "admin"');
-  assert.ok(i > 0);
-  const block = a.slice(i, a.indexOf("保護ルートから弾かれてログインに来た場合は"));
-  assert.match(block, /determineAdminEntryPath/); assert.match(block, /auth\.signOut\(\)/);
-  assert.match(block, /redirect\(adminEntry\.path\)/);
-  assert.ok(i < a.indexOf("保護ルートから弾かれてログインに来た場合は"), "adminの分岐は next の復帰より前");
+  const strip = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const ad = strip(a.slice(a.indexOf("export async function adminSignInAction("), a.indexOf("/**\n * 一般ログイン")));
+  const gen = strip(a.slice(a.indexOf("export async function signInAction("), a.indexOf("export async function requestPasswordResetAction(")));
+  // 管理者専用: is_platform_admin（determineAdminEntryPath）で判定。拒否時はこのセッションのみ破棄。フォーム値では分岐しない。
+  assert.match(ad, /determineAdminEntryPath/); assert.match(ad, /redirect\(adminEntry\.path\)/); assert.match(ad, /discardThisSession/);
+  assert.doesNotMatch(ad, /entryMode/);
+  // 一般: 管理者は拒否（文言固定）、確認不能も拒否、いずれもセッション破棄。entryMode=admin 等のフォーム値で通れない。
+  assert.match(gen, /getAdminStatus\(supabase\)/);
+  assert.match(gen, /adminStatus === "admin"[\s\S]*?discardThisSession[\s\S]*?ADMIN_USE_ADMIN_LOGIN_MESSAGE/);
+  assert.match(gen, /adminStatus === "error"[\s\S]*?discardThisSession/);
+  assert.doesNotMatch(gen, /entryMode"\) === "admin"|determineAdminEntryPath|redirect\(adminEntry/);
+  assert.ok(gen.indexOf("getAdminStatus") < gen.indexOf("safeInternalPath"), "管理者拒否は next の復帰より前");
+  assert.doesNotMatch(a, /^export (const|let|var) /m, "\"use server\" のファイルは async 関数しかexportできない（ビルドエラーになる）");
+  assert.match(a, /ADMIN_USE_ADMIN_LOGIN_MESSAGE = "管理者の方は、管理者ログインをご利用ください。"/);
+  assert.match(a, /signOut\(\{ scope: "local" \}\)/);          // 他端末のセッションを巻き込まない
+  assert.doesNotMatch(a.slice(a.indexOf("async function authenticateWithPassword"), a.indexOf("requestPasswordResetAction")), /auth\.signOut\(\)/);
+  assert.match(src("app/(auth)/login/login-form.tsx"), /mode === "admin" \? adminSignInAction : signInAction/);
 });
 
 test("管理者専用ログイン画面: サロン名・店舗の入力なし、新規登録なし、共通のログイン処理を使う", () => {
