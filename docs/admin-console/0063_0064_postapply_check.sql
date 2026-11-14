@@ -1,6 +1,6 @@
 -- 0063・0064 適用後の確認（何も変更しない。最後にROLLBACK）。0064 の直後に実行する。決済・課金・メール送信は一切行わない。
--- 出力は PASS / FAIL / INFO の表。FAIL が1つでもあれば最後にエラーで止まる（その場合は 0064_suspend_keep_guard 等を検討）。
-begin;
+-- 出力は PASS / FAIL / INFO の1つの表（最後の行が総合判定）。FAILがあれば 0064_suspend_keep_guard 等を検討。
+drop table if exists post_log;
 create temp table post_log (n serial, name text, result text, info text);
 grant all on post_log to public; grant all on sequence post_log_n_seq to public;
 do $$
@@ -41,7 +41,10 @@ begin
   insert into post_log(name, result, info) select '13 旧成功報酬の件数・状態別（適用前と一致すること）', 'INFO', coalesce((select string_agg(fee_status || '=' || n, ',' order by fee_status) from (select fee_status, count(*) n from public.hiring_success_fees group by 1) s), '0件');
   insert into post_log(name, result, info) select '13 stripe_checkout_records の件数（適用前と一致すること）', 'INFO', (select count(*)::text from public.stripe_checkout_records);
 end $$;
-select n, name, result, info from post_log order by n;
-select result, count(*) from post_log group by 1 order by 1;
-do $$ begin if exists (select 1 from post_log where result = 'FAIL') then raise exception '適用後チェックに FAIL があります。0064_suspend_keep_guard の実行を検討してください。'; end if; end $$;
-rollback;
+-- 結果は【この1つの表だけ】。最後の行が総合判定（FAIL が0件なら問題なし。FAILがあれば0064_suspend_keep_guardを検討）。このファイルはBEGIN/ROLLBACKを使わない（結果表を最後に出すため）。変更するのは一時表 post_log だけで、接続を閉じれば消える。
+select n, name, result, info from (
+  select n, name, result, info from post_log
+  union all
+  select 9999, '【総合判定】' || (select count(*) from post_log where result = 'PASS') || ' PASS / ' || (select count(*) from post_log where result = 'FAIL') || ' FAIL / ' || (select count(*) from post_log where result = 'INFO') || ' INFO',
+         case when exists (select 1 from post_log where result = 'FAIL') then 'FAIL' else 'PASS' end, 'FAIL が0件なら問題なし。FAILがあれば0064_suspend_keep_guardを検討'
+) r order by n;

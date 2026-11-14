@@ -1,6 +1,6 @@
 -- 0063・0064 適用前の確認（読み取り専用。何も変更しない）。0062 の適用と「0062 適用後チェック」の後、0063 の直前に実行する。
--- 出力は PASS / FAIL / INFO の表。FAIL が1つでもあれば最後にエラーで止まる。FAIL のまま適用しない。
-begin;
+-- 出力は PASS / FAIL / INFO の1つの表（最後の行が総合判定）。FAIL のまま適用しない。
+drop table if exists pre_log;
 create temp table pre_log (n serial, name text, result text, info text);
 do $$
 declare v text; f text; t text;
@@ -28,6 +28,10 @@ begin
   insert into pre_log(name, result, info) select '5 0040 整合性チェックの定義の指紋（適用後は変わる＝0064が1行を足す）', 'INFO', md5(pg_get_functiondef('public.get_admin_billing_integrity_issues()'::regprocedure));
   insert into pre_log(name, result, info) select '6 platform_admins が1件以上', case when (select count(*) from public.platform_admins) >= 1 then 'PASS' else 'FAIL' end, (select count(*)::text from public.platform_admins);
 end $$;
-select n, name, result, info from pre_log order by n;
-do $$ begin if exists (select 1 from pre_log where result = 'FAIL') then raise exception '適用前チェックに FAIL があります。適用しないでください。'; end if; end $$;
-rollback;
+-- 結果は【この1つの表だけ】。最後の行が総合判定（FAIL が0件なら適用してよい。1件でもあれば適用しない）。このファイルはBEGIN/ROLLBACKを使わない（結果表を最後に出すため）。変更するのは一時表 pre_log だけで、接続を閉じれば消える。
+select n, name, result, info from (
+  select n, name, result, info from pre_log
+  union all
+  select 9999, '【総合判定】' || (select count(*) from pre_log where result = 'PASS') || ' PASS / ' || (select count(*) from pre_log where result = 'FAIL') || ' FAIL / ' || (select count(*) from pre_log where result = 'INFO') || ' INFO',
+         case when exists (select 1 from pre_log where result = 'FAIL') then 'FAIL' else 'PASS' end, 'FAIL が0件なら適用してよい。1件でもあれば適用しない'
+) r order by n;
