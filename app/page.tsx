@@ -349,11 +349,11 @@ export default async function Home() {
         </div>
         )}
 
-        {/* Beauty Reachでできること */}
+        {/* Beauty Reachでマッチング */}
         <div className="mt-12 text-center lg:mt-10">
           <div className="flex items-center justify-center gap-4">
             <hr className="h-px w-10 border-0" style={{ backgroundColor: "#8A6D3B" }} />
-            <p className="font-serif text-[15px] font-semibold text-ink">Beauty Reachでできること</p>
+            <p className="font-serif text-[15px] font-semibold text-ink">Beauty Reachでマッチング</p>
             <hr className="h-px w-10 border-0" style={{ backgroundColor: "#8A6D3B" }} />
           </div>
         </div>
