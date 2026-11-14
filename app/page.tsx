@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, ListChecks, BarChart3, Heart, UserRound, Store, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { getUserRole } from "@/lib/auth/user-roles";
 import { getAdminStatus } from "@/lib/admin/is-admin";
 import { signOutAction } from "@/lib/auth/actions";
 import { SubmitButton } from "@/components/auth/submit-button";
@@ -35,14 +34,33 @@ export default async function Home() {
   // ロジックでも「同時に両方trueにはならない」ことを構造的に保証するため、
   // hasStylist/hasSalonをこの単一role値から導出する（以降のJSX・デザインは
   // 一切変更していない）。
-  const role = user ? await getUserRole(supabase, user.id) : null;
+  // ★表示の出し分け（ログイン状態ごと）。権限・役割を取得できなかったときは、別の役割と推測して枠を出さない。
+  //   guest        … 未ログイン: 現在のトップ構成（美容師の診断枠＋サロン入口＋管理者入口）
+  //   stylist      … 美容師: 「あなたのタイプ」＋マイページ導線のみ。サロンの枠・診断ボタン・初回案内は出さない（再診断はマイページから）
+  //   salon        … サロン: 「サロンマイページへ」のみ。「あなたのタイプ」・美容師向け案内は出さない
+  //   admin        … 管理者: 通常の美容師・サロン向け枠は出さず、ヘッダーの「管理画面へ」
+  //   check_failed … 運営権限／役割を確認できない: どの役割の枠も出さず、再読み込みを案内
+  //   no_role      … 役割が未登録（オンボーディング前など）: どちらの枠も出さない（ヘッダーの「マイページ」から振り分け）
+  // これは表示の整理のみ。アクセス制御は middleware・各ページ・DBのRPCが従来どおり行う。
   // ★運営者かどうかは is_platform_admin()（確認できなかったときは "error"）。運営者は美容師・サロンのマイページへ
   // 誘導せず、共通の「マイページ」（/mypage）から /admin へ進める。確認できないときは role の導線を出さず、再読み込みを案内する。
   const adminStatus = user ? await getAdminStatus(supabase) : "not_admin";
   const isAdmin = adminStatus === "admin";
-  const adminCheckFailed = adminStatus === "error";
-  const hasStylist = role === "stylist" && !isAdmin && !adminCheckFailed;
-  const hasSalon = role === "salon" && !isAdmin && !adminCheckFailed;
+  let view: "guest" | "stylist" | "salon" | "admin" | "check_failed" | "no_role" = "guest";
+  if (user) {
+    if (adminStatus === "error") view = "check_failed";
+    else if (isAdmin) view = "admin";
+    else {
+      const { data: roleRow, error: roleError } = await supabase.from("user_roles").select("role").eq("user_id", user.id).maybeSingle();
+      if (roleError) view = "check_failed";
+      else if (roleRow?.role === "stylist") view = "stylist";
+      else if (roleRow?.role === "salon") view = "salon";
+      else view = "no_role";
+    }
+  }
+  const adminCheckFailed = view === "check_failed";
+  const showStylistCard = view === "guest" || view === "stylist";
+  const showSalonEntry = view === "guest" || view === "salon";
 
   // ★確定デザイン仕様（Claude指示用.png）に忠実に実装した一般TOP。
   // ★レスポンシブ: lg（1024px）以上はブランド訴求(左)＋キャラクター領域(右)の
@@ -186,15 +204,18 @@ export default async function Home() {
               {HERO_CHARACTER_SRC && <HeroCharacter src={HERO_CHARACTER_SRC} alt="" />}
 
               {/* ★最重要CTA。横幅を活かし、高さは抑える。 */}
-              <Link
-                href="/stylist/diagnosis"
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-full px-6 text-center font-bold text-surface shadow-md py-4 text-[16px] lg:mt-2.5 lg:w-[78%] lg:h-[54px] lg:py-0 lg:text-[15px]"
-                style={{ backgroundColor: "#8B5E34" }}
-              >
-                <Sparkles size={17} />
-                30問であなたのタイプを診断する
-                <ArrowRight size={17} />
-              </Link>
+              {/* 美容師でログイン中は出さない（再診断はマイページの「診断を受け直す」から）。未ログイン等は従来どおり。 */}
+              {view !== "stylist" && (
+                <Link
+                  href="/stylist/diagnosis"
+                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-full px-6 text-center font-bold text-surface shadow-md py-4 text-[16px] lg:mt-2.5 lg:w-[78%] lg:h-[54px] lg:py-0 lg:text-[15px]"
+                  style={{ backgroundColor: "#8B5E34" }}
+                >
+                  <Sparkles size={17} />
+                  30問であなたのタイプを診断する
+                  <ArrowRight size={17} />
+                </Link>
+              )}
 
               <div className="mt-5 grid w-full grid-cols-3 gap-2 lg:mt-2.5 lg:w-[78%] lg:gap-3">
                 <div className="flex flex-col items-center gap-1.5 text-center lg:gap-1">
@@ -228,7 +249,9 @@ export default async function Home() {
 
         {/* カード行: Heroの下、ページ幅のほぼ100%を使って美容師/サロンを
             横並びに配置する。高さは揃え、文字・ボタンは縮小しすぎない。 */}
+        {(showStylistCard || showSalonEntry) && (
         <div className="relative z-10 mt-10 space-y-4 sm:flex sm:items-stretch sm:gap-5 sm:space-y-0 lg:mt-4 lg:gap-6">
+          {showStylistCard && (
           <section
             className="rounded-[24px] p-5 shadow-sm sm:flex sm:flex-none sm:basis-[calc(50%-0.625rem)] sm:flex-col lg:basis-[calc(50%-0.75rem)] lg:p-4"
             style={{ backgroundColor: "#F2EEFA" }}
@@ -254,7 +277,7 @@ export default async function Home() {
               あなたのタイプ・市場価値・相性の良いサロンが分かります
             </p>
             <div className="sm:mt-auto">
-              {hasStylist ? (
+              {view === "stylist" ? (
                 <Link
                   href="/stylist/mypage"
                   className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full px-6 py-3.5 text-[14.5px] font-semibold text-surface lg:mt-2.5 lg:py-2.5 lg:text-[13.5px]"
@@ -263,38 +286,33 @@ export default async function Home() {
                   美容師マイページへ
                   <ArrowRight size={15} />
                 </Link>
-              ) : user ? (
-                // ログイン済みだが美容師roleを持たない場合、ログイン導線は
-                // middlewareのGUEST_ONLY_PATHSにより押しても/へ戻されて
-                // しまうため表示しない。非クリックの案内表示にとどめる。
-                <p className="mt-3 rounded-full border border-line bg-surface px-6 py-3.5 text-center text-[13px] text-sub lg:mt-2.5 lg:py-2.5">
-                  {isAdmin ? "運営アカウントです。上の「管理画面へ」から進めます" : adminCheckFailed ? "権限を確認できませんでした。再読み込みしてください" : "美容師アカウントでログインするとご利用いただけます"}
-                </p>
               ) : (
-                <Link
-                  href="/stylist/login"
-                  className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full px-6 py-3.5 text-[14.5px] font-semibold text-surface lg:mt-2.5 lg:py-2.5 lg:text-[13.5px]"
-                  style={{ backgroundColor: "#6E4AA6" }}
-                >
-                  ログイン
-                  <ArrowRight size={15} />
-                </Link>
-              )}
-              {!hasStylist && !user && (
-                <p className="mt-2 text-center text-[12px] text-sub lg:mt-1 lg:text-[11px]">
-                  初めての方は30問の診断から始めましょう
-                </p>
+                <>
+                  <Link
+                    href="/stylist/login"
+                    className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full px-6 py-3.5 text-[14.5px] font-semibold text-surface lg:mt-2.5 lg:py-2.5 lg:text-[13.5px]"
+                    style={{ backgroundColor: "#6E4AA6" }}
+                  >
+                    ログイン
+                    <ArrowRight size={15} />
+                  </Link>
+                  <p className="mt-2 text-center text-[12px] text-sub lg:mt-1 lg:text-[11px]">
+                    初めての方は30問の診断から始めましょう
+                  </p>
+                </>
               )}
             </div>
           </section>
+          )}
 
           {/* サロンの方の入口: 以前の大きな緑の枠を、コンパクトな入口に変更（PCは従来の約半分の幅、スマホは幅いっぱいで高さ・文字・余白を控えめに）。
               ログイン（既存サロン）と新規登録（初めてのサロン）は別の導線として分けて表示する。 */}
+          {showSalonEntry && (
           <aside
             aria-label="サロンの方の入口"
-            className="rounded-2xl border border-line bg-surface p-3 sm:ml-auto sm:flex sm:flex-none sm:basis-[calc(25%-0.3125rem)] sm:flex-col sm:self-center lg:basis-[calc(25%-0.375rem)] xl:ml-0 xl:basis-[calc(21%-0.375rem)] lg:self-end"
+            className={`rounded-2xl border border-line bg-surface p-3 sm:flex sm:flex-none sm:basis-[calc(25%-0.3125rem)] sm:flex-col sm:self-center lg:basis-[calc(25%-0.375rem)] lg:self-end ${view === "salon" ? "sm:ml-0" : "sm:ml-auto xl:ml-0 xl:basis-[calc(21%-0.375rem)]"}`}
           >
-            {hasSalon ? (
+            {view === "salon" ? (
               <Link
                 href="/salon/mypage"
                 className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-full px-4 py-2 text-[13px] font-semibold text-surface lg:text-[12.5px]"
@@ -303,12 +321,6 @@ export default async function Home() {
                 サロンマイページへ
                 <ArrowRight size={14} />
               </Link>
-            ) : user ? (
-              // ログイン済みだがサロンroleを持たない場合、ログイン・新規登録導線は middleware の GUEST_ONLY_PATHS により
-              // 押しても/へ戻されてしまうため表示しない。非クリックの案内表示にとどめる。
-              <p className="rounded-xl bg-surface2 px-3 py-2 text-center text-[11.5px] leading-snug text-sub">
-                {isAdmin ? "運営アカウントです。上の「管理画面へ」から進めます" : adminCheckFailed ? "権限を確認できませんでした。再読み込みしてください" : "サロンアカウントでログインするとご利用いただけます"}
-              </p>
             ) : (
               <>
                 <Link
@@ -333,7 +345,9 @@ export default async function Home() {
               </>
             )}
           </aside>
+          )}
         </div>
+        )}
 
         {/* Beauty Reachでできること */}
         <div className="mt-12 text-center lg:mt-10">

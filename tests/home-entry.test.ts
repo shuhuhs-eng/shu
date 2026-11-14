@@ -94,3 +94,27 @@ test("PC: 大きなイラスト(xl)＋サロン入口は左下の小さな枠、
   assert.match(p, /xl:basis-\[calc\(21%/);
   assert.match(p, /lg:whitespace-nowrap/);   // 狭いPC幅でも「サロンログイン」が1行
 });
+
+test("トップの表示出し分け: 美容師/サロン/管理者/未ログイン/確認失敗。非表示の枠は枠ごと出さない", () => {
+  const h = strip(src("app/page.tsx"));
+  // 役割は一つの view に集約。取得できなければ推測しない
+  assert.match(h, /view = "check_failed"[\s\S]*?view = "admin"[\s\S]*?roleRow\?\.role === "stylist"[\s\S]*?view = "stylist"[\s\S]*?view = "salon"[\s\S]*?view = "no_role"/);
+  assert.match(h, /const showStylistCard = view === "guest" \|\| view === "stylist"/);
+  assert.match(h, /const showSalonEntry = view === "guest" \|\| view === "salon"/);
+  // 枠ごと条件付き（空の枠・余白を残さない）。カード行そのものも両方なければ出さない
+  assert.match(h, /\{\(showStylistCard \|\| showSalonEntry\) && \(/);
+  assert.match(h, /\{showStylistCard && \(\s*<section/); assert.match(h, /\{showSalonEntry && \(\s*<aside/);
+  // 美容師: 診断ボタンを出さず、マイページ導線は残す。初回案内は未ログインのみ
+  assert.match(h, /\{view !== "stylist" && \(\s*<Link\s+href="\/stylist\/diagnosis"/);
+  assert.match(h, /view === "stylist" \? \(\s*<Link\s+href="\/stylist\/mypage"/);
+  // 旧「…アカウントでログインするとご利用いただけます」の案内は残っていない
+  assert.doesNotMatch(h, /アカウントでログインするとご利用いただけます/);
+  assert.doesNotMatch(h, /運営アカウントです。上の/);
+  // サロン: サロンマイページへ。ヘッダーのマイページは user 全般に残る。管理者はヘッダーの「管理画面へ」
+  assert.match(h, /view === "salon" \? \(\s*<Link\s+href="\/salon\/mypage"/);
+  assert.match(h, /href="\/mypage"[\s\S]*?マイページ/); assert.match(h, /href="\/admin"[\s\S]*?管理画面へ/);
+  // 初回案内（30問の診断から）は未ログイン側のログインリンクと同じブロックにだけある
+  assert.equal((h.match(/初めての方は30問の診断から始めましょう/g) ?? []).length, 1);
+  // 認証・アクセス制御は表示だけに頼らない（再診断は /stylist/mypage の「診断を受け直す」）
+  assert.match(src("app/stylist/mypage/page.tsx"), /診断を受け直す/);
+});

@@ -59,8 +59,10 @@ test("/mypage とホームは共通処理を使い、確認失敗は再試行で
   assert.doesNotMatch(m, /getUserRoles/);
   const h = src("app/page.tsx");
   assert.match(h, /getAdminStatus/); assert.match(h, /href="\/mypage"/); assert.match(h, /adminCheckFailed/);
-  assert.match(h, /hasStylist = role === "stylist" && !isAdmin && !adminCheckFailed/);
-  assert.match(h, /hasSalon = role === "salon" && !isAdmin && !adminCheckFailed/);
+  // 役割の判定は「管理者でも確認失敗でもない」場合だけ。確認できなければ別の役割と推測しない（view="check_failed"）
+  assert.match(h, /if \(adminStatus === "error"\) view = "check_failed"/);
+  assert.match(h, /else if \(isAdmin\) view = "admin"/);
+  assert.match(h, /if \(roleError\) view = "check_failed"/);
 });
 
 test("管理画面の入口の権限確認は従来どおり（確認できなければ入れない）", () => {
