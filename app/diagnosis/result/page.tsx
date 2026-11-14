@@ -230,7 +230,7 @@ export default function DiagnosisResultPage() {
   // ⑤ロック項目をコンパクトに（7項目→6項目、市場価値と想定年収を1項目に統合）。
   const lockedItems = [
     "6つの才能バランス",
-    "市場価値・想定年収",
+    "経験・実績の特徴と伸ばせる点",
     "あなたの強み",
     "向いている働き方",
     "AIによるあなた専用分析",
@@ -303,7 +303,7 @@ export default function DiagnosisResultPage() {
         <ul className="mt-4 space-y-2.5">
           <li className="flex items-start justify-center gap-1.5 text-[14px] font-semibold leading-snug text-ink">
             <span aria-hidden="true" style={{ color: "var(--gold)" }}>→</span>
-            あなたの市場価値は？
+            あなたの経験・実績の強みは？
           </li>
           <li className="flex items-start justify-center gap-1.5 text-[14px] font-semibold leading-snug text-ink">
             <span aria-hidden="true" style={{ color: "var(--gold)" }}>→</span>

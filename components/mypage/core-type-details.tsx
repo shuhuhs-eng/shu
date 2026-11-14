@@ -7,61 +7,36 @@ type Props = {
 
 function StarRow({ stars }: { stars: number }) {
   return (
-    <span aria-hidden className="text-[13px] tracking-wide text-[var(--gold)]">
-      {"★".repeat(stars)}
-      <span className="text-line">{"★".repeat(5 - stars)}</span>
+    <span className="flex items-center gap-1.5 text-[13px] tracking-wide text-[var(--gold)]">
+      <span aria-hidden="true">
+        {"★".repeat(stars)}
+        <span className="text-line">{"★".repeat(5 - stars)}</span>
+      </span>
+      <span className="text-[11px] text-sub">5段階中{stars}</span>
     </span>
   );
 }
 
 /**
- * 8タイプの「このタイプの強み」「向いている働き方」「あなたの強みが
- * 活きやすい環境傾向」を表示する。すべて静的コンテンツ（AI生成ではない）。
- * 診断体験120点化Sprintにより、強み・環境傾向をカードUIへ変更した
- * （見せ方のみの変更。データ自体・判定ロジックには一切手を加えていない）。
- *
- * 「環境傾向」は断定的な推薦表現を避け、あくまで参考情報として示す。
- * 本格的なマッチング（サロン提案）はここでは行わず、将来のマッチング
- * フェーズへの接続点として注記のみを表示する
- * （requirements-v1.0.md 4.1節参照）。
+ * 8タイプの「あなたに合いやすい職場」「向いている働き方」「このタイプの強み」（静的コンテンツ。AI生成ではない）。
+ * マッチングへの接続を主役にするため、職場を先頭に置き、強みは簡潔なチップにして目立たせない。
+ * 内容・データ・判定ロジックは変更していない（見せ方のみ）。星の数は「その環境との合いやすさ」の目安で、点数ではない。
  */
 export function CoreTypeDetails({ coreTypeCode }: Props) {
   const content = CORE_TYPE_CONTENT[coreTypeCode];
 
   return (
-    <div className="space-y-6">
-      <section>
-        <p className="eyebrow mb-3">このタイプの強み</p>
-        <div className="grid grid-cols-3 gap-3">
-          {content.strengthCards.map((card, i) => (
-            <div
-              key={i}
-              className="flex flex-col items-center gap-2 rounded-2xl border border-line bg-surface px-3 py-5 text-center"
-            >
-              <span aria-hidden className="text-[26px]">
-                {card.icon}
-              </span>
-              <span className="text-[12.5px] font-medium text-charcoal">{card.label}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
+    <div className="space-y-4">
       <section className="rounded-2xl border border-line bg-surface p-6">
-        <p className="eyebrow mb-3">向いている働き方</p>
-        <p className="text-[13.5px] leading-relaxed text-charcoal">{content.workStyle}</p>
-      </section>
-
-      <section>
-        <p className="eyebrow mb-3">あなたの強みが活きやすい環境</p>
+        <p className="eyebrow mb-1">あなたに合いやすい職場</p>
+        <p className="mb-4 text-[12px] leading-relaxed text-sub">
+          診断で出た「{content.name}」タイプの傾向から、強みが活きやすい環境の目安を並べています。
+        </p>
         <div className="space-y-2.5">
           {content.environmentCards.map((card, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-5 py-4"
-            >
-              <span className="flex items-center gap-2.5 text-[13.5px] text-charcoal">
-                <span aria-hidden className="text-[18px]">
+            <div key={i} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl bg-surface2 px-4 py-3">
+              <span className="flex items-center gap-2.5 text-[13.5px] font-medium text-charcoal">
+                <span aria-hidden="true" className="text-[18px]">
                   {card.icon}
                 </span>
                 {card.label}
@@ -70,9 +45,26 @@ export function CoreTypeDetails({ coreTypeCode }: Props) {
             </div>
           ))}
         </div>
-        <p className="mt-3 text-[12px] text-sub">
-          ※特定のサロンを推薦するものではありません。本格的なマッチング機能は今後実装予定です。
+        <p className="mt-3 text-[11.5px] leading-relaxed text-sub">
+          ※特定のサロンを推薦するものではありません。サロンごとの相性は「公開中の店舗を探す」で確認できます。
         </p>
+      </section>
+
+      <section className="rounded-2xl border border-line bg-surface p-6">
+        <p className="eyebrow mb-2">向いている働き方</p>
+        <p className="text-[13.5px] leading-relaxed text-charcoal">{content.workStyle}</p>
+      </section>
+
+      <section className="px-1">
+        <p className="mb-2 text-[12px] font-semibold text-sub">このタイプの強み</p>
+        <ul className="flex flex-wrap gap-2">
+          {content.strengthCards.map((card, i) => (
+            <li key={i} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[12px] text-charcoal">
+              <span aria-hidden="true">{card.icon}</span>
+              {card.label}
+            </li>
+          ))}
+        </ul>
       </section>
     </div>
   );

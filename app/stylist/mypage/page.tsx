@@ -9,7 +9,12 @@ import { CoreTypeHeader } from "@/components/mypage/core-type-header";
 import { CoreTypeDetails } from "@/components/mypage/core-type-details";
 import { MarketValueCard } from "@/components/mypage/market-value-card";
 import { AiNarrativeBlocks } from "@/components/mypage/ai-narrative-blocks";
-import { TraitScoreBars } from "@/components/diagnosis/trait-score-bars";
+import { TraitRadar } from "@/components/diagnosis/trait-radar";
+import { OrderMadeMatchCard } from "@/components/mypage/order-made-match-card";
+import { RetakeLink } from "@/components/mypage/retake-link";
+import { getStylistRetakeLimit } from "@/lib/diagnosis-limit/retake-status";
+import { buildExperienceProfile } from "@/lib/diagnosis/experience-profile";
+import { CORE_TYPE_CONTENT } from "@/lib/diagnosis/core-type-content";
 import type { AiOutputType, Database } from "@/types/database";
 import type { TraitScores } from "@/lib/diagnosis";
 import { NotificationBell } from "@/components/notifications/notification-bell";
@@ -52,7 +57,8 @@ export default async function StylistMyPage() {
     hasStylistRole,
     { data: latest },
     { data: preferenceProfile },
-    { data: matchProfile },
+    { data: matchProfile, error: matchProfileError },
+    retakeLimit,
     scoutTotal,
     scoutUnread,
     offerTotal,
@@ -72,7 +78,9 @@ export default async function StylistMyPage() {
     // ★「働きたいサロン環境」Preference診断（8問・8軸）。既存の30問診断とは完全に別物
     // （診断ロジック・8タイプ・市場価値・AIには一切影響しない、回答済み状態の確認のみ）。
     supabase.from("stylist_preference_profiles").select("status").eq("stylist_user_id", user.id).maybeSingle(),
-    supabase.from("stylist_match_profiles").select("status").eq("stylist_user_id", user.id).maybeSingle(),
+    supabase.from("stylist_match_profiles").select("status, primary_goal, secondary_goals, career_stage").eq("stylist_user_id", user.id).maybeSingle(),
+    // 回数制限（0058）の状態。関数が無い（未適用）・失敗のときは「制限は有効でない」として扱い、制限の説明を出さない。
+    getStylistRetakeLimit(supabase),
     // ★届いたスカウト／オファーは専用画面（/stylist/scouts・/stylist/offers）へ移した。
     // ここでは件数だけを本人宛(stylist_user_id=自分)の既存テーブルから数える。
     supabase.from("scouts").select("id", { count: "exact", head: true }).eq("stylist_user_id", user.id),
@@ -143,6 +151,7 @@ export default async function StylistMyPage() {
   const offerPendingCount = offerPending.count ?? 0;
 
   const showNewStylistDesign = !!coreTypeCode && !!latest;
+  const hasMatchProfileData = hasMatchProfile && !!matchProfile;
 
   const traitScores: TraitScores | null = latest
     ? {
@@ -154,6 +163,9 @@ export default async function StylistMyPage() {
         M: latest.mentor_score,
       }
     : null;
+
+  // 保存済みの回答と6才能から、経験・実績の特徴と伸ばせる点を読み出す（読めない旧データは出さない）。
+  const experienceProfile = latest && traitScores ? buildExperienceProfile(latest.answers, traitScores) : null;
 
   return (
     <main className="mx-auto max-w-[560px] px-5 py-12">
@@ -174,13 +186,11 @@ export default async function StylistMyPage() {
 
           <div className="mt-2 space-y-4">
             <section className="rounded-2xl border border-line bg-surface p-6">
-              <p className="eyebrow mb-3">6才能スコア</p>
-              <TraitScoreBars scores={traitScores} />
+              <p className="eyebrow mb-3">6つの才能のバランス</p>
+              <TraitRadar scores={traitScores} accent={CORE_TYPE_CONTENT[coreTypeCode].primaryColor} />
             </section>
 
-            {latest.market_value_score != null && (
-              <MarketValueCard score={latest.market_value_score} salaryBand={latest.salary_band} />
-            )}
+            {experienceProfile && <MarketValueCard profile={experienceProfile} salaryBand={latest.salary_band} />}
 
             <AiNarrativeBlocks
               aiByType={aiByType}
@@ -190,23 +200,6 @@ export default async function StylistMyPage() {
             <CoreTypeDetails coreTypeCode={coreTypeCode} />
           </div>
 
-          <section className="mt-8 rounded-2xl border border-line bg-surface2 p-6 text-center">
-            <p className="text-[13.5px] leading-relaxed text-charcoal">
-              あなたの才能は
-              <br />
-              経験とともに成長します。
-              <br />
-              半年後にもう一度診断すると、
-              <br />
-              新しい強みに出会えるかもしれません。
-            </p>
-            <Link
-              href="/stylist/diagnosis"
-              className="mt-5 flex w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface"
-            >
-              もう一度診断する
-            </Link>
-          </section>
         </>
       ) : (
         <>
@@ -263,20 +256,13 @@ export default async function StylistMyPage() {
         )}
       </section>
 
-      <section className="mt-4 rounded-2xl border border-line bg-surface p-6">
-        <p className="eyebrow mb-2">オーダーメイドマッチ</p>
-        <p className="text-[13px] leading-relaxed text-charcoal">
-          {hasMatchProfile
-            ? "転職で変えたいことと実績を登録済みです。"
-            : "転職で一番変えたいことと、サロンへ提供できる価値を登録します。"}
-        </p>
-        <Link
-          href="/stylist/match-profile"
-          className="mt-4 flex w-full items-center justify-center rounded-full border border-line bg-surface2 px-6 py-3.5 text-[14px] font-semibold text-ink"
-        >
-          {hasMatchProfile ? "登録内容を見直す" : "希望条件を登録する"}
-        </Link>
-      </section>
+      <div className="mt-4">
+        <OrderMadeMatchCard
+          profile={hasMatchProfileData && matchProfile ? { primary_goal: matchProfile.primary_goal, secondary_goals: matchProfile.secondary_goals ?? [], career_stage: matchProfile.career_stage } : null}
+          coreTypeName={coreTypeCode ? CORE_TYPE_CONTENT[coreTypeCode].name : null}
+          loadFailed={!!matchProfileError}
+        />
+      </div>
 
       {/* ★届いたスカウト／オファー。店舗単位の専用画面への導線と件数。 */}
       <Link href="/messages" className="mt-4 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-3.5 text-[14px] font-semibold text-ink">
@@ -352,6 +338,9 @@ export default async function StylistMyPage() {
       <Link href="/stylist/profile" className="mt-4 block text-center text-[13px] text-sub underline">
         プロフィール編集
       </Link>
+
+      {/* 再診断は、働きたいサロン・職場の設定より下、ページ最下部の控えめなリンクにする。 */}
+      {showNewStylistDesign && <RetakeLink limit={retakeLimit} />}
     </main>
   );
 }

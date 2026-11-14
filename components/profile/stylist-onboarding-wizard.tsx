@@ -14,6 +14,7 @@ import { TextareaField } from "@/components/profile/textarea-field";
 import { AvatarUploader } from "@/components/profile/avatar-uploader";
 import { SnsLinksField } from "@/components/profile/sns-links-field";
 import { ValuePrioritySelector } from "@/components/profile/value-priority-selector";
+import { VisibilityField } from "@/components/profile/visibility-field";
 import {
   PREFECTURES,
   SPECIALTY_OPTIONS,
@@ -22,8 +23,6 @@ import {
   GENDER_LABELS,
   EMPLOYMENT_TYPE_LABELS,
   JOB_CHANGE_INTENT_LABELS,
-  SALARY_BAND_LABELS,
-  VISIBILITY_LABELS,
 } from "@/lib/validation/profile-options";
 import type { ProfileFormInitialValues } from "@/components/profile/profile-form";
 
@@ -110,7 +109,6 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
       return null;
     }
     if (targetStep === 3) {
-      if (!get("desiredSalaryRange")) return "希望年収帯を選択してください";
       return null;
     }
     if (targetStep === 4) {
@@ -293,16 +291,6 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
               options={toOptions(JOB_CHANGE_INTENT_LABELS)}
               errors={state.fieldErrors?.jobChangeIntent}
             />
-            <SelectField
-              id="desiredSalaryRange"
-              name="desiredSalaryRange"
-              label="希望年収帯"
-              placeholder="選択してください"
-              required={false}
-              defaultValue={initialValues.desiredSalaryRange}
-              options={toOptions(SALARY_BAND_LABELS)}
-              errors={state.fieldErrors?.desiredSalaryRange}
-            />
           </div>
 
           {/* ステップ4: 働き方・価値観 */}
@@ -322,27 +310,8 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
               maxLength={1000}
               errors={state.fieldErrors?.bio}
             />
-            <SelectField
-              id="visibility"
-              name="visibility"
-              label="プロフィールの公開範囲"
-              required={false}
-              defaultValue={initialValues.visibility}
-              options={toOptions(VISIBILITY_LABELS)}
-              errors={state.fieldErrors?.visibility}
-            />
-            <SelectField
-              id="scoutEnabled"
-              name="scoutEnabled"
-              label="スカウト受信設定"
-              required={false}
-              defaultValue={String(initialValues.scoutEnabled)}
-              options={[
-                { value: "true", label: "スカウトを受け取る" },
-                { value: "false", label: "スカウトを受け取らない" },
-              ]}
-              errors={state.fieldErrors?.scoutEnabled}
-            />
+            <VisibilityField defaultValue={initialValues.visibility} errors={state.fieldErrors?.visibility} />
+            <p className="text-[12px] leading-relaxed text-sub">公開にすると、サービス内のスカウトを受け取れます。氏名・性別・年代は、公開にしてもサロンへ表示されません。</p>
             <p className="text-[12.5px] text-sub">入力内容は後からいつでも変更できます。</p>
           </div>
         </div>

@@ -1,50 +1,74 @@
+import type { ExperienceProfile } from "@/lib/diagnosis/experience-profile";
+
 type Props = {
-  score: number;
-  salaryBand: string | null;
+  profile: ExperienceProfile;
+  /** 既存の想定年収帯（算出済みの値）。主役にはせず、参考として小さく折りたたむ。点数・順位には置き換えない。 */
+  salaryBand?: string | null;
 };
 
 /**
- * スコア(38〜97、lib/diagnosis/scoring.tsのmarketValue()が算出する既存の値)から
- * 星の数と定性メッセージを導く、表示専用のヘルパー。市場価値の算出ロジック
- * 自体（lib/diagnosis）には一切手を加えていない。
- *
- * 実データが蓄積されるまでは「上位○%」のようなパーセンタイル表示は行わない
- * （診断体験120点化Sprintの指示どおり）。
+ * 経験・実績の特徴と、これから伸ばせる点（旧「市場価値○点」の主役表示をやめた）。
+ * 表示するのは、本人が選んだ回答と6才能の傾向だけ。点数・「上位○%」・給与額への置き換えはしない。
+ * 色だけで意味を伝えないよう、見出し文字とアイコンの両方で区別している。
  */
-function starsAndMessage(score: number): { stars: number; message: string } {
-  if (score >= 85) return { stars: 5, message: "業界でもトップクラスの水準です" };
-  if (score >= 70) return { stars: 4, message: "業界平均を上回っています" };
-  if (score >= 55) return { stars: 3, message: "着実に力をつけています" };
-  return { stars: 2, message: "これからの伸びしろがあります" };
-}
-
-function StarRow({ stars }: { stars: number }) {
-  return (
-    <span aria-hidden className="text-[18px] tracking-wide text-[var(--gold)]">
-      {"★".repeat(stars)}
-      <span className="text-line">{"★".repeat(5 - stars)}</span>
-    </span>
-  );
-}
-
-/**
- * 市場価値のカード表示（診断体験120点化Sprintによるリデザイン）。
- * ★算出ロジックには一切手を加えていない。既存の market_value_score /
- * salary_band をそのまま表示し、見せ方（カードUI・星評価・定性メッセージ）
- * だけを追加している。
- */
-export function MarketValueCard({ score, salaryBand }: Props) {
-  const { stars, message } = starsAndMessage(score);
+export function MarketValueCard({ profile, salaryBand }: Props) {
+  const { answers, strengths, growth } = profile;
+  const facts = [
+    answers.experience && { label: "経験", value: answers.experience },
+    answers.role && { label: "いまの役割", value: answers.role },
+    answers.specialties.length > 0 && { label: "得意分野", value: answers.specialties.join("・") },
+    answers.workStyles.length > 0 && { label: "大切にしたい働き方", value: answers.workStyles.join("・") },
+  ].filter(Boolean) as { label: string; value: string }[];
 
   return (
-    <section className="rounded-2xl border border-line bg-surface p-6 text-center">
-      <p className="eyebrow mb-2">市場価値</p>
-      <p className="font-data text-[40px] font-bold leading-none text-ink">{score}</p>
-      <div className="mt-3">
-        <StarRow stars={stars} />
+    <section className="rounded-2xl border border-line bg-surface p-6">
+      <p className="eyebrow mb-1">あなたの経験・実績の特徴</p>
+      <p className="text-[12px] leading-relaxed text-sub">診断で選んだ回答と、才能のバランスから読み取った内容です。点数や順位ではありません。</p>
+
+      {facts.length > 0 && (
+        <dl className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {facts.map((f) => (
+            <div key={f.label} className="rounded-xl bg-surface2 px-4 py-3">
+              <dt className="text-[11px] font-semibold text-sub">{f.label}</dt>
+              <dd className="mt-0.5 text-[13.5px] font-semibold text-ink">{f.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
+      <div className="mt-5 rounded-xl border border-[#2E8B7F]/30 bg-[#2E8B7F]/[0.07] px-4 py-3.5">
+        <p className="flex items-center gap-1.5 text-[13px] font-bold text-[#1F6B61]">
+          <span aria-hidden="true">💪</span>強みとして表れている点
+        </p>
+        <ul className="mt-2 space-y-1.5">
+          {strengths.map((s) => (
+            <li key={s.key} className="text-[13px] leading-relaxed text-charcoal">
+              <span className="font-semibold text-ink">{s.name}</span>：{s.description}
+            </li>
+          ))}
+        </ul>
       </div>
-      <p className="mt-3 text-[13.5px] text-charcoal">{message}</p>
-      {salaryBand && <p className="mt-1 text-[12px] text-sub">想定年収帯: {salaryBand}</p>}
+
+      <div className="mt-3 rounded-xl border border-[#B8860B]/30 bg-[#D89A3B]/[0.09] px-4 py-3.5">
+        <p className="flex items-center gap-1.5 text-[13px] font-bold text-[#8A5A00]">
+          <span aria-hidden="true">🌱</span>これから伸ばせる点
+        </p>
+        <ul className="mt-2 space-y-1.5">
+          {growth.map((g) => (
+            <li key={g.key} className="text-[13px] leading-relaxed text-charcoal">
+              <span className="font-semibold text-ink">{g.name}</span>：{g.description}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-[11.5px] leading-relaxed text-sub">経験を積むほど変わっていく項目です。弱みという意味ではありません。</p>
+      </div>
+
+      {salaryBand && (
+        <details className="mt-4">
+          <summary className="inline-flex min-h-[44px] cursor-pointer items-center text-[12px] text-sub underline">参考情報を見る</summary>
+          <p className="text-[12px] leading-relaxed text-sub">診断時に算出された想定年収帯（目安）: {salaryBand}。実際の給与・待遇を示すものではありません。</p>
+        </details>
+      )}
     </section>
   );
 }

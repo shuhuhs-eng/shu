@@ -9,8 +9,8 @@ const employmentTypeEnum = z.enum([
   "full_time", "part_time", "contract", "freelance", "owner", "other",
 ]);
 const jobChangeIntentEnum = z.enum(["active", "passive", "not_looking"]);
-const salaryBandEnum = z.enum(["lt_350", "350_450", "450_600", "600_800", "gt_800", "flexible"]);
-const visibilityEnum = z.enum(["PRIVATE", "LIMITED", "PUBLIC"]);
+// 美容師プロフィールの公開範囲は「公開」「非公開」の二択（「一部公開」は選択肢から外した）。
+const visibilityEnum = z.enum(["PRIVATE", "PUBLIC"]);
 
 const VALUE_PRIORITY_CODES = VALUE_PRIORITY_OPTIONS.map((o) => o.code) as [string, ...string[]];
 const SNS_PLATFORM_CODES = SNS_PLATFORMS.map((p) => p.code) as [string, ...string[]];
@@ -50,7 +50,6 @@ export const profileFormSchema = z.object({
     .min(1, "得意技術を1つ以上選択してください"),
   employmentType: employmentTypeEnum,
   jobChangeIntent: jobChangeIntentEnum,
-  desiredSalaryRange: salaryBandEnum,
   // SNSリンク（現在はInstagramのみUIに表示。0件=未入力も許可する）。
   snsLinks: z.array(snsLinkSchema).max(SNS_PLATFORMS.length, "登録できるSNSの数を超えています"),
   bio: z.string().trim().max(1000, "1000文字以内で入力してください").optional().or(z.literal("")),
@@ -77,7 +76,6 @@ export const profileFormSchema = z.object({
     .refine((arr) => new Set(arr).size === arr.length, "同じ項目を重複して選択できません"),
 
   // --- 設定（user_settings / stylist_profiles.visibility） ---
-  scoutEnabled: z.enum(["true", "false"]),
   visibility: visibilityEnum,
 });
 

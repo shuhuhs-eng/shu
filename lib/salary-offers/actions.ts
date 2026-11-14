@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { isSalaryOfferPresentationPaused, SALARY_OFFER_PAUSED_MESSAGE } from "@/lib/salary-offers/pause";
 import { RECRUITING_PAUSED_MESSAGE, isRecruitingPausedError } from "@/lib/contracts/recruiting-access";
 
 const offerFields = {
@@ -39,6 +40,7 @@ const storeOfferSchema = z.object({ storeId: z.string().uuid(), ...offerFields }
  * Interest済み・実績確認済みの判定はRPC側（DB）を正とする。
  */
 export async function createStoreSalaryOffer(input: z.infer<typeof storeOfferSchema>): Promise<{ success: true } | { success: false; error: string }> {
+  if (isSalaryOfferPresentationPaused()) return { success: false, error: SALARY_OFFER_PAUSED_MESSAGE };
   const parsed = storeOfferSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "提示条件を確認してください。" };
   const supabase = await createClient();

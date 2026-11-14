@@ -33,8 +33,11 @@ export default async function StylistProfileEditPage() {
 
       <h1 className="font-serif text-2xl font-bold text-ink">プロフィール編集</h1>
       <p className="mt-3 text-[14px] leading-relaxed text-charcoal">
-        登録内容はいつでも変更できます。氏名・年代・性別はサロンへ自動公開されません。
+        登録内容はいつでも変更できます。氏名・性別・年代はサロンへ公開されません。
       </p>
+      <Link href="/stylist/profile/preview" className="mt-2 inline-flex min-h-[44px] items-center text-[13px] font-semibold text-ink underline">
+        サロンからの見え方を確認する →
+      </Link>
 
       <div className="mt-6">
         <ProfileForm mode="edit" userId={user.id} initialValues={initialValues} />

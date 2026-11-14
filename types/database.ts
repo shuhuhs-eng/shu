@@ -657,7 +657,7 @@ export type Database = {
           p_specialties: string[];
           p_employment_type: EmploymentType;
           p_job_change_intent: JobChangeIntent;
-          p_desired_salary_range: SalaryBand;
+          p_desired_salary_range: SalaryBand | null;
           p_sns_links: SnsLink[];
           p_bio: string | null;
           p_visibility: ProfileVisibility;

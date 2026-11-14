@@ -1,4 +1,5 @@
 import { SalonOfferForm } from "@/components/salary-offers/salon-offer-form";
+import { isSalaryOfferPresentationPaused } from "@/lib/salary-offers/pause";
 import { JOB_CHANGE_INTENT_LABELS } from "@/lib/validation/profile-options";
 import { CAREER_GOAL_LABELS, type CareerGoalCode } from "@/lib/match-profile/options";
 import { formatJstDateTime } from "@/lib/store-activity/format";
@@ -156,7 +157,7 @@ export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPa
       {interest.bio && <p className="mt-3 text-[12.5px] leading-relaxed text-charcoal">{interest.bio}</p>}
 
       {canOffer ? (
-        <SalonOfferForm stylistUserId={interest.stylist_user_id} existingOffer={latestOffer} storeId={storeId} recruitingPaused={recruitingPaused} />
+        <SalonOfferForm stylistUserId={interest.stylist_user_id} existingOffer={latestOffer} storeId={storeId} recruitingPaused={recruitingPaused} salaryOfferPaused={isSalaryOfferPresentationPaused()} />
       ) : (
         <p className="mt-3 rounded-lg bg-surface2 px-3 py-2 text-[10.5px] leading-relaxed text-sub">
           給与条件の提示は、実績に基づくオファーを希望し、提出資料の確認が完了した美容師に行えます。

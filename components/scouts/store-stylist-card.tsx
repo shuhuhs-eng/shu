@@ -4,7 +4,7 @@ import { useState } from "react";
 import { sendStoreScout } from "@/lib/scouts/actions";
 import { RECRUITING_PAUSED_MESSAGE } from "@/lib/contracts/recruiting-access";
 import { SCOUT_TEMPLATES, SCOUT_RESPONSE_LABELS, type ScoutTemplateType } from "@/lib/scouts/options";
-import { JOB_CHANGE_INTENT_LABELS } from "@/lib/validation/profile-options";
+import { StylistPublicView } from "@/components/profile/stylist-public-view";
 import { MATCH_AXIS_LABELS } from "@/lib/matching/types";
 import type { StoreStylistMatchResult } from "@/lib/matching/types";
 import type { PublicStylistForScout } from "@/lib/scouts/types";
@@ -72,11 +72,20 @@ export function StoreStylistCard({ storeId, stylist, match, latestScout, recruit
   return (
     <div className="rounded-2xl border border-line bg-surface p-5">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="font-serif text-[17px] font-bold text-ink">{stylist.public_name ?? "美容師"}</h3>
-          <p className="mt-1 text-[12.5px] text-sub">
-            {[stylist.prefecture, stylist.current_position].filter(Boolean).join(" / ") || "プロフィール情報未設定"}
-          </p>
+        <div className="min-w-0 flex-1">
+          <StylistPublicView
+            data={{
+              publicName: stylist.public_name,
+              prefecture: stylist.prefecture,
+              currentPosition: stylist.current_position,
+              experienceYears: stylist.experience_years,
+              desiredWorkLocation: stylist.desired_work_location,
+              jobChangeIntent: stylist.job_change_intent,
+              specialties: stylist.specialties,
+              bio: stylist.bio,
+              age: (stylist as { age?: number | null }).age ?? null,
+            }}
+          />
         </div>
         {match?.available && (
           <div className="shrink-0 rounded-full px-3 py-1.5 text-center" style={{ backgroundColor: "#EAF3EC" }}>
@@ -87,22 +96,6 @@ export function StoreStylistCard({ storeId, stylist, match, latestScout, recruit
           </div>
         )}
       </div>
-
-      {stylist.experience_years != null && <p className="mt-2 text-[12px] text-sub">経験{stylist.experience_years}年</p>}
-      {stylist.desired_work_location && <p className="mt-1 text-[12.5px] text-charcoal">希望勤務地: {stylist.desired_work_location}</p>}
-      <p className="mt-1 text-[12.5px] text-charcoal">{JOB_CHANGE_INTENT_LABELS[stylist.job_change_intent]}</p>
-
-      {stylist.specialties.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {stylist.specialties.map((s) => (
-            <span key={s} className="rounded-full border border-line bg-surface2 px-2.5 py-1 text-[11px] text-charcoal">
-              {s}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {stylist.bio && <p className="mt-3 text-[12.5px] leading-relaxed text-charcoal">{stylist.bio}</p>}
 
       {match?.available && (
         <details className="mt-4 border-t border-line pt-3">

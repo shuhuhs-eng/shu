@@ -14,6 +14,8 @@ import { TextareaField } from "@/components/profile/textarea-field";
 import { AvatarUploader } from "@/components/profile/avatar-uploader";
 import { SnsLinksField } from "@/components/profile/sns-links-field";
 import { ValuePrioritySelector } from "@/components/profile/value-priority-selector";
+import { VisibilityField } from "@/components/profile/visibility-field";
+import { profileFieldsKey } from "@/lib/profile/fields-key";
 import {
   PREFECTURES,
   SPECIALTY_OPTIONS,
@@ -22,16 +24,12 @@ import {
   GENDER_LABELS,
   EMPLOYMENT_TYPE_LABELS,
   JOB_CHANGE_INTENT_LABELS,
-  SALARY_BAND_LABELS,
-  VISIBILITY_LABELS,
 } from "@/lib/validation/profile-options";
 import type {
   AgeBand,
   EmploymentType,
   GenderType,
   JobChangeIntent,
-  ProfileVisibility,
-  SalaryBand,
   SnsLink,
 } from "@/types/database";
 
@@ -47,13 +45,12 @@ export type ProfileFormInitialValues = {
   specialties: string[];
   employmentType: EmploymentType | "";
   jobChangeIntent: JobChangeIntent;
-  desiredSalaryRange: SalaryBand | "";
   snsLinks: SnsLink[];
   bio: string;
   avatarPath: string | null;
   avatarSignedUrl: string | null;
-  scoutEnabled: boolean;
-  visibility: ProfileVisibility;
+  /** 画面で選べるのは公開／非公開のみ（既存の一部公開は非公開として表示）。 */
+  visibility: "PUBLIC" | "PRIVATE";
   valuePriorities: string[];
 };
 
@@ -82,7 +79,7 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
       <FormErrorBanner message={state.error} />
       {mode === "edit" && <FormSuccessBanner message={state.success} />}
 
-      <PendingFieldset>
+      <PendingFieldset key={profileFieldsKey(initialValues)}>
         <div className="space-y-8">
           <section className="space-y-4">
             <h2 className="eyebrow">公開プロフィール</h2>
@@ -156,15 +153,6 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
               options={toOptions(JOB_CHANGE_INTENT_LABELS)}
               errors={state.fieldErrors?.jobChangeIntent}
             />
-            <SelectField
-              id="desiredSalaryRange"
-              name="desiredSalaryRange"
-              label="希望年収帯"
-              placeholder="選択してください"
-              defaultValue={initialValues.desiredSalaryRange}
-              options={toOptions(SALARY_BAND_LABELS)}
-              errors={state.fieldErrors?.desiredSalaryRange}
-            />
             <SnsLinksField defaultValues={initialValues.snsLinks} />
             <TextareaField
               id="bio"
@@ -177,7 +165,8 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
           </section>
 
           <section className="space-y-4">
-            <h2 className="eyebrow">個人情報（サロンへ自動公開されません）</h2>
+            <h2 className="eyebrow">本人情報（サロンへは表示されません）</h2>
+            <p className="text-[12px] leading-relaxed text-sub">サロンに表示される名前は、上の「公開名」です。ここで入力する氏名・性別・年代は、ご本人の確認用で、サロンには表示されません。</p>
             <TextField
               id="fullName"
               name="fullName"
@@ -217,26 +206,9 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
           </section>
 
           <section className="space-y-4">
-            <h2 className="eyebrow">公開範囲・スカウト受信設定</h2>
-            <SelectField
-              id="visibility"
-              name="visibility"
-              label="プロフィールの公開範囲"
-              defaultValue={initialValues.visibility}
-              options={toOptions(VISIBILITY_LABELS)}
-              errors={state.fieldErrors?.visibility}
-            />
-            <SelectField
-              id="scoutEnabled"
-              name="scoutEnabled"
-              label="スカウト受信設定"
-              defaultValue={String(initialValues.scoutEnabled)}
-              options={[
-                { value: "true", label: "スカウトを受け取る" },
-                { value: "false", label: "スカウトを受け取らない" },
-              ]}
-              errors={state.fieldErrors?.scoutEnabled}
-            />
+            <h2 className="eyebrow">公開範囲</h2>
+            <VisibilityField defaultValue={initialValues.visibility} errors={state.fieldErrors?.visibility} />
+            <p className="text-[12px] leading-relaxed text-sub">公開にすると、サービス内のスカウトを受け取れます。氏名・性別・年代は、公開にしてもサロンへ表示されません。</p>
           </section>
         </div>
       </PendingFieldset>

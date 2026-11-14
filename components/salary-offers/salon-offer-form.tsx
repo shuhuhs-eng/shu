@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createStoreSalaryOffer } from "@/lib/salary-offers/actions";
+import { SALARY_OFFER_PAUSED_MESSAGE } from "@/lib/salary-offers/pause";
 import { RECRUITING_PAUSED_MESSAGE } from "@/lib/contracts/recruiting-access";
 import type { Database } from "@/types/database";
 type Offer = Database["public"]["Tables"]["salary_offers"]["Row"];
@@ -26,7 +27,7 @@ function parseAmountInput(raw: string): AmountParseResult {
 
 // 提示は常に店舗単位(create_salary_offer_v2)。storeIdは呼び出し元（店舗workspaceのparams.storeId）が必ず渡す。
 // （旧・サロン単位の create_salary_offer は 0053 で停止した。）
-export function SalonOfferForm({ stylistUserId, existingOffer, storeId, recruitingPaused = false }: { stylistUserId: string; existingOffer: ExistingOffer | null; storeId: string; recruitingPaused?: boolean }) {
+export function SalonOfferForm({ stylistUserId, existingOffer, storeId, recruitingPaused = false, salaryOfferPaused = false }: { stylistUserId: string; existingOffer: ExistingOffer | null; storeId: string; recruitingPaused?: boolean; salaryOfferPaused?: boolean }) {
   const [open, setOpen] = useState(false); const [busy, setBusy] = useState(false); const [message, setMessage] = useState<string | null>(null);
   const [guarantee, setGuarantee] = useState(250000); const [additionInput, setAdditionInput] = useState("0"); const [condition, setCondition] = useState(""); const [months, setMonths] = useState<1|3|6|12>(3); const [note, setNote] = useState("");
   const parsedAddition = parseAmountInput(additionInput);
@@ -34,6 +35,8 @@ export function SalonOfferForm({ stylistUserId, existingOffer, storeId, recruiti
   const addition = additionValid ? parsedAddition.value : 0;
   if (existingOffer?.status === "pending") return <p className="mt-3 rounded-lg bg-surface px-3 py-2 text-[11px] font-semibold text-sub">給与条件を提示済み・回答待ちです</p>;
   if (existingOffer?.status === "accepted") return <p className="mt-3 rounded-lg bg-[#37755B]/10 px-3 py-2 text-[11px] font-semibold text-[#285B45]">提示条件が承諾されました。次は面談で正式条件を確認してください。</p>;
+  // 給与条件の提示を一時停止中は、新規・再提示とも作成できない（既存の提示の確認・回答は止めない）。
+  if (salaryOfferPaused && !open) return <p className="mt-3 rounded-lg bg-surface px-3 py-2 text-[11px] text-sub">{SALARY_OFFER_PAUSED_MESSAGE}</p>;
   // 新しい採用活動を受け付けていない店舗では、新規・再提示とも作成できない（既存の提示の確認・回答は止めない）。
   if (recruitingPaused && !open) return <p className="mt-3 rounded-lg bg-surface px-3 py-2 text-[11px] text-sub">{RECRUITING_PAUSED_MESSAGE}。新しい給与条件は提示できません。</p>;
   if (!open && existingOffer?.status === "revision_requested") return <div className="mt-3 rounded-lg bg-surface px-3 py-3 text-[11px] text-charcoal"><p className="font-bold">条件相談が届いています：{RESPONSE_REASONS[existingOffer.response_reason ?? ""] ?? "その他"}</p>{existingOffer.response_note && <p className="mt-1 text-sub">{existingOffer.response_note}</p>}<button type="button" onClick={()=>setOpen(true)} className="mt-2 underline">条件を再提示する</button></div>;

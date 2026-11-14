@@ -4,6 +4,17 @@ import type { ProfileFormInitialValues } from "@/components/profile/profile-form
 import { getAvatarSignedUrl } from "@/lib/storage/avatar";
 
 /**
+ * 公開範囲の初期値。
+ *   ・プロフィールがまだ無い（新規）→ 公開（新規プロフィールの初期値）
+ *   ・既存の行 → 保存済みの値そのまま。ただし画面は公開／非公開の二択のため、既存の「一部公開」は「非公開」として表示する
+ *     （一部公開は、サロンの一覧・検索に元々表示されていない＝非公開と同じ見え方。既存の非公開を公開にすることは決してない）。
+ */
+export function initialVisibility(pub: { visibility: string } | null | undefined): "PUBLIC" | "PRIVATE" {
+  if (!pub) return "PUBLIC";
+  return pub.visibility === "PUBLIC" ? "PUBLIC" : "PRIVATE";
+}
+
+/**
  * 4テーブル（profiles / stylist_private / stylist_profiles / user_settings）から
  * プロフィールフォームの初期値を組み立てる。行が無い列（初回はほぼ全てnull）は
  * フォームの空値・既定値にフォールバックする。
@@ -26,11 +37,10 @@ export async function getProfileFormInitialValues(
   userId: string,
   fallbackPublicName: string | null = null,
 ): Promise<{ initialValues: ProfileFormInitialValues }> {
-  const [{ data: profile }, { data: priv }, { data: pub }, { data: settings }] = await Promise.all([
+  const [{ data: profile }, { data: priv }, { data: pub }] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).single(),
     supabase.from("stylist_private").select("*").eq("user_id", userId).maybeSingle(),
     supabase.from("stylist_profiles").select("*").eq("user_id", userId).maybeSingle(),
-    supabase.from("user_settings").select("*").eq("user_id", userId).single(),
   ]);
 
   const avatarPath = profile?.avatar_path ?? null;
@@ -48,13 +58,11 @@ export async function getProfileFormInitialValues(
     specialties: pub?.specialties ?? [],
     employmentType: pub?.employment_type ?? "",
     jobChangeIntent: pub?.job_change_intent ?? "passive",
-    desiredSalaryRange: pub?.desired_salary_range ?? "",
     snsLinks: pub?.sns_links ?? [],
     bio: pub?.bio ?? "",
     avatarPath,
     avatarSignedUrl,
-    scoutEnabled: settings?.scout_enabled ?? true,
-    visibility: pub?.visibility ?? "PRIVATE",
+    visibility: initialVisibility(pub),
     valuePriorities: pub?.value_priorities ?? [],
   };
 

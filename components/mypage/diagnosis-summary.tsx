@@ -1,5 +1,7 @@
 import { fullType, type TypeId, type TraitScores } from "@/lib/diagnosis";
-import { TraitScoreBars } from "@/components/diagnosis/trait-score-bars";
+import { TraitRadar } from "@/components/diagnosis/trait-radar";
+import { MarketValueCard } from "@/components/mypage/market-value-card";
+import { buildExperienceProfile } from "@/lib/diagnosis/experience-profile";
 import type { AiOutputType, Database } from "@/types/database";
 
 type DiagnosisResultRow = Database["public"]["Tables"]["diagnosis_results"]["Row"];
@@ -62,6 +64,8 @@ export function DiagnosisSummary({ latest, aiByType, showTypeHeader = true, show
     M: latest.mentor_score,
   };
 
+  const experienceProfile = buildExperienceProfile(latest.answers, scores);
+
   const hasAiContent =
     typeof aiByType.essence === "string" ||
     typeof aiByType.explanation === "string" ||
@@ -79,19 +83,11 @@ export function DiagnosisSummary({ latest, aiByType, showTypeHeader = true, show
       )}
 
       <section className="rounded-2xl border border-line bg-surface p-6">
-        <p className="eyebrow mb-3">6才能スコア</p>
-        <TraitScoreBars scores={scores} />
+        <p className="eyebrow mb-3">6つの才能のバランス</p>
+        <TraitRadar scores={scores} />
       </section>
 
-      {latest.market_value_score != null && (
-        <section className="rounded-2xl border border-line bg-surface p-6">
-          <p className="eyebrow mb-1">市場価値（参考値）</p>
-          <p className="font-data text-2xl font-bold text-ink">{latest.market_value_score}</p>
-          {latest.salary_band && (
-            <p className="mt-1 text-[13px] text-sub">想定年収帯: {latest.salary_band}</p>
-          )}
-        </section>
-      )}
+      {experienceProfile && <MarketValueCard profile={experienceProfile} salaryBand={latest.salary_band} />}
 
       {showAiSection &&
         (latest.ai_status === "PENDING" || latest.ai_status === "GENERATING" ? (

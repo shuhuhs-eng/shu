@@ -56,7 +56,6 @@ export async function saveProfileAction(
     specialties: formData.getAll("specialties"),
     employmentType: formData.get("employmentType"),
     jobChangeIntent: formData.get("jobChangeIntent"),
-    desiredSalaryRange: formData.get("desiredSalaryRange"),
     snsLinks,
     bio: formData.get("bio"),
     avatarPath: formData.get("avatarPath"),
@@ -64,7 +63,6 @@ export async function saveProfileAction(
     ageBand: formData.get("ageBand"),
     gender: formData.get("gender"),
     valuePriorities: formData.getAll("valuePriorities"),
-    scoutEnabled: formData.get("scoutEnabled"),
     visibility: formData.get("visibility"),
   };
 
@@ -97,6 +95,17 @@ export async function saveProfileAction(
     .single();
   const previousAvatarPath = beforeProfile?.avatar_path ?? null;
 
+  // 画面から外した項目は、保存済みの値をそのまま引き継ぐ（保存でデータを消さない）。
+  //   ・希望年収帯: 入力欄とサロン向け表示から外したが、保存済みの値は削除しない
+  //   ・スカウト受信設定: 選択欄をなくした。新規は「受け取る」、既存の設定は変更しない（既存の受信拒否の扱いは別途決定）
+  //   ・SNS: Instagram以外のリンクが保存済みなら、そのまま残す
+  const [{ data: existingPublic }, { data: existingSettings }] = await Promise.all([
+    supabase.from("stylist_profiles").select("desired_salary_range, sns_links").eq("user_id", user.id).maybeSingle(),
+    supabase.from("user_settings").select("scout_enabled").eq("user_id", user.id).maybeSingle(),
+  ]);
+  const submittedPlatforms = new Set(SNS_PLATFORMS.map((p) => p.code));
+  const keptSnsLinks = ((existingPublic?.sns_links ?? []) as SnsLink[]).filter((l) => !submittedPlatforms.has(l.platform));
+
   const { error } = await supabase.rpc("save_stylist_profile", {
     p_public_name: v.publicName,
     p_full_name: v.fullName,
@@ -109,11 +118,11 @@ export async function saveProfileAction(
     p_specialties: v.specialties,
     p_employment_type: v.employmentType,
     p_job_change_intent: v.jobChangeIntent,
-    p_desired_salary_range: v.desiredSalaryRange,
-    p_sns_links: v.snsLinks,
+    p_desired_salary_range: existingPublic?.desired_salary_range ?? null,
+    p_sns_links: [...v.snsLinks, ...keptSnsLinks],
     p_bio: v.bio || null,
     p_visibility: v.visibility,
-    p_scout_enabled: v.scoutEnabled === "true",
+    p_scout_enabled: existingSettings?.scout_enabled ?? true,
     p_avatar_path: newAvatarPath,
     p_value_priorities: v.valuePriorities,
   });
@@ -132,6 +141,7 @@ export async function saveProfileAction(
   revalidatePath("/onboarding");
   revalidatePath("/profile/edit");
   revalidatePath("/stylist/profile");
+  revalidatePath("/stylist/profile/preview");
   revalidatePath("/stylist/mypage");
   revalidatePath("/");
 
