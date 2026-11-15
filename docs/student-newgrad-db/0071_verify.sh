@@ -35,7 +35,7 @@ vfy_build_chain ${P}rb 0071
 out=$(psql -X -q -v ON_ERROR_STOP=1 -d ${P}rb -f "$(ffind 0071_rollback.draft.sql)" 2>&1); rc=$?
 vfy_chk "0071 の巻き戻しが成功" "$rc" "0"
 vfy_chk "0058 の関数が元の定義へ戻る" "$(psql -X -Atq -d ${P}rb -c "select md5(prosrc) from pg_proc where proname='commit_diagnosis_result'")|$(psql -X -Atq -d ${P}rb -c "select md5(prosrc) from pg_proc where proname='_trg_diagnosis_results_limit'")" "04fe4af9ea696398239f95f6f984b6f6|15df323841beef4372b72dc2e2d488e4"
-vfy_chk "公開判定は 0070 の定義へ戻る（区分の参照なし）" "$(psql -X -Atq -d ${P}rb -c "select (position('career_phase' in prosrc)=0)::text from pg_proc where proname='stylist_salon_publishable'")" "true"
+vfy_chk "公開判定は 0071 では変わらない（0070の定義のまま・区分の参照なし）" "$(psql -X -Atq -d ${P}rb -c "select (position('career_phase' in prosrc)=0 and position('age_display_mode' in prosrc)>0)::text from pg_proc where proname='stylist_salon_publishable'")" "true"
 out=$(psql -X -q -v ON_ERROR_STOP=1 -d ${P}rb -f "$(ffind 0071_student_newgrad.draft.sql)" 2>&1); rc=$?
 vfy_chk "巻き戻し後に 0071 を再適用できる" "$rc" "0"
 vfy_exit

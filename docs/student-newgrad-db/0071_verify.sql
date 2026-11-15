@@ -9,6 +9,7 @@ create or replace function pg_temp.try(p_sql text) returns text language plpgsql
 insert into auth.users (id,email) values ('00000000-0000-0000-0000-0000000c0001','c1@t'),('00000000-0000-0000-0000-0000000c0002','c2@t'),('00000000-0000-0000-0000-0000000c0003','c3@t') on conflict do nothing;
 insert into public.profiles (id,role) values ('00000000-0000-0000-0000-0000000c0001','stylist'),('00000000-0000-0000-0000-0000000c0002','stylist'),('00000000-0000-0000-0000-0000000c0003','stylist') on conflict do nothing;
 insert into public.user_roles (user_id,role) values ('00000000-0000-0000-0000-0000000c0001','stylist'),('00000000-0000-0000-0000-0000000c0002','stylist'),('00000000-0000-0000-0000-0000000c0003','stylist') on conflict do nothing;
+insert into public.stylist_private (user_id, birth_date, age_display_mode) select u, (current_date - interval '30 years')::date, 'exact' from unnest(array['00000000-0000-0000-0000-0000000c0001','00000000-0000-0000-0000-0000000c0002','00000000-0000-0000-0000-0000000c0003']::uuid[]) u on conflict (user_id) do update set birth_date=excluded.birth_date;
 insert into public.stylist_profiles (user_id) values ('00000000-0000-0000-0000-0000000c0001'),('00000000-0000-0000-0000-0000000c0002') on conflict do nothing;
 grant select on public.stylist_profiles to authenticated;
 
@@ -149,7 +150,7 @@ reset role;
 do $$
 declare u uuid := '00000000-0000-0000-0000-0000000c0003'; r1 uuid := gen_random_uuid(); r2 uuid := gen_random_uuid(); a jsonb; b jsonb; n1 int; n2 int; cc int; cur record;
 begin
-  insert into public.stylist_profiles (user_id) values (u) on conflict do nothing;
+  insert into public.stylist_profiles (user_id) values (u) on conflict do nothing;  -- 生年月日は冒頭で登録済み（必須）
   set local role service_role;
   a := pg_temp.ecommit(u, r1, '[5,5]'::jsonb);
   b := pg_temp.scommit(u, r2, pg_temp.ans('z'));

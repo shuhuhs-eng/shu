@@ -25,6 +25,7 @@ import {
   JOB_CHANGE_INTENT_LABELS,
 } from "@/lib/validation/profile-options";
 import { BirthDateField } from "@/components/profile/birth-date-field";
+import { AgeDisplayModeField } from "@/components/profile/age-display-mode-field";
 import type { ProfileFormInitialValues } from "@/components/profile/profile-form";
 
 const STEP_LABELS = ["基本情報", "キャリア", "希望条件", "働き方・価値観"];
@@ -101,6 +102,10 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
       if (!get("fullName")) return "氏名を入力してください";
       if (!get("ageBand")) return "年代を選択してください";
       if (!get("gender")) return "性別を選択してください";
+      if (initialValues.birthDateSupported) {
+        if (!get("birthDate")) return "生年月日を入力してください";
+        if (!get("ageDisplayMode")) return "サロンへの年齢の表示方法を選択してください";
+      }
       return null;
     }
     if (targetStep === 2) {
@@ -238,7 +243,10 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
               </p>
             )}
             {initialValues.birthDateSupported && (
-              <BirthDateField defaultValue={initialValues.birthDate} errors={state.fieldErrors?.birthDate} />
+              <>
+                <BirthDateField defaultValue={initialValues.birthDate} errors={state.fieldErrors?.birthDate} />
+                <AgeDisplayModeField defaultValue={initialValues.ageDisplayMode} errors={state.fieldErrors?.ageDisplayMode} />
+              </>
             )}
           </div>
 

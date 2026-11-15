@@ -6,6 +6,7 @@ create temp table t_log (n serial, name text, ok boolean);
 create function pg_temp.chk(p text, o boolean) returns void language sql as $$ insert into t_log(name,ok) values (p, coalesce(o,false)) $$;
 insert into auth.users (id,email) values ('00000000-0000-0000-0000-0000000cc001','cons@t') on conflict do nothing;
 insert into public.profiles (id,role) values ('00000000-0000-0000-0000-0000000cc001','stylist') on conflict do nothing;
+insert into public.stylist_private (user_id, birth_date, age_display_mode) values ('00000000-0000-0000-0000-0000000cc001', (current_date - interval '30 years')::date, 'exact') on conflict (user_id) do update set birth_date=excluded.birth_date, age_display_mode=excluded.age_display_mode;
 insert into public.stylist_profiles (user_id) values ('00000000-0000-0000-0000-0000000cc001') on conflict do nothing;
 -- 組み合わせを書き込んでみて、受理されたら true（失敗したらfalse）。毎回サブトランザクションで元に戻す。
 create function pg_temp.accepts(p_phase text, p_ym date, p_kind text, p_start date, p_lic text) returns boolean language plpgsql as $$

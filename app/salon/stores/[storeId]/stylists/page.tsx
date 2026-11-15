@@ -1,3 +1,4 @@
+import { fetchPublicStylistsForScout } from "@/lib/scouts/public-stylists";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -61,7 +62,7 @@ export default async function StoreStylistsPage({ params }: Props) {
     redirect("/salon/company");
   }
 
-  const { data: stylistsData, error } = await supabase.rpc("get_public_stylists_for_scout");
+  const { data: stylistsData, error } = await fetchPublicStylistsForScout(supabase, storeId);
   if (error) {
     console.error("[StoreStylistsPage] get_public_stylists_for_scout failed", { message: error.message, code: error.code });
   }

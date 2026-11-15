@@ -5,6 +5,8 @@ import { sendStoreScout } from "@/lib/scouts/actions";
 import { RECRUITING_PAUSED_MESSAGE } from "@/lib/contracts/recruiting-access";
 import { SCOUT_TEMPLATES, SCOUT_RESPONSE_LABELS, type ScoutTemplateType } from "@/lib/scouts/options";
 import { StylistPublicView } from "@/components/profile/stylist-public-view";
+import { AgeRequestControl } from "@/components/age-disclosure/age-request-control";
+import { formatAgeLabel } from "@/lib/profile/birth-date";
 import { MATCH_AXIS_LABELS } from "@/lib/matching/types";
 import type { StoreStylistMatchResult } from "@/lib/matching/types";
 import type { PublicStylistForScout } from "@/lib/scouts/types";
@@ -91,7 +93,7 @@ export function StoreStylistCard({ storeId, stylist, match, latestScout, recruit
               employmentType: stylist.employment_type ?? null,
               instagramHandle: stylist.instagram_handle ?? null,
               valuePriorities: stylist.value_priorities ?? null,
-              age: stylist.age ?? null,
+              ageLabel: formatAgeLabel(stylist),
             }}
           />
         </div>
@@ -104,6 +106,8 @@ export function StoreStylistCard({ storeId, stylist, match, latestScout, recruit
           </div>
         )}
       </div>
+
+      <AgeRequestControl storeId={storeId} stylistUserId={stylist.stylist_user_id} status={stylist.age_request_status} recruitingPaused={recruitingPaused} />
 
       {match?.available && (
         <details className="mt-4 border-t border-line pt-3">

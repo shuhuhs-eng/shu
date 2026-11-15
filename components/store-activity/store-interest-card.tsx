@@ -4,6 +4,9 @@ import { JOB_CHANGE_INTENT_LABELS } from "@/lib/validation/profile-options";
 import { CAREER_GOAL_LABELS, type CareerGoalCode } from "@/lib/match-profile/options";
 import { formatJstDateTime } from "@/lib/store-activity/format";
 import type { StoreReceivedInterest, StoreSalaryOffer } from "@/lib/store-activity/types";
+import type { StoreAgeInfo } from "@/lib/age-disclosure/actions";
+import { AgeRequestControl } from "@/components/age-disclosure/age-request-control";
+import { formatAgeLabel } from "@/lib/profile/birth-date";
 
 type Props = {
   storeId: string;
@@ -12,6 +15,8 @@ type Props = {
   latestOffer: StoreSalaryOffer | null;
   /** 新しい採用活動を受け付けていない店舗か（給与オファーの新規作成を止める）。 */
   recruitingPaused?: boolean;
+  /** 年齢情報（get_store_stylist_age_infos）。無い（未対応・取得失敗）ときは年齢を表示しない。 */
+  ageInfo?: StoreAgeInfo | null;
 };
 
 const VERIFICATION_LABELS: Record<string, string> = {
@@ -29,7 +34,8 @@ const VERIFICATION_LABELS: Record<string, string> = {
  * 給与オファーのフォームは、DB側(create_salary_offer_v2)の条件と同じ
  * 「実績に基づくオファーを希望」かつ「提出資料の確認済み」の美容師にだけ表示する。
  */
-export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPaused = false }: Props) {
+export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPaused = false, ageInfo = null }: Props) {
+  const ageLabel = ageInfo && ageInfo.age_request_status !== "unavailable" ? formatAgeLabel(ageInfo) : null;
   const mp = interest.match_profile;
   const match = interest.match;
   const canOffer = !!mp && mp.wants_performance_offer && mp.verification_status === "verified";
@@ -43,6 +49,7 @@ export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPa
             {[interest.prefecture, interest.current_position].filter(Boolean).join(" / ") ||
               "プロフィール情報未設定"}
           </p>
+          {ageLabel && <p className="mt-1 text-[12px] text-charcoal">年齢: {ageLabel}</p>}
           <p className="mt-1 text-[10.5px] text-sub">{formatJstDateTime(interest.created_at)} に送信</p>
         </div>
         <div className="shrink-0 text-right">
@@ -61,6 +68,8 @@ export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPa
           )}
         </div>
       </div>
+
+      {ageInfo && <AgeRequestControl storeId={storeId} stylistUserId={interest.stylist_user_id} status={ageInfo.age_request_status} recruitingPaused={recruitingPaused} />}
 
       {interest.desired_work_location && (
         <p className="mt-3 text-[12.5px] text-charcoal">希望勤務地: {interest.desired_work_location}</p>

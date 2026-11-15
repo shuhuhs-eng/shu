@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { getStoreReceivedInterests, getStoreSalaryOffers } from "@/lib/store-activity/actions";
+import { getStoreStylistAgeInfos } from "@/lib/age-disclosure/actions";
 import type { StoreSalaryOffer } from "@/lib/store-activity/types";
 import { StorePageShell } from "@/components/store-activity/store-page-shell";
 import { StoreInterestCard } from "@/components/store-activity/store-interest-card";
@@ -66,6 +67,9 @@ export default async function StoreInterestsPage({ params }: Props) {
     getStoreSalaryOffers(storeId),
   ]);
 
+  // 年齢情報（実年齢表示・承認済みの店舗だけ実年齢。年代表示は年代のみ。取得できなければ年齢は出さない）
+  const ageInfos = await getStoreStylistAgeInfos(storeId, (interests ?? []).map((i) => i.stylist_user_id));
+
   // 美容師ごとの最新の給与オファー（get_store_salary_offersは新しい順）。
   const latestOfferByStylist = new Map<string, StoreSalaryOffer>();
   for (const offer of offers ?? []) {
@@ -93,6 +97,7 @@ export default async function StoreInterestsPage({ params }: Props) {
                 storeId={storeId}
                 recruitingPaused={recruitingPaused}
                 interest={interest}
+                ageInfo={ageInfos[interest.stylist_user_id] ?? null}
                 latestOffer={latestOfferByStylist.get(interest.stylist_user_id) ?? null}
               />
               <AddCandidateButton

@@ -150,9 +150,9 @@ test("サロン向け表示: 項目を整理して表示。年齢は値がある
   for (const w of ["基本情報", "経験", "希望する働き方", "さくら", "5年", "カット", "横浜", "自己紹介"]) assert.ok(html.includes(w), w);
   assert.ok(!html.includes("年齢"));
   // DB未対応（extended未指定）のときは、従来の項目だけ。年齢・雇用形態・Instagram・大切にしたいことは出さない。
-  const legacy = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, age: 29, instagramHandle: "x", employmentType: "full_time" as const } }));
+  const legacy = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, ageLabel: "29歳", instagramHandle: "x", employmentType: "full_time" as const } }));
   assert.ok(!/年齢|雇用形態|Instagram/.test(legacy));
-  const withAge = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, extended: true, age: 29 } }));
+  const withAge = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, extended: true, ageLabel: "29歳" } }));
   assert.match(withAge, /29歳/);
   assert.ok(!/氏名|性別|年代|生年月日|希望年収/.test(withAge));
   const long = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, bio: "あ".repeat(200) } }));
@@ -199,7 +199,7 @@ test("給与条件の提示の一時停止: 既定は停止中。環境変数 fa
 
 test("サロン向け表示（0070対応）: 画像・雇用形態・Instagram・大切にしたいこと・年齢。未登録は「未登録」と表示。個人情報は出さない", () => {
   const base = { publicName: "さくら", prefecture: "東京都", currentPosition: null, experienceYears: 3, desiredWorkLocation: null, jobChangeIntent: "active" as const, specialties: ["カット"], bio: null, extended: true };
-  const html = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, avatarUrl: "https://example.test/a.webp", employmentType: "full_time" as const, instagramHandle: "sakura_hair", valuePriorities: ["work_life_balance", "unknown_code"], age: 28 } }));
+  const html = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, avatarUrl: "https://example.test/a.webp", employmentType: "full_time" as const, instagramHandle: "sakura_hair", valuePriorities: ["work_life_balance", "unknown_code"], ageLabel: "28歳" } }));
   assert.match(html, /<img[^>]+a\.webp/);
   assert.match(html, /28歳/);
   assert.match(html, /雇用形態/);
@@ -208,7 +208,7 @@ test("サロン向け表示（0070対応）: 画像・雇用形態・Instagram�
   assert.match(html, /サロン選びで大切にしたいこと/);
   assert.match(html, /ワークライフバランス重視/);
   assert.ok(!html.includes("unknown_code"));
-  const none = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, age: null } }));
+  const none = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, ageLabel: null } }));
   assert.match(none, /未登録/);
   assert.ok(!/<img/.test(none)); // 画像なしは頭文字の丸
   assert.ok(!/氏名|性別|年代|生年月日|希望年収/.test(html + none));
@@ -231,19 +231,20 @@ test("生年月日: 満年齢は誕生日の前日までは上がらない。範
   assert.match(todayJst(new Date("2026-11-14T16:00:00Z")), /^2026-11-15$/); // 日本時間
 });
 
-test("生年月日の保存入力: 項目なし(DB未対応)は何もしない・空は未登録に戻す・不正は拒否", () => {
+test("生年月日の保存入力（確定方針）: 項目なし(DB未対応)は何もしない・空は必須エラー（未登録に戻せない）・不正は拒否", () => {
   const ok = { publicName: "A", prefecture: "東京都", experienceYears: "3", specialties: ["カット"], employmentType: "full_time", jobChangeIntent: "active", snsLinks: [], fullName: "山田", ageBand: "25_29", gender: "female", valuePriorities: ["work_life_balance", "skill_growth", "teamwork"], visibility: "PUBLIC" };
   const none = profileFormSchema.safeParse(ok);
   assert.ok(none.success); assert.equal(none.data.birthDate, undefined);
   const empty = profileFormSchema.safeParse({ ...ok, birthDate: "" });
-  assert.ok(empty.success); assert.equal(empty.data.birthDate, "");
+  assert.ok(!empty.success); // 項目があるのに空は拒否（登録済みの生年月日を消して必須条件を回避できない）
   assert.ok(profileFormSchema.safeParse({ ...ok, birthDate: "1995-06-15" }).success);
   assert.ok(!profileFormSchema.safeParse({ ...ok, birthDate: "2999-01-01" }).success);
   assert.ok(!profileFormSchema.safeParse({ ...ok, birthDate: "abc" }).success);
   const field = renderToStaticMarkup(createElement(BirthDateField, { defaultValue: "1995-06-15" }));
   assert.match(field, /type="date"/);
   assert.match(field, /value="1995-06-15"/);
-  assert.match(field, /未登録/);
+  assert.match(field, /required/);
+  assert.match(field, /登録が済むまで/);
 });
 
 test("生年月日の未対応判定: 列が存在しないときだけ unsupported。権限・通信エラーは error（従来表示へ切り替えない）", async () => {

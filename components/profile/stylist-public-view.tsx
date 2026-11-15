@@ -23,7 +23,8 @@ export type StylistPublicViewData = {
   /** サロン選びで大切にしたいこと（コード。配列の順が優先順位）。 */
   valuePriorities?: string[] | null;
   /** 満年齢。未登録はnull（年代などから推測しない）。生年月日そのものは扱わない。 */
-  age?: number | null;
+  /** 年齢の表記（例: 「45歳」「40代」）。nullは未登録（サロン向けには出ない状態。推測しない）。 */
+  ageLabel?: string | null;
 };
 
 const VALUE_LABEL = new Map(VALUE_PRIORITY_OPTIONS.map((o) => [o.code, o.label]));
@@ -79,7 +80,7 @@ export function StylistPublicView({ data }: { data: StylistPublicViewData }) {
           <p className="mb-0.5 text-[11px] font-bold tracking-wide text-sub">基本情報</p>
           <dl>
             <Row label="都道府県">{data.prefecture || "未設定"}</Row>
-            {ext && <Row label="年齢">{data.age != null ? `${data.age}歳` : "未登録"}</Row>}
+            {ext && <Row label="年齢">{data.ageLabel ?? "未登録"}</Row>}
             {ext && data.instagramHandle && (
               <Row label="Instagram">
                 <a href={`https://www.instagram.com/${encodeURIComponent(data.instagramHandle)}/`} target="_blank" rel="noopener noreferrer" className="break-all underline">

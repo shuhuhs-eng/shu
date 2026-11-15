@@ -67,3 +67,45 @@ export async function readOwnBirthDate(
   if (error) return isMissingBirthDateColumn(error) ? { status: "unsupported" } : { status: "error" };
   return { status: "ok", birthDate: data?.birth_date ?? null };
 }
+
+export type AgeDisplayMode = "exact" | "decade";
+export const AGE_DISPLAY_MODES: ReadonlyArray<{ value: AgeDisplayMode; label: string; example: string }> = [
+  { value: "exact", label: "実年齢で表示", example: "例: 45歳" },
+  { value: "decade", label: "年代で表示", example: "例: 40代" },
+];
+
+export function isAgeDisplayMode(v: unknown): v is AgeDisplayMode {
+  return v === "exact" || v === "decade";
+}
+
+/** 満年齢から年代（10の位）。 */
+export function decadeOf(age: number): number {
+  return Math.floor(age / 10) * 10;
+}
+
+/** サロン向けの年齢表記。実年齢が許可されていれば「45歳」、年代だけなら「40代」、どちらも無ければnull（推測しない）。 */
+export function formatAgeLabel(info: { age?: number | null; age_decade?: number | null }): string | null {
+  if (typeof info.age === "number") return `${info.age}歳`;
+  if (typeof info.age_decade === "number") return `${info.age_decade}代`;
+  return null;
+}
+
+export type AgeDisplayModeRead =
+  | { status: "ok"; mode: AgeDisplayMode | null }
+  | { status: "unsupported" }
+  | { status: "error" };
+
+/** 本人の表示方法を読む。列が無い（0070未適用）なら unsupported。それ以外の失敗は error。 */
+export async function readOwnAgeDisplayMode(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<AgeDisplayModeRead> {
+  const { data, error } = await supabase.from("stylist_private").select("age_display_mode").eq("user_id", userId).maybeSingle();
+  if (error) {
+    return error.code === "42703" || error.code === "PGRST204" || /column\b.*age_display_mode.*does not exist/i.test(error.message ?? "")
+      ? { status: "unsupported" }
+      : { status: "error" };
+  }
+  const m = data?.age_display_mode ?? null;
+  return { status: "ok", mode: isAgeDisplayMode(m) ? m : null };
+}

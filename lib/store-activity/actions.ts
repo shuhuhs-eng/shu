@@ -1,5 +1,6 @@
 "use server";
 
+import { fetchPublicStylistsForScout } from "@/lib/scouts/public-stylists";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -111,7 +112,7 @@ export async function getStoreStylistNameMap(storeId: string): Promise<Record<st
   const supabase = await createClient();
   const [interestsResult, publicResult] = await Promise.all([
     supabase.rpc("get_store_received_interests", { p_store_id: parsed.data }),
-    supabase.rpc("get_public_stylists_for_scout"),
+    fetchPublicStylistsForScout(supabase, parsed.data),
   ]);
 
   const names: Record<string, string> = {};

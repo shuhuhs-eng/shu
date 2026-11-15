@@ -68,16 +68,31 @@ export const profileFormSchema = z.object({
   fullName: z.string().trim().min(1, "氏名を入力してください").max(60, "60文字以内で入力してください"),
   ageBand: ageBandEnum,
   gender: genderEnum,
-  // 生年月日（本人のみ確認・編集。サロンには満年齢だけを返す）。DB未対応のときは入力欄ごと出さないため、項目が無い(undefined)場合は何もしない。空文字は「未登録に戻す」。
+  // 生年月日（必須。本人のみ確認・編集。サロンへは公開せず、満年齢または年代だけを返す）。
+  // DB未対応（0070未適用）のときは入力欄ごと出さないため、項目が無い(undefined)場合だけ検査しない。
+  // 項目があるのに空なら必須エラー（登録済みの生年月日を空にして「未登録に戻す」ことはできない）。
   birthDate: z
     .string()
     .trim()
     .optional()
     .superRefine((v, ctx) => {
-      if (!v) return;
+      if (v === undefined) return;
+      if (!v) {
+        ctx.addIssue({ code: "custom", message: "生年月日を入力してください" });
+        return;
+      }
       const msg = validateBirthDate(v);
       if (msg) ctx.addIssue({ code: "custom", message: msg });
     }),
+  // サロンへの年齢の表示方法（必須の初回選択。exact=実年齢 / decade=年代）。項目が無い(undefined)のはDB未対応のときだけ。
+  ageDisplayMode: z
+    .string()
+    .optional()
+    .superRefine((v, ctx) => {
+      if (v === undefined) return;
+      if (v !== "exact" && v !== "decade") ctx.addIssue({ code: "custom", message: "年齢の表示方法を選択してください" });
+    })
+    .transform((v) => (v === "exact" || v === "decade" ? (v as "exact" | "decade") : undefined)),
 
   // --- 働き方・価値観（stylist_profiles.value_priorities） ---
   // 候補約12項目から、重要な3つを優先順位付きで選択する（ちょうど3件必須）。

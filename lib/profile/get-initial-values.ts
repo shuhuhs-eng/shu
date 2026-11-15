@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import type { ProfileFormInitialValues } from "@/components/profile/profile-form";
 import { getAvatarSignedUrl } from "@/lib/storage/avatar";
-import { readOwnBirthDate } from "@/lib/profile/birth-date";
+import { readOwnAgeDisplayMode, readOwnBirthDate } from "@/lib/profile/birth-date";
 
 /**
  * 公開範囲の初期値。
@@ -38,11 +38,12 @@ export async function getProfileFormInitialValues(
   userId: string,
   fallbackPublicName: string | null = null,
 ): Promise<{ initialValues: ProfileFormInitialValues }> {
-  const [{ data: profile }, { data: priv }, { data: pub }, birth] = await Promise.all([
+  const [{ data: profile }, { data: priv }, { data: pub }, birth, ageMode] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).single(),
     supabase.from("stylist_private").select("*").eq("user_id", userId).maybeSingle(),
     supabase.from("stylist_profiles").select("*").eq("user_id", userId).maybeSingle(),
     readOwnBirthDate(supabase, userId),
+    readOwnAgeDisplayMode(supabase, userId),
   ]);
 
   const avatarPath = profile?.avatar_path ?? null;
@@ -55,7 +56,8 @@ export async function getProfileFormInitialValues(
     gender: priv?.gender ?? "",
     birthDate: birth.status === "ok" ? (birth.birthDate ?? "") : "",
     birthDateSupported: birth.status === "ok",
-    birthDateLoadFailed: birth.status === "error",
+    birthDateLoadFailed: birth.status === "error" || ageMode.status === "error",
+    ageDisplayMode: ageMode.status === "ok" ? (ageMode.mode ?? "") : "",
     prefecture: pub?.prefecture ?? "",
     desiredWorkLocation: pub?.desired_work_location ?? "",
     experienceYears: pub?.experience_years != null ? String(pub.experience_years) : "",

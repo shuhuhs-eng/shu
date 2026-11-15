@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { profileFormSchema } from "@/lib/validation/profile";
+import { readOwnAgeDisplayMode } from "@/lib/profile/birth-date";
 import { SNS_PLATFORMS } from "@/lib/validation/profile-options";
 import type { AuthActionState } from "@/lib/auth/types";
 import type { SnsLink } from "@/types/database";
@@ -63,6 +64,7 @@ export async function saveProfileAction(
     ageBand: formData.get("ageBand"),
     gender: formData.get("gender"),
     birthDate: formData.get("birthDate") ?? undefined,
+    ageDisplayMode: formData.get("ageDisplayMode") ?? undefined,
     valuePriorities: formData.getAll("valuePriorities"),
     visibility: formData.get("visibility"),
   };
@@ -107,7 +109,17 @@ export async function saveProfileAction(
   const submittedPlatforms = new Set(SNS_PLATFORMS.map((p) => p.code));
   const keptSnsLinks = ((existingPublic?.sns_links ?? []) as SnsLink[]).filter((l) => !submittedPlatforms.has(l.platform));
 
-  const { error } = await supabase.rpc("save_stylist_profile", {
+  // DBが年齢仕様（0070）に対応しているかは「サーバー側でDBを読んで」判断する。フォームの項目欠落（未選択のラジオは送信されない）では判断しない。
+  //   ・対応済み: 生年月日と表示方法が必須。欠落・未選択は保存せずエラー。保存は save_stylist_profile_v2 の1回（1トランザクション）。
+  //     途中で失敗すると生年月日・表示方法・公開設定を含めすべて取り消される。
+  //   ・未対応（0070未適用）: 従来の save_stylist_profile で保存する。
+  //   ・判定できない（読み取りエラー）: 推測せず保存しない。
+  const support = await readOwnAgeDisplayMode(supabase, user.id);
+  if (support.status === "error") {
+    return { error: "保存に失敗しました。しばらくしてから再度お試しください。" };
+  }
+
+  const common = {
     p_public_name: v.publicName,
     p_full_name: v.fullName,
     p_age_band: v.ageBand,
@@ -126,20 +138,29 @@ export async function saveProfileAction(
     p_scout_enabled: existingSettings?.scout_enabled ?? true,
     p_avatar_path: newAvatarPath,
     p_value_priorities: v.valuePriorities,
-  });
+  };
+
+  let error: { message?: string } | null;
+  if (support.status === "unsupported") {
+    ({ error } = await supabase.rpc("save_stylist_profile", common));
+  } else {
+    const fieldErrors: Record<string, string[]> = {};
+    if (v.birthDate === undefined) fieldErrors.birthDate = ["生年月日を入力してください"];
+    if (v.ageDisplayMode === undefined) fieldErrors.ageDisplayMode = ["年齢の表示方法を選択してください"];
+    if (v.birthDate === undefined || v.ageDisplayMode === undefined) {
+      return { error: "入力内容をご確認ください。", fieldErrors };
+    }
+    ({ error } = await supabase.rpc("save_stylist_profile_v2", {
+      ...common,
+      p_birth_date: v.birthDate,
+      p_age_display_mode: v.ageDisplayMode,
+    }));
+  }
 
   if (error) {
     // 固定パス方式のため、失敗時にStorage側を削除する補償処理は行わない
     // （削除すると既存の正常なアバターを消してしまう可能性があるため）。
     return { error: "保存に失敗しました。しばらくしてから再度お試しください。" };
-  }
-
-  // 生年月日（入力欄があるときだけ＝DB対応時のみ）。プロフィール本体の保存後に、専用RPCで本人分だけ保存する。
-  if (v.birthDate !== undefined) {
-    const { error: birthError } = await supabase.rpc("set_stylist_birth_date", { p_birth_date: v.birthDate || null });
-    if (birthError) {
-      return { error: "プロフィールは保存しましたが、生年月日を保存できませんでした。もう一度お試しください。" };
-    }
   }
 
   // 保存成功後にのみ、不要になった旧画像を削除する。

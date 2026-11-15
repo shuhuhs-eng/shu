@@ -319,25 +319,7 @@ $$;
 revoke all on function public.commit_student_diagnosis(uuid, uuid, text, jsonb, jsonb) from public, anon, authenticated, service_role;
 grant execute on function public.commit_student_diagnosis(uuid, uuid, text, jsonb, jsonb) to service_role;
 
--- ---------------------------------------------------------------------------
--- 6. サロン公開の保留: 区分が「美容学生・新卒」で生年月日が未登録の人は、年齢未確認のため保留する。
---    ・年齢未登録を成人と推定しない。満18歳未満と分かる人は0070の規則で保留（フラグ minor_salon_public が保留のあいだ）。
---    ・区分未設定・経験者で生年月日が未登録の既存会員は、従来どおり表示（年齢は「年齢未登録」＝null）。
---    ・解除はフラグの運営操作のみ（別承認）。0070（前提）の同名関数を置き換える。
--- ---------------------------------------------------------------------------
-create or replace function public.stylist_salon_publishable(p_user_id uuid)
-returns boolean language sql stable security definer set search_path = public, pg_temp
-as $$
-  select not coalesce(
-    coalesce((select paused from public.feature_pauses where feature = 'minor_salon_public'), true)
-    and (
-      coalesce((select public.stylist_age_years(birth_date) < 18 from public.stylist_private where user_id = p_user_id), false)
-      or (
-        coalesce((select birth_date is null from public.stylist_private where user_id = p_user_id), true)
-        and exists (select 1 from public.stylist_profiles sp where sp.user_id = p_user_id and sp.career_phase in ('student','new_graduate'))
-      )
-    ), false)
-$$;
-revoke all on function public.stylist_salon_publishable(uuid) from public, anon, authenticated, service_role;
+-- （サロン公開の判定 stylist_salon_publishable は 0070 の確定方針で定義済み: 生年月日登録・表示方法の選択・正確な満年齢。
+--   0071 では置き換えない。区分（学生・新卒）による別扱いもしない。）
 
 commit;

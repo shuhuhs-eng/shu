@@ -22,6 +22,7 @@ import { getNotificationsForBell } from "@/lib/notifications/get-notifications";
 import { getMyHiringProcesses } from "@/lib/hiring/actions";
 import { isClosedStatus } from "@/lib/hiring/format";
 import { nowMs } from "@/lib/perf/timer";
+import { readOwnAgeDisplayMode, readOwnBirthDate } from "@/lib/profile/birth-date";
 import { calculateCoreType, type CoreTypeCode } from "@/lib/diagnosis/core-types";
 
 type AiOutputRow = Database["public"]["Tables"]["diagnosis_ai_outputs"]["Row"];
@@ -55,6 +56,8 @@ export default async function StylistMyPage() {
   // role未完了の場合はこの直後にredirectするので、並列に取得した結果は使われず破棄される。
   const [
     hasStylistRole,
+    birthRead,
+    ageModeRead,
     { data: latest },
     { data: preferenceProfile },
     { data: matchProfile, error: matchProfileError },
@@ -67,6 +70,8 @@ export default async function StylistMyPage() {
     { notifications, unreadCount },
   ] = await Promise.all([
     hasCompletedRole(supabase, user.id, "stylist"),
+    readOwnBirthDate(supabase, user.id),
+    readOwnAgeDisplayMode(supabase, user.id),
     supabase
       .from("diagnosis_results")
       .select("*")
@@ -97,6 +102,15 @@ export default async function StylistMyPage() {
   if (!hasStylistRole) {
     redirect("/onboarding");
   }
+
+  // 生年月日・表示方法の登録案内。両方読めた（=DB対応）ときだけ判定する。
+  const ageRegistration: { needed: boolean; missing: string } =
+    birthRead.status === "ok" && ageModeRead.status === "ok" && (birthRead.birthDate == null || ageModeRead.mode == null)
+      ? {
+          needed: true,
+          missing: birthRead.birthDate == null && ageModeRead.mode == null ? "生年月日の登録と年齢の表示方法の選択が必要です" : birthRead.birthDate == null ? "生年月日の登録が必要です" : "年齢の表示方法の選択が必要です",
+        }
+      : { needed: false, missing: "" };
 
   // 最新の診断（latest）に紐づくAI解説と8タイプ判定の履歴は、latest.id が決まってから並列に取得する。
   const aiByType: Partial<Record<AiOutputType, unknown>> = {};
@@ -179,6 +193,16 @@ export default async function StylistMyPage() {
       </div>
 
       {!showNewStylistDesign && <h1 className="mt-5 font-serif text-2xl font-bold text-ink">マイページ</h1>}
+
+      {/* 生年月日の登録と年齢の表示方法の選択が済むまで、サロン向けの一覧には表示されない。ログインや他の機能は妨げず、入力を案内する。
+          読み込めない場合（未対応のDB・通信エラー）は案内を出さない（誤って「未登録」と伝えない）。 */}
+      {ageRegistration.needed && (
+        <p role="status" className="mt-4 rounded-xl border border-[#C98A1B]/40 bg-[#C98A1B]/[0.08] px-4 py-3 text-[13px] leading-relaxed text-[#7A5410]">
+          <span className="font-bold">【サロンにはまだ表示されていません】</span>
+          {ageRegistration.missing}。
+          <Link href="/stylist/profile" className="font-semibold underline">プロフィール</Link>で登録すると、サロン向けの一覧に表示されます。
+        </p>
+      )}
 
       {showNewStylistDesign && coreTypeCode && traitScores && latest ? (
         <>
@@ -314,6 +338,15 @@ export default async function StylistMyPage() {
           {offerPendingCount > 0 && (
             <span className="rounded-full bg-[#C24545] px-2.5 py-1 text-[10px] font-bold text-white">回答待ち</span>
           )}
+        </Link>
+        <Link
+          href="/stylist/age-requests"
+          className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span>
+            <span className="eyebrow block">年齢の開示依頼</span>
+            <span className="mt-1 block text-[13px] text-charcoal">サロンからの実年齢の開示依頼を確認して、承認・辞退できます</span>
+          </span>
         </Link>
         <Link
           href="/stylist/applications"

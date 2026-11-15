@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { StylistPublicView } from "@/components/profile/stylist-public-view";
 import { StatusPanel } from "@/components/error-panel";
 import { initialVisibility } from "@/lib/profile/get-initial-values";
-import { ageOn, readOwnBirthDate, todayJst } from "@/lib/profile/birth-date";
+import { ageOn, decadeOf, readOwnAgeDisplayMode, readOwnBirthDate, todayJst } from "@/lib/profile/birth-date";
 import { readPublicExtendedStatus } from "@/lib/profile/public-extended";
 import { getAvatarSignedUrl } from "@/lib/storage/avatar";
 import type { SnsLink } from "@/types/database";
@@ -30,8 +30,17 @@ export default async function StylistProfilePreviewPage() {
   ]);
   // 追加表示が「いまサロンに出ているか」は、DBの機能フラグで判定する（生年月日の列の有無では判定しない）。
   const extended = extStatus === "enabled";
-  const birth = extended ? await readOwnBirthDate(supabase, user.id) : ({ status: "unsupported" } as const);
+  const [birth, ageMode] = extended
+    ? await Promise.all([readOwnBirthDate(supabase, user.id), readOwnAgeDisplayMode(supabase, user.id)])
+    : ([{ status: "unsupported" }, { status: "unsupported" }] as const);
   const birthDate = birth.status === "ok" ? birth.birthDate : null;
+  const mode = ageMode.status === "ok" ? ageMode.mode : null;
+  const age = ageOn(birthDate, todayJst());
+  // サロン向けの年齢の表記（選んだ方法のとおり。未登録・未選択は出ない＝推測しない）。承認前のサロンには、年代表示なら年代だけが出る。
+  const ageLabel = age == null || mode == null ? null : mode === "exact" ? `${age}歳` : `${decadeOf(age)}代`;
+  const heldReason = extended && (birth.status === "ok" || ageMode.status === "ok")
+    ? birthDate == null ? "生年月日が未登録です" : mode == null ? "年齢の表示方法が未選択です" : null
+    : null;
   const avatarUrl = extended ? await getAvatarSignedUrl(supabase, profile?.avatar_path ?? null) : null;
   const instagramHandle = ((pub?.sns_links ?? []) as SnsLink[]).find((l) => l.platform === "instagram")?.handle || null;
 
@@ -42,7 +51,7 @@ export default async function StylistProfilePreviewPage() {
   );
 
   // 生年月日の読み込み失敗は「未対応」ではない。従来表示に切り替えず、エラーとして伝える。
-  if (error || extStatus === "error" || birth.status === "error") {
+  if (error || extStatus === "error" || birth.status === "error" || ageMode.status === "error") {
     return (
       <StatusPanel
         title="プレビューを表示できませんでした"
@@ -81,6 +90,13 @@ export default async function StylistProfilePreviewPage() {
             {visibility === "PUBLIC" ? "サロンの一覧に表示され、スカウトを受け取れます。" : "サロンの一覧・検索には表示されません。下は、公開した場合の表示です。"}
           </p>
 
+          {heldReason && (
+            <p role="alert" className="mt-3 rounded-xl border border-[#C24545]/40 bg-[#C24545]/[0.06] px-4 py-3 text-[13px] leading-relaxed text-[#8A2E2E]">
+              <span className="font-bold">【サロンには表示されていません】</span>
+              {heldReason}。<Link href="/stylist/profile" className="underline">プロフィール編集</Link>で登録すると、サロン向けの一覧に表示されます。
+            </p>
+          )}
+
           <div className="mt-5 rounded-2xl border border-line bg-surface p-5">
             <StylistPublicView
               data={{
@@ -97,7 +113,7 @@ export default async function StylistProfilePreviewPage() {
                 employmentType: pub.employment_type,
                 instagramHandle,
                 valuePriorities: pub.value_priorities,
-                age: ageOn(birthDate, todayJst()),
+                ageLabel,
               }}
             />
           </div>
@@ -105,7 +121,7 @@ export default async function StylistProfilePreviewPage() {
           <p className="mt-4 text-[12px] leading-relaxed text-sub">
             氏名・性別・年代・生年月日・希望年収帯は、サロンには表示されません（保存済みの内容は削除されません）。
             {extended
-              ? "年齢は満年齢だけが表示され、生年月日が未入力の場合は「未登録」と表示されます。"
+              ? "年齢は、選んだ方法（実年齢または年代）でだけ表示されます。年代で表示している場合、実年齢の開示を依頼したサロンに承認すると、そのサロンにだけ実年齢が表示されます（承認の確認は「年齢の開示依頼」から）。"
               : "プロフィール画像・雇用形態・Instagram・大切にしたいこと・年齢は、現在サロンには表示されていません（サービスの更新前、または一時停止中）。表示が始まると、このプレビューにも同じ内容が出ます。"}
           </p>
         </>

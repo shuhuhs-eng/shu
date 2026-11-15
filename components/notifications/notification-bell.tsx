@@ -20,6 +20,8 @@ const TYPE_LABELS: Record<string, string> = {
   evidence_rejected: "実績確認",
   interview_action_required: "次のアクション",
   stylist_interest_received: "意思表示",
+  age_disclosure_requested: "年齢の開示依頼",
+  age_disclosure_approved: "年齢の開示",
   hiring_interview_scheduled: "面談予定",
   hiring_interview_rescheduled: "面談日時の変更",
   hiring_status_updated: "選考状況",
@@ -64,6 +66,10 @@ function targetHref(notification: NotificationRow, role: "stylist" | "salon"): s
     case "salary_offer_declined":
     case "stylist_interest_received":
       return "/salon/mypage#interests";
+    case "age_disclosure_requested":
+      return "/stylist/age-requests";
+    case "age_disclosure_approved":
+      return "/salon/mypage";
     case "evidence_verified":
     case "evidence_rejected":
       return "/stylist/match-profile#evidence";

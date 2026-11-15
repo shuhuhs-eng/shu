@@ -15,6 +15,7 @@ import { AvatarUploader } from "@/components/profile/avatar-uploader";
 import { SnsLinksField } from "@/components/profile/sns-links-field";
 import { ValuePrioritySelector } from "@/components/profile/value-priority-selector";
 import { BirthDateField } from "@/components/profile/birth-date-field";
+import { AgeDisplayModeField } from "@/components/profile/age-display-mode-field";
 import { VisibilityField } from "@/components/profile/visibility-field";
 import { profileFieldsKey } from "@/lib/profile/fields-key";
 import {
@@ -28,6 +29,7 @@ import {
 } from "@/lib/validation/profile-options";
 import type {
   AgeBand,
+  AgeDisplayMode,
   EmploymentType,
   GenderType,
   JobChangeIntent,
@@ -45,6 +47,8 @@ export type ProfileFormInitialValues = {
   birthDateSupported: boolean;
   /** 生年月日の読み込みに失敗した（未対応ではない）。入力欄は出さず、保存でも生年月日は変更しない。 */
   birthDateLoadFailed: boolean;
+  /** 年齢の表示方法（本人の選択）。未選択は空文字（既存会員を勝手に実年齢表示にしない）。 */
+  ageDisplayMode: AgeDisplayMode | "";
   prefecture: string;
   desiredWorkLocation: string;
   experienceYears: string;
@@ -205,7 +209,10 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
               </p>
             )}
             {initialValues.birthDateSupported && (
-              <BirthDateField defaultValue={initialValues.birthDate} errors={state.fieldErrors?.birthDate} />
+              <>
+                <BirthDateField defaultValue={initialValues.birthDate} errors={state.fieldErrors?.birthDate} />
+                <AgeDisplayModeField defaultValue={initialValues.ageDisplayMode} errors={state.fieldErrors?.ageDisplayMode} />
+              </>
             )}
           </section>
 

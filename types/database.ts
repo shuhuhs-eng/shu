@@ -10,6 +10,11 @@ export type AgeBand =
   | "under_20" | "20_24" | "25_29" | "30_34" | "35_39" | "40_44" | "45_plus" | "prefer_not_to_say";
 export type EmploymentType = "full_time" | "part_time" | "contract" | "freelance" | "owner" | "other";
 export type JobChangeIntent = "active" | "passive" | "not_looking";
+/** サロンへの年齢の表示方法（0070・確定方針）。exact=実年齢（45歳）/ decade=年代（40代）。 */
+export type AgeDisplayMode = "exact" | "decade";
+/** サロンから見た、実年齢の開示依頼の状態。unavailable=公開されない人 / not_needed=実年齢表示 / none=未依頼 / pending / approved / declined */
+export type AgeRequestStatus = "unavailable" | "not_needed" | "none" | "pending" | "approved" | "declined";
+export type AgeRequestDecision = "pending" | "approved" | "declined";
 export type SalaryBand = "lt_350" | "350_450" | "450_600" | "600_800" | "gt_800" | "flexible";
 export type DiagnosisModeDb = "stylist" | "salon";
 export type ProfileVisibility = "PRIVATE" | "LIMITED" | "PUBLIC";
@@ -196,7 +201,7 @@ export type Database = {
         // 書き込みは save_stylist_profile() RPC経由のみ（直接INSERT/UPDATE権限は無い）。
         // handle_new_user()では作成しない（upsertのため事前作成不要）。
         // birth_date: 0070（草案・未適用）で追加予定。未適用のDBには存在しないため任意扱い（本人のみ閲覧。サロンへは満年齢のみ）。
-        Row: { user_id: string; full_name: string | null; age_band: AgeBand | null; gender: GenderType | null; birth_date?: string | null } & Timestamps;
+        Row: { user_id: string; full_name: string | null; age_band: AgeBand | null; gender: GenderType | null; birth_date?: string | null; age_display_mode?: AgeDisplayMode | null } & Timestamps;
         Insert: Record<string, never>;
         Update: Record<string, never>;
         Relationships: [];
@@ -668,6 +673,31 @@ export type Database = {
         };
         Returns: Database["public"]["Tables"]["profiles"]["Row"];
       };
+      save_stylist_profile_v2: {
+        Args: {
+          p_public_name: string;
+          p_full_name: string;
+          p_age_band: AgeBand;
+          p_gender: GenderType;
+          p_prefecture: string;
+          p_desired_work_location: string | null;
+          p_experience_years: number;
+          p_current_position: string | null;
+          p_specialties: string[];
+          p_employment_type: EmploymentType;
+          p_job_change_intent: JobChangeIntent;
+          p_desired_salary_range: SalaryBand | null;
+          p_sns_links: SnsLink[];
+          p_bio: string | null;
+          p_visibility: ProfileVisibility;
+          p_scout_enabled: boolean;
+          p_avatar_path: string | null;
+          p_value_priorities: string[];
+          p_birth_date: string;
+          p_age_display_mode: AgeDisplayMode;
+        };
+        Returns: Database["public"]["Tables"]["profiles"]["Row"];
+      };
       save_salon_profile: {
         Args: {
           p_salon_name: string;
@@ -931,9 +961,42 @@ export type Database = {
         Returns: boolean;
       };
       set_stylist_birth_date: {
-        // 0070（草案・未適用）。本人の生年月日だけを保存する。NULLで未登録に戻す。
-        Args: { p_birth_date: string | null };
+        // 0070（草案・未適用）。本人の生年月日だけを保存する（必須登録。NULLは受け付けない）。
+        Args: { p_birth_date: string };
         Returns: undefined;
+      };
+      set_stylist_age_display_mode: {
+        // 0070（確定方針・草案）。サロンへの年齢の表示方法（exact=実年齢 / decade=年代）。本人のみ。
+        Args: { p_mode: AgeDisplayMode };
+        Returns: undefined;
+      };
+      request_stylist_age_disclosure: {
+        // 0070（確定方針・草案）。店舗（can_manage_store_hiring）から、年代表示の美容師へ実年齢の開示を依頼する。重複は同じ依頼を返す。
+        Args: { p_store_id: string; p_stylist_user_id: string };
+        Returns: { status: AgeRequestDecision; created: boolean };
+      };
+      respond_age_disclosure_request: {
+        // 0070（確定方針・草案）。美容師本人のみ。二重処理は同じ結果、逆の決定は 'age_disclosure_already_decided'。
+        Args: { p_request_id: string; p_approve: boolean };
+        Returns: { status: AgeRequestDecision };
+      };
+      get_my_age_disclosure_requests: {
+        Args: Record<string, never>;
+        Returns: Array<{
+          request_id: string; store_id: string; store_name: string; prefecture: string | null; city: string | null;
+          status: AgeRequestDecision; requested_at: string; decided_at: string | null;
+        }>;
+      };
+      get_store_stylist_age_infos: {
+        // 0070（確定方針・草案）。店舗にアクセスできるサロンへ、興味あり済み／候補の美容師の年齢情報（一覧と同じ規則）を返す。
+        Args: { p_store_id: string; p_stylist_user_ids: string[] };
+        Returns: Array<{
+          stylist_user_id: string;
+          age_display_mode: AgeDisplayMode | null;
+          age_decade?: number;
+          age?: number;
+          age_request_status: AgeRequestStatus;
+        }>;
       };
       create_salary_offer_v2: {
         // 0035で追加。store単位給与オファー作成。アクセス権はis_store_accessible(p_store_id)、
@@ -1358,7 +1421,8 @@ export type Database = {
         // scout_enabled）を満たす美容師を、matchの相性が高い順に返す。
         // matchはcalculate_stylist_salon_match/calculate_salon_stylist_matchと
         // 同じReturns shape（内部で共通のcalculate_match_axes()を使うため）。
-        Args: Record<string, never>;
+        // 0070（確定方針・草案）で p_store_id（任意）を追加。店舗の画面から呼ぶと、その店舗に承認された実年齢だけが含まれる。
+        Args: { p_store_id?: string | null };
         Returns: Array<{
           stylist_user_id: string;
           public_name: string | null;
@@ -1374,7 +1438,12 @@ export type Database = {
           value_priorities?: string[] | null;
           avatar_path?: string | null;
           instagram_handle?: string | null;
-          age?: number | null;
+          // 年齢情報（0070・確定方針）。age は「本人が実年齢表示を選んだ」または「この店舗に開示を承認した」ときだけキーが存在する。
+          //   年代表示で未承認の場合は age のキー自体が無い（生年月日は常に含まれない）。
+          age_display_mode?: AgeDisplayMode | null;
+          age_decade?: number | null;
+          age?: number;
+          age_request_status?: AgeRequestStatus;
           match: {
             available: boolean;
             reason: string | null;
