@@ -66,3 +66,28 @@ test("制限エラーは利用者向けの文言と解除日時になり、失�
   assert.equal(r2.ok, false);
   if (!r2.ok) assert.match(r2.error.message, /数えていません/);
 });
+
+test("デッドロック（40P01）・直列化失敗（40001）で保存に失敗したときは、成功と表示せず、旧保存へも戻らず、同じ送信IDで再試行できる", async () => {
+  for (const [code, message] of [["40P01", "deadlock detected"], ["40001", "could not serialize access"]] as const) {
+    const { c, calls } = client(() => ({ data: null, error: { code, message, details: "Process 1 waits for ..." } }));
+    const r = await commitDiagnosisResult(c, args);
+    assert.equal(r.ok, false);
+    if (!r.ok) {
+      assert.equal(r.error.code, "busy");
+      assert.match(r.error.message, /保存できませんでした/);
+      assert.match(r.error.message, /数えていません/);
+      assert.match(r.error.message, /同じ内容で、もう一度/);
+      assert.ok(!/保存しました|保存できました|完了/.test(r.error.message));
+    }
+    assert.equal(calls.insert, 0, "旧保存（直接INSERT）へ戻らない");
+  }
+  // 再試行: 同じ送信ID・同じ内容で呼べて、成功すれば通常の成功として返る（二重保存の防止はDBが行う）
+  let n = 0;
+  const { c } = client(() => (++n === 1
+    ? { data: null, error: { code: "40P01", message: "deadlock detected" } }
+    : { data: { result_id: "r1", action: "unchanged", replay: false, locked_until: null }, error: null }));
+  const first = await commitDiagnosisResult(c, args);
+  const second = await commitDiagnosisResult(c, args);
+  assert.equal(first.ok, false);
+  assert.equal(second.ok, true);
+});

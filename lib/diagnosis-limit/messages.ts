@@ -105,6 +105,7 @@ export type LimitErrorCode =
   | "draft_incomplete"
   | "not_allowed"
   | "not_authenticated"
+  | "busy"
   | "unknown";
 
 export type LimitError = { code: LimitErrorCode; message: string; lockedUntil: string | null };
@@ -112,7 +113,7 @@ export type LimitError = { code: LimitErrorCode; message: string; lockedUntil: s
 const NOT_COUNTED = "今回の保存は変更回数に数えていません。";
 
 /** DB（0058）が返すエラーを、利用者向けの文言とコードに直す。 */
-export function mapLimitError(err: { message?: string | null; details?: string | null } | null | undefined): LimitError {
+export function mapLimitError(err: { message?: string | null; details?: string | null; code?: string | null } | null | undefined): LimitError {
   const msg = (err?.message ?? "").toLowerCase();
   const detail = err?.details ?? null;
   if (msg.includes("diagnosis_change_locked")) {
@@ -143,6 +144,10 @@ export function mapLimitError(err: { message?: string | null; details?: string |
     return { code: "not_allowed", lockedUntil: null, message: "この店舗の診断を保存する権限がありません（閲覧のみの権限では保存できません）。" };
   if (msg.includes("not authenticated"))
     return { code: "not_authenticated", lockedUntil: null, message: "ログインの有効期限が切れました。ログインし直してください。" };
+  // 同時操作の競合（デッドロック40P01・直列化失敗40001）。DBはその保存を丸ごと取り消すので、何も保存されず回数も数えられていない。
+  // 同じ送信ID・同じ内容で、そのまま再試行できる。保存できたとは表示しない。
+  if (err?.code === "40P01" || err?.code === "40001" || msg.includes("deadlock detected") || msg.includes("could not serialize"))
+    return { code: "busy", lockedUntil: null, message: `ほかの操作と重なったため、保存できませんでした。${NOT_COUNTED}同じ内容で、もう一度保存してください。` };
   return { code: "unknown", lockedUntil: null, message: `結果の保存に失敗しました。${NOT_COUNTED}もう一度お試しください。` };
 }
 

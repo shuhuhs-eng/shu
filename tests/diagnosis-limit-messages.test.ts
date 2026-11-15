@@ -82,3 +82,13 @@ test("関数が無い（0058未適用）エラーの判定は、この関数の�
   assert.equal(isMissingFunctionError({ message: "fetch failed" }), false, "通信失敗");
   assert.equal(isMissingFunctionError(null), false);
 });
+
+import { mapLimitError as mapBusy } from "../lib/diagnosis-limit/messages";
+test("競合（デッドロック・直列化失敗）の文言: 保存できなかったこと・回数に数えていないこと・もう一度保存できることを伝える", () => {
+  for (const e of [{ code: "40P01", message: "deadlock detected" }, { code: "40001", message: "x" }, { message: "ERROR: deadlock detected" }]) {
+    const m = mapBusy(e);
+    assert.equal(m.code, "busy");
+    assert.ok(m.message.includes("数えていません") && m.message.includes("もう一度保存してください"));
+  }
+  assert.equal(mapBusy({ message: "diagnosis_change_locked" }).code, "locked"); // 他のエラーは従来どおり
+});
