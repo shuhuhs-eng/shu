@@ -1,0 +1,20 @@
+-- 0073 適用後チェック（SELECT1文・読み取り専用）。PASS/FAIL/INFO、最終行が総合判定。
+with f as (select * from pg_proc p where p.oid = to_regprocedure('public.save_stylist_profile_v3(text,text,public.age_band,public.gender_type,text,text,integer,text,text[],public.employment_type,public.job_change_intent,public.salary_band,jsonb,text,public.profile_visibility,boolean,text,text[],date,text,text,date,text,date,text)')),
+r(ord, level, item, detail) as (values
+ (1, case when exists (select 1 from f) then 'PASS' else 'FAIL' end, 'v3保存関数（プロフィールと立場を1回で保存）がある', ''),
+ (2, case when (select pronargs = 25 and proargnames[21:25] = array['p_career_phase','p_graduation_ym','p_graduation_kind','p_desired_start_ym','p_license_status']::text[] from f) then 'PASS' else 'FAIL' end, '引数: v2の20項目＋立場の5項目（立場・卒業年月・卒業区分・就業開始希望・免許）', ''),
+ (3, case when (select prosecdef and exists (select 1 from unnest(coalesce(proconfig,'{}')) c where c like 'search_path=%') from f) then 'PASS' else 'FAIL' end, 'SECURITY DEFINER で search_path を固定', ''),
+ (4, case when (select has_function_privilege('authenticated', oid, 'execute') and not has_function_privilege('anon', oid, 'execute') and not has_function_privilege('service_role', oid, 'execute') and not exists (select 1 from aclexplode(coalesce(proacl, acldefault('f', proowner))) a where a.grantee = 0) from f) then 'PASS' else 'FAIL' end, '実行権限は authenticated だけ', ''),
+ (5, case when (select prosrc like '%career_phase_required%' and prosrc like '%save_stylist_profile_v2(%' and (length(prosrc) - length(replace(lower(prosrc), 'update public.stylist_profiles', ''))) / 29 = 1 from f) then 'PASS' else 'FAIL' end, '静的確認: 立場の必須検証があり、v2を内部で呼び、立場の列を更新するUPDATEは1回', ''),
+ (6, case when exists (select 1 from pg_constraint where conrelid='public.stylist_profiles'::regclass and conname='stylist_profiles_career_phase_check' and pg_get_constraintdef(oid) like '%blank%' and pg_get_constraintdef(oid) like '%student%')
+        and exists (select 1 from pg_constraint where conrelid='public.stylist_profiles'::regclass and conname='stylist_profiles_career_phase_consistent' and pg_get_constraintdef(oid) like '%blank%') then 'PASS' else 'FAIL' end, '制約が blank を許可し、旧値（student）も有効なまま', ''),
+ (7, case when exists (select 1 from pg_trigger where tgname='trg_career_phase_valid' and tgrelid='public.stylist_profiles'::regclass and tgenabled='O') then 'PASS' else 'FAIL' end, '立場を変える更新は3択のみ許可するトリガーが有効', ''),
+ (8, case when has_function_privilege('authenticated', to_regprocedure('public.save_stylist_profile_v2(text,text,public.age_band,public.gender_type,text,text,integer,text,text[],public.employment_type,public.job_change_intent,public.salary_band,jsonb,text,public.profile_visibility,boolean,text,text[],date,text)'), 'execute') and has_function_privilege('authenticated', to_regprocedure('public.set_stylist_career_phase(text,date,text,date,text)'), 'execute') then 'PASS' else 'FAIL' end, '旧経路の権限は変わっていない（0073は追加のみ。アプリ切り替え前の旧アプリも動く）', ''),
+ (9, case when exists (select 1 from pg_trigger where tgname='trg_stylist_profiles_birth_required' and tgrelid='public.stylist_profiles'::regclass and tgenabled='O') and not has_table_privilege('authenticated','public.stylist_profiles','update') then 'PASS' else 'FAIL' end, '0070の生年月日必須トリガーが有効・authenticated は表を直接書けないまま', ''),
+ (10, 'INFO', '美容師プロフィール数（適用前と同じはず）', (select count(*)::text from public.stylist_profiles)),
+ (11, 'INFO', '立場の内訳（未設定 / 美容学生 / 新卒 / 現役 / ブランクあり）。適用前と同じ（ブランクありは0）はず', (select count(*) filter (where career_phase is null)::text||' / '||count(*) filter (where career_phase='student')::text||' / '||count(*) filter (where career_phase='new_graduate')::text||' / '||count(*) filter (where career_phase='experienced')::text||' / '||count(*) filter (where career_phase='blank')::text from public.stylist_profiles))
+)
+select ord, level, item, detail from (select ord::text as ord, level, item, detail from r
+union all
+select '99', case when (select count(*) from r where level='FAIL')=0 then 'PASS' else 'FAIL' end, '総合判定（INFO '||(select count(*) from r where level='INFO')||'件は人が確認）', 'FAIL '||(select count(*) from r where level='FAIL')||'件'
+) t order by ord::int;

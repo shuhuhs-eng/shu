@@ -1,0 +1,16 @@
+-- 0073 適用前チェック（SELECT1文・読み取り専用）。PASS/FAIL/INFO、最終行が総合判定。
+with r(ord, level, item, detail) as (values
+ (1, case when exists (select 1 from information_schema.columns where table_schema='public' and table_name='stylist_profiles' and column_name='career_phase') and to_regclass('public.student_diagnosis_results') is not null then 'PASS' else 'FAIL' end, '前提: 0071が適用済み（立場の列・学生診断の表）', ''),
+ (2, case when to_regprocedure('public.save_stylist_profile_v2(text,text,public.age_band,public.gender_type,text,text,integer,text,text[],public.employment_type,public.job_change_intent,public.salary_band,jsonb,text,public.profile_visibility,boolean,text,text[],date,text)') is not null then 'PASS' else 'FAIL' end, '前提: 0070が適用済み（v2保存関数）', ''),
+ (3, case when to_regprocedure('public.save_stylist_profile_v3(text,text,public.age_band,public.gender_type,text,text,integer,text,text[],public.employment_type,public.job_change_intent,public.salary_band,jsonb,text,public.profile_visibility,boolean,text,text[],date,text,text,date,text,date,text)') is null then 'PASS' else 'FAIL' end, '0073が未適用（v3保存関数がまだ無い）', ''),
+ (4, case when exists (select 1 from pg_constraint where conrelid='public.stylist_profiles'::regclass and conname='stylist_profiles_career_phase_check' and pg_get_constraintdef(oid) like '%student%' and pg_get_constraintdef(oid) not like '%blank%')
+        and exists (select 1 from pg_constraint where conrelid='public.stylist_profiles'::regclass and conname='stylist_profiles_career_phase_consistent' and pg_get_constraintdef(oid) not like '%blank%') then 'PASS' else 'FAIL' end, '0071の2つの制約（値・整合）が、置き換え対象の名前と内容で存在する（blankは未対応）', ''),
+ (5, case when has_function_privilege('authenticated', to_regprocedure('public.save_stylist_profile_v2(text,text,public.age_band,public.gender_type,text,text,integer,text,text[],public.employment_type,public.job_change_intent,public.salary_band,jsonb,text,public.profile_visibility,boolean,text,text[],date,text)'), 'execute') and has_function_privilege('authenticated', to_regprocedure('public.set_stylist_career_phase(text,date,text,date,text)'), 'execute') then 'PASS' else 'FAIL' end, '現状: 旧経路（v2・立場の保存）は authenticated が実行できる（0073は閉じない。閉じるのは0074）', ''),
+ (6, 'INFO', '美容師プロフィール数', (select count(*)::text from public.stylist_profiles)),
+ (7, 'INFO', '立場の内訳（未設定 / 美容学生 / 新卒 / 現役 / ブランクあり）。未設定・美容学生は、本人の次回のプロフィール保存で選び直す', (select count(*) filter (where career_phase is null)::text||' / '||count(*) filter (where career_phase='student')::text||' / '||count(*) filter (where career_phase='new_graduate')::text||' / '||count(*) filter (where career_phase='experienced')::text||' / '||count(*) filter (where career_phase='blank')::text from public.stylist_profiles)),
+ (8, 'INFO', 'stylist_profiles への書き込みが進行中のトランザクション数（0なら待ちなしで適用できる）', (select count(*)::text from pg_locks l join pg_class c on c.oid=l.relation where c.relname='stylist_profiles' and l.mode='RowExclusiveLock' and l.granted))
+)
+select ord, level, item, detail from (select ord::text as ord, level, item, detail from r
+union all
+select '99', case when (select count(*) from r where level='FAIL')=0 then 'PASS' else 'FAIL' end, '総合判定（INFO '||(select count(*) from r where level='INFO')||'件は人が確認）', 'FAIL '||(select count(*) from r where level='FAIL')||'件'
+) t order by ord::int;
