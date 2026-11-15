@@ -20,6 +20,8 @@ unlock() { q "update public.diagnosis_change_limits set locked_until = now() - i
 snap() { q "select json_build_object('current', (select json_build_object('bank',bank,'result_id',result_id,'seq',seq) from public.stylist_diagnosis_current where user_id='$U'),
   'latest_experienced_id', (select id from public.diagnosis_results where user_id='$U' and mode='stylist' order by created_at desc, id desc limit 1),
   'latest_student_id', (select id from public.student_diagnosis_results where user_id='$U' order by created_at desc, id desc limit 1),
+  'experienced_rows', (select coalesce(json_agg(json_build_object('id',id,'user_id',user_id,'mode','stylist','created_at',created_at) order by created_at, id),'[]'::json) from public.diagnosis_results where user_id='$U' and mode='stylist'),
+  'student_rows', (select coalesce(json_agg(json_build_object('id',id,'user_id',user_id,'answers','{}'::json,'version','v','created_at',created_at) order by created_at, id),'[]'::json) from public.student_diagnosis_results where user_id='$U'),
   'experienced_count', (select count(*) from public.diagnosis_results where user_id='$U' and mode='stylist'),
   'student_count', (select count(*) from public.student_diagnosis_results where user_id='$U'),
   'change_count', (select change_count from public.diagnosis_change_limits where kind='stylist' and user_id='$U'))"; }

@@ -35,29 +35,41 @@ export async function readCurrentDiagnosis(supabase: SupabaseClient, userId: str
   return { status: "ok", current: { bank: data.bank, resultId: data.result_id, seq: Number(data.seq) } };
 }
 
-/** マイページの診断表示。experienced=従来の表示／student=学生・新卒の結果／unknown=現在の診断を確認できない。 */
-export type DiagnosisView = "experienced" | "student" | "unknown";
+/** マイページの診断表示。experienced=従来の表示／student=学生・新卒の結果／unknown=現在の診断を読み込めない／inconsistent=現在の診断の行が無いのに履歴だけある（または指す結果が無い）。 */
+export type DiagnosisView = "experienced" | "student" | "unknown" | "inconsistent";
+
+/** 現在の診断の読み取り結果だけで決まる大枠（学生用の結果を取りに行くかの判断に使う）。最終的な表示は decideMypageView。 */
 export function decideDiagnosisView(read: CurrentDiagnosisRead): DiagnosisView {
   if (read.status === "unsupported") return "experienced";
   if (read.status === "error") return "unknown";
   return read.current?.bank === "student" ? "student" : "experienced";
 }
 
-/** 経験者の表示は、現在の診断の result_id と一致する結果があるときだけ。食い違うときは古い結果で代用せず unknown。 */
-export function reconcileExperiencedView(view: DiagnosisView, read: CurrentDiagnosisRead, latestExperiencedId: string | null): DiagnosisView {
-  if (view !== "experienced" || read.status !== "ok" || !read.current) return view;
-  return latestExperiencedId !== null && latestExperiencedId === read.current.resultId ? "experienced" : "unknown";
+export type MypageContext = {
+  /** 経験者の結果の取得（現在の診断が経験者のときは result_id 指定の取得）で得た行のID。無ければ null */
+  experiencedRowId: string | null;
+  experiencedFetchError: boolean;
+  /** 経験者・学生のどちらかの診断履歴が1件でもあるか */
+  anyHistory: boolean;
+};
+
+/**
+ * マイページの最終的な表示。基準は現在の診断（bank と result_id）。日時順の先頭では代用しない。
+ * ・0071未適用（unsupported）だけが従来表示（日時順の最新）。
+ * ・読み取り失敗は unknown（どの結果も出さない）。
+ * ・現在の診断の行が無く、履歴だけがある場合は inconsistent（古い結果を現在として出さない）。履歴も無ければ従来の「診断を受ける」表示。
+ * ・現在が経験者なら、result_id で取得できた結果だけを表示。取得できなければ（行なしは inconsistent、失敗は unknown）。
+ */
+export function decideMypageView(read: CurrentDiagnosisRead, ctx: MypageContext): DiagnosisView {
+  if (read.status === "unsupported") return "experienced";
+  if (read.status === "error") return "unknown";
+  if (!read.current) return ctx.anyHistory ? "inconsistent" : "experienced";
+  if (read.current.bank === "student") return "student";
+  if (ctx.experiencedFetchError) return "unknown";
+  return ctx.experiencedRowId === read.current.resultId ? "experienced" : "inconsistent";
 }
 
 /** 画面の部品の出し分け（マイページ）。「いまの立場」は診断の種類に左右されず常に出す。 */
 export function mypageSections(view: DiagnosisView) {
-  return { showExperienced: view === "experienced", showStudent: view === "student", showUnknownNotice: view === "unknown" };
-}
-
-/** 学生・新卒の結果ページが開いている結果の位置づけ。current=現在の結果／past=過去の結果／unknown=確認できない。 */
-export type StudentResultStatus = "current" | "past" | "unknown";
-export function decideStudentResultStatus(read: CurrentDiagnosisRead, shownResultId: string): StudentResultStatus {
-  if (read.status === "error") return "unknown";
-  if (read.status === "unsupported") return "unknown";
-  return read.current?.bank === "student" && read.current.resultId === shownResultId ? "current" : "past";
+  return { showExperienced: view === "experienced", showStudent: view === "student", showUnknownNotice: view === "unknown", showInconsistentNotice: view === "inconsistent" };
 }

@@ -8,7 +8,8 @@ import { DiagnosisSummary } from "@/components/mypage/diagnosis-summary";
 import { CareerPhaseSummary } from "@/components/student-diagnosis/career-phase-summary";
 import { StudentCurrentCard } from "@/components/student-diagnosis/student-current-card";
 import { readOwnCareerPhase } from "@/lib/student-diagnosis/career-phase";
-import { decideDiagnosisView, mypageSections, reconcileExperiencedView, readCurrentDiagnosis } from "@/lib/student-diagnosis/current";
+import { decideDiagnosisView, decideMypageView, mypageSections, readCurrentDiagnosis } from "@/lib/student-diagnosis/current";
+import { fetchExperiencedForMypage, fetchStudentById } from "@/lib/student-diagnosis/current-results";
 import { computeStudentResult } from "@/lib/student-diagnosis/result";
 import { STUDENT_DIAGNOSIS_VERSION, isValidStudentAnswers } from "@/lib/student-diagnosis/questions";
 import { CoreTypeHeader } from "@/components/mypage/core-type-header";
@@ -68,14 +69,14 @@ export default async function StylistMyPage() {
   let studentResult: ReturnType<typeof computeStudentResult> | null = null;
   let hasAnyStudentResult = false;
   if (currentRead.status !== "unsupported") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sdb = (supabase as any).from("student_diagnosis_results");
     if (earlySections.showStudent && currentRead.status === "ok" && currentRead.current) {
-      const { data, error } = await sdb.select("answers, version").eq("id", currentRead.current.resultId).eq("user_id", user.id).maybeSingle();
-      if (!error && data && isValidStudentAnswers(data.answers)) studentResult = computeStudentResult(data.answers, data.version ?? STUDENT_DIAGNOSIS_VERSION);
+      // 現在の診断が学生・新卒: result_id と本人のIDを指定して取得（日時順の先頭では代用しない）
+      const r = await fetchStudentById(supabase, user.id, currentRead.current.resultId);
+      if (r.row && isValidStudentAnswers(r.row.answers)) studentResult = computeStudentResult(r.row.answers, r.row.version ?? STUDENT_DIAGNOSIS_VERSION);
       hasAnyStudentResult = true;
     } else {
-      const { data, error } = await sdb.select("id").eq("user_id", user.id).limit(1);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("student_diagnosis_results").select("id").eq("user_id", user.id).limit(1);
       hasAnyStudentResult = !error && (data?.length ?? 0) > 0;
     }
   }
@@ -88,7 +89,7 @@ export default async function StylistMyPage() {
     hasStylistRole,
     birthRead,
     ageModeRead,
-    { data: latest },
+    experiencedFetch,
     { data: preferenceProfile },
     { data: matchProfile, error: matchProfileError },
     retakeLimit,
@@ -102,14 +103,9 @@ export default async function StylistMyPage() {
     hasCompletedRole(supabase, user.id, "stylist"),
     readOwnBirthDate(supabase, user.id),
     readOwnAgeDisplayMode(supabase, user.id),
-    supabase
-      .from("diagnosis_results")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("mode", "stylist")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    // 経験者の結果。現在の診断（bank/result_id）が経験者なら result_id 指定で取得し、日時順の先頭では代用しない。
+    // 日時順の最新を使うのは、0071未適用（現在の診断の表が無い）の従来表示のときだけ。
+    fetchExperiencedForMypage(supabase, user.id, currentRead),
     // ★「働きたいサロン環境」Preference診断（8問・8軸）。既存の30問診断とは完全に別物
     // （診断ロジック・8タイプ・市場価値・AIには一切影響しない、回答済み状態の確認のみ）。
     supabase.from("stylist_preference_profiles").select("status").eq("stylist_user_id", user.id).maybeSingle(),
@@ -128,6 +124,7 @@ export default async function StylistMyPage() {
   ]);
 
   const perfFetchDone = nowMs();
+  const latest = experiencedFetch.row;
 
   if (!hasStylistRole) {
     redirect("/onboarding");
@@ -174,7 +171,13 @@ export default async function StylistMyPage() {
   // 履歴が無い場合（8タイプ判定の保存に失敗した等）は、最新診断のスコアから同じ判定式（SQLと一致）で求める。
   // 初回確定のassignment（過去の診断由来）は表示に使わない＝古いタイプが現在の結果として出ない。
   // 現在の診断（bank / result_id）を基準にする。経験者の表示は、現在の診断の result_id と一致する結果だけ。
-  const sections = mypageSections(reconcileExperiencedView(diagView, currentRead, latest?.id ?? null));
+  const sections = mypageSections(
+    decideMypageView(currentRead, {
+      experiencedRowId: latest?.id ?? null,
+      experiencedFetchError: experiencedFetch.error,
+      anyHistory: experiencedFetch.historyExists || hasAnyStudentResult,
+    }),
+  );
   const coreTypeCode: CoreTypeCode | null = latest
     ? ((latestCoreTypeCode as CoreTypeCode | null) ??
       calculateCoreType({
@@ -245,23 +248,19 @@ export default async function StylistMyPage() {
         </p>
       )}
 
+      {sections.showInconsistentNotice && (
+        <p role="status" data-testid="inconsistent-notice" className="mt-6 rounded-xl border border-[#C98A1B]/40 bg-[#C98A1B]/[0.08] px-4 py-3 text-[13px] leading-relaxed text-[#7A5410]">
+          <span className="font-bold">【現在の診断を確認できません】</span>
+          診断の履歴はありますが、現在の診断の記録が見つかりませんでした。古い結果を現在の結果として表示しないよう、結果の表示を止めています。しばらくしてから開き直しても変わらないときは、お問い合わせください。
+        </p>
+      )}
+
       {sections.showStudent && (
         <div className="mt-6 space-y-4">
           {studentResult ? (
-            <StudentCurrentCard result={studentResult} hasPastExperienced={!!latest} />
+            <StudentCurrentCard result={studentResult} hasPastExperienced={experiencedFetch.historyExists} />
           ) : (
             <p role="status" className="rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">学生・新卒の診断結果を読み込めませんでした。しばらくしてから、もう一度開いてください。</p>
-          )}
-          {!retakeNotice(retakeLimit).canStart ? (
-            <>
-              <span aria-disabled="true" className="flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-4 text-[15px] font-semibold text-sub/70">診断を受け直す（いまは変更できません）</span>
-              <p className="text-center text-[12.5px] leading-relaxed text-sub">{retakeNotice(retakeLimit).lockedText}</p>
-            </>
-          ) : (
-            <div className="grid gap-3">
-              <Link href="/stylist/diagnosis/student" className="flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-4 text-[15px] font-semibold text-ink">学生・新卒の診断を受け直す</Link>
-              <Link href="/stylist/diagnosis" className="flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-3.5 text-[14px] font-semibold text-ink">現役の美容師向けの診断を受ける</Link>
-            </div>
           )}
         </div>
       )}
@@ -444,7 +443,10 @@ export default async function StylistMyPage() {
       </Link>
 
       {/* 再診断は、働きたいサロン・職場の設定より下、ページ最下部の控えめなリンクにする。 */}
-      {showNewStylistDesign && <RetakeLink limit={retakeLimit} />}
+      {sections.showExperienced && showNewStylistDesign && <RetakeLink limit={retakeLimit} />}
+      {sections.showStudent && (
+        <RetakeLink limit={retakeLimit} href="/stylist/diagnosis/student" hideBaseText secondary={{ href: "/stylist/diagnosis", label: "現役の美容師向けの診断を受ける" }} />
+      )}
     </main>
   );
 }
