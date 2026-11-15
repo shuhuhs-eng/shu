@@ -6,6 +6,7 @@ mkdir -p "$OUT" && [ -z "$(ls -A "$OUT")" ] || { echo "ERROR: 出力先が空で
 mkdir -p "$OUT"/{sql,verify,app,docs}
 cp "$D"/0071_student_newgrad.draft.sql "$D"/0071_preapply_check.sql "$D"/0071_postapply_check.sql "$D"/0071_rollback.draft.sql "$OUT/sql/"
 bash "$R/docs/verify-0070-0071/pack_0070_0071.sh" "$OUT/verify" >/dev/null || exit 2
+cp "$D"/0071_current_view_*.sh "$D"/0071_current_view_check.ts "$OUT/verify/"
 cp "$D"/0071_review_packet.md "$D"/experience_years_investigation.md "$D"/experience_years_readonly.sql "$OUT/docs/"
 cp "$R"/docs/review-diagnosis-limit/0059_close_direct_paths.draft.sql "$R"/docs/review-diagnosis-limit/0059_postapply_check.sql "$R"/docs/review-diagnosis-limit/0059_rollback_permissions.sql "$OUT/verify/" || exit 2
 cp "$R/docs/verify-0070-0071/experience_years_verify.sh" "$OUT/verify/"
