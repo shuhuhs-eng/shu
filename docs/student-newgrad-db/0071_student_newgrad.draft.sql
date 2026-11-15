@@ -1,7 +1,7 @@
 -- ============================================================================
 -- 0071（草案・未適用）: 美容学生・新卒対応（美容師側のプロフィール区分と、学生・新卒診断の保存）
 -- ============================================================================
--- ★前提: 0058（診断の変更回数制限）が適用済みであること。0058の状態表・ゲート関数・所有者ロックを共有する。
+-- ★適用順は 0070→0071 に固定。前提: 0058（診断の変更回数制限）と 0070（公開判定関数・フラグ）が適用済みであること。0058の状態表・ゲート関数・所有者ロックを共有する。
 -- ★0058・0059・0070とは別。既存の表・関数の定義は変更しない（追加のみ）。診断・マッチング計算には触れない。
 -- ★公開・課金は含まない: サロンへ学生・新卒の情報を返す関数は作らない（未成年の公開は未確定・採用料も未確定）。
 --
@@ -19,9 +19,19 @@
 --   ・【0058の関数を2つ置き換える】commit_diagnosis_result と _trg_diagnosis_results_limit（stylistモードのみ判定を変更。サロン診断の分岐は同一）。
 --     適用前に、本番の現行定義が0058の定義と一致することを下の確認で止める（一致しなければ中止）。
 begin;
+set local lock_timeout = '15s';   -- 診断保存の最中に長く待たせない（待てなければ中止。やり直し可）
+-- ★ロック順: 結果表を先にロックしてから既存分を登録する。適用の瞬間に保存中だった診断は、この待機で確定を待ち、
+--   確定済みの分はこのあとの「現在の診断への初期登録」に必ず含まれる。ロック中に始まった保存は、適用の確定後に新しい関数で処理される。
+lock table public.diagnosis_results in share row exclusive mode;
 
 do $$
 begin
+  if to_regprocedure('public.stylist_salon_publishable(uuid)') is null or to_regclass('public.feature_pauses') is null then
+    raise exception '0071 requires 0070 (stylist_salon_publishable / minor_salon_public flag) to be applied first';
+  end if;
+  if not exists (select 1 from public.feature_pauses where feature = 'minor_salon_public') then
+    raise exception '0071 requires 0070 (stylist_salon_publishable / minor_salon_public flag) to be applied first';
+  end if;
   if to_regclass('public.diagnosis_change_limits') is null or to_regprocedure('public._diagnosis_limit_gate(text,uuid,uuid,uuid,boolean,boolean,boolean,text)') is null
      or to_regprocedure('public._diag_owner_lock(text,uuid,uuid)') is null then
     raise exception '0071 requires 0058 (diagnosis change limits) to be applied first';
@@ -42,11 +52,12 @@ alter table public.stylist_profiles
   add column graduation_kind  text check (graduation_kind in ('planned','completed')),
   add column desired_start_ym date check (desired_start_ym is null or desired_start_ym = date_trunc('month', desired_start_ym)::date),
   add column license_status   text check (license_status in ('studying','exam_planned','passed_waiting','obtained'));
+-- ★NULLの扱いを明示: 「卒業区分がNULL」の新卒・学生は、制約でも拒否する（CHECKはNULLを通すため、is not null を必ず書く）。
 alter table public.stylist_profiles add constraint stylist_profiles_career_phase_consistent check (
   (career_phase is null and graduation_ym is null and graduation_kind is null and desired_start_ym is null and license_status is null)
   or (career_phase = 'experienced' and graduation_ym is null and graduation_kind is null and desired_start_ym is null and license_status is null)
-  or (career_phase = 'student' and graduation_ym is not null and graduation_kind = 'planned')
-  or (career_phase = 'new_graduate' and graduation_ym is not null and graduation_kind in ('planned','completed'))
+  or (career_phase = 'student' and graduation_ym is not null and graduation_kind is not null and graduation_kind = 'planned')
+  or (career_phase = 'new_graduate' and graduation_ym is not null and graduation_kind is not null and graduation_kind in ('planned','completed'))
 );
 alter table public.stylist_profiles add constraint stylist_profiles_start_after_graduation check (
   desired_start_ym is null or graduation_ym is null or desired_start_ym >= graduation_ym
@@ -81,7 +92,8 @@ begin
     if v_grad is null then raise exception 'graduation month required'; end if;
     -- 想定値（変更可）: 卒業は3年前〜5年後、就業開始希望は1年前〜6年後
     if v_grad < (v_m0 - interval '3 years') or v_grad > (v_m0 + interval '5 years') then raise exception 'graduation month out of range'; end if;
-    if p_phase = 'student' and p_graduation_kind is distinct from 'planned' then raise exception 'student requires planned graduation'; end if;
+    if p_graduation_kind is null then raise exception 'graduation kind required'; end if;   -- NULLは拒否（student/new_graduate とも）
+    if p_phase = 'student' and p_graduation_kind <> 'planned' then raise exception 'student requires planned graduation'; end if;
     if p_phase = 'new_graduate' and p_graduation_kind not in ('planned','completed') then raise exception 'invalid graduation kind'; end if;
     if p_graduation_kind = 'completed' and v_grad > v_m0 then raise exception 'completed graduation cannot be in the future'; end if;
     if v_start is not null and (v_start < (v_m0 - interval '1 year') or v_start > (v_m0 + interval '6 years') or v_start < v_grad) then
@@ -306,28 +318,24 @@ revoke all on function public.commit_student_diagnosis(uuid, uuid, text, jsonb, 
 grant execute on function public.commit_student_diagnosis(uuid, uuid, text, jsonb, jsonb) to service_role;
 
 -- ---------------------------------------------------------------------------
--- 6. サロン公開の保留（0070が適用済みの場合のみ）: 区分が「美容学生・新卒」で生年月日が未登録の人は、年齢未確認のため保留する。
---    （年齢未登録を成人と推定しない。生年月日が満18歳未満と分かる人は0070の規則で保留。サロンへ返す関数は本マイグレーションには無い）
---    0070を後から適用する場合は、0070適用後にこのブロックだけを再実行する。
+-- 6. サロン公開の保留: 区分が「美容学生・新卒」で生年月日が未登録の人は、年齢未確認のため保留する。
+--    ・年齢未登録を成人と推定しない。満18歳未満と分かる人は0070の規則で保留（フラグ minor_salon_public が保留のあいだ）。
+--    ・区分未設定・経験者で生年月日が未登録の既存会員は、従来どおり表示（年齢は「年齢未登録」＝null）。
+--    ・解除はフラグの運営操作のみ（別承認）。0070（前提）の同名関数を置き換える。
 -- ---------------------------------------------------------------------------
-do $$
-begin
-  if to_regprocedure('public.stylist_salon_publishable(uuid)') is not null then
-    execute $f$
-      create or replace function public.stylist_salon_publishable(p_user_id uuid)
-      returns boolean language sql stable security definer set search_path = public, pg_temp
-      as $b$
-        select not coalesce(
-          coalesce((select paused from public.feature_pauses where feature = 'minor_salon_public'), true)
-          and (
-            coalesce((select public.stylist_age_years(birth_date) < 18 from public.stylist_private where user_id = p_user_id), false)
-            or (
-              coalesce((select birth_date is null from public.stylist_private where user_id = p_user_id), true)
-              and exists (select 1 from public.stylist_profiles sp where sp.user_id = p_user_id and sp.career_phase in ('student','new_graduate'))
-            )
-          ), false)
-      $b$ $f$;
-  end if;
-end $$;
+create or replace function public.stylist_salon_publishable(p_user_id uuid)
+returns boolean language sql stable security definer set search_path = public, pg_temp
+as $$
+  select not coalesce(
+    coalesce((select paused from public.feature_pauses where feature = 'minor_salon_public'), true)
+    and (
+      coalesce((select public.stylist_age_years(birth_date) < 18 from public.stylist_private where user_id = p_user_id), false)
+      or (
+        coalesce((select birth_date is null from public.stylist_private where user_id = p_user_id), true)
+        and exists (select 1 from public.stylist_profiles sp where sp.user_id = p_user_id and sp.career_phase in ('student','new_graduate'))
+      )
+    ), false)
+$$;
+revoke all on function public.stylist_salon_publishable(uuid) from public, anon, authenticated, service_role;
 
 commit;

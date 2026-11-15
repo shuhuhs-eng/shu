@@ -3,6 +3,7 @@
 -- 0058の2関数は、0058の定義（docs/review-diagnosis-limit/0058_diagnosis_change_limits.draft.sql の該当部分）へ戻す。
 -- 末尾の2関数の定義は、0058本体から機械的に抜き出したもの（内容は0058と同一）。
 begin;
+set local lock_timeout = '15s';
 do $$
 begin
   if exists (select 1 from public.stylist_profiles where career_phase is not null)
@@ -24,20 +25,15 @@ alter table public.stylist_profiles drop constraint if exists stylist_profiles_c
 alter table public.stylist_profiles drop column if exists license_status, drop column if exists desired_start_ym,
   drop column if exists graduation_kind, drop column if exists graduation_ym, drop column if exists career_phase;
 -- 公開判定を0070の定義へ戻す（0070適用済みの場合のみ）
-do $$
-begin
-  if to_regprocedure('public.stylist_salon_publishable(uuid)') is not null then
-    execute $f$
-      create or replace function public.stylist_salon_publishable(p_user_id uuid)
-      returns boolean language sql stable security definer set search_path = public, pg_temp
-      as $b$
-        select not coalesce(
-          coalesce((select paused from public.feature_pauses where feature = 'minor_salon_public'), true)
-          and coalesce((select public.stylist_age_years(birth_date) < 18 from public.stylist_private where user_id = p_user_id), false),
-          false)
-      $b$ $f$;
-  end if;
-end $$;
+create or replace function public.stylist_salon_publishable(p_user_id uuid)
+returns boolean language sql stable security definer set search_path = public, pg_temp
+as $$
+  select not coalesce(
+    coalesce((select paused from public.feature_pauses where feature = 'minor_salon_public'), true)
+    and coalesce((select public.stylist_age_years(birth_date) < 18 from public.stylist_private where user_id = p_user_id), false),
+    false)
+$$;
+revoke all on function public.stylist_salon_publishable(uuid) from public, anon, authenticated, service_role;
 create or replace function public.commit_diagnosis_result(
   p_user_id uuid, p_request_id uuid, p_allow_change boolean,
   p_diagnosis_version text, p_mode public.diagnosis_mode, p_answers jsonb,

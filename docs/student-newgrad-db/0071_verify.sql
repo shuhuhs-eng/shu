@@ -1,4 +1,4 @@
--- 0071草案の検証（ローカルDB専用。全体をROLLBACKする）。前提: 0058適用済み + 0071適用済みのDB
+-- 0071草案の検証（ローカルDB専用。全体をROLLBACKする）。前提: 0058→0070→0071 を順に適用済みのDB
 \set ON_ERROR_STOP on
 begin;
 create temp table t_log (n serial, name text, ok boolean, info text);
@@ -68,6 +68,17 @@ begin
   m := pg_temp.try($q$select public.set_stylist_career_phase('experienced', null, null, null, null)$q$);
   perform pg_temp.chk('B16 プロフィール行がない人は設定不可', m like '%profile not found%', m);
   reset role;
+  -- 卒業区分NULLの拒否（RPCと制約の両方）
+  set local role authenticated; perform pg_temp.as_user(u1);
+  m := pg_temp.try(format($q$select public.set_stylist_career_phase('new_graduate', %L, null, null, null)$q$, (md - interval '1 month')::date));
+  perform pg_temp.chk('B18 新卒で卒業区分NULLはRPCが拒否', m like '%graduation kind required%', m);
+  m := pg_temp.try(format($q$select public.set_stylist_career_phase('student', %L, null, null, null)$q$, (md + interval '3 months')::date));
+  perform pg_temp.chk('B19 学生で卒業区分NULLはRPCが拒否', m like '%graduation kind required%', m);
+  reset role;
+  m := pg_temp.try(format($q$update public.stylist_profiles set career_phase='new_graduate', graduation_ym=%L, graduation_kind=null where user_id=%L$q$, (md - interval '1 month')::date, u2));
+  perform pg_temp.chk('B20 新卒で卒業区分NULLは制約が拒否（RPCを通さない直接書き込みでも）', m like '%career_phase_consistent%', m);
+  m := pg_temp.try(format($q$update public.stylist_profiles set career_phase='student', graduation_ym=%L, graduation_kind=null where user_id=%L$q$, (md + interval '3 months')::date, u2));
+  perform pg_temp.chk('B21 学生で卒業区分NULLも制約が拒否', m like '%career_phase_consistent%', m);
   -- 整合制約（直接）
   m := pg_temp.try($q$update public.stylist_profiles set career_phase='experienced', license_status='obtained' where user_id='00000000-0000-0000-0000-0000000c0002'$q$);
   perform pg_temp.chk('B17 整合制約: 経験者+免許は不可', m like '%consistent%', m);
