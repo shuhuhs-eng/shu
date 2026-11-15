@@ -43,8 +43,10 @@ test("区分の表示: 未設定は何も出さない。学生・新卒は共通
   assert.deepEqual(describeCareerPhase({ phase: "experienced", graduationYm: null, graduationKind: null, desiredStartYm: null, licenseStatus: null }), ["現役の美容師（経験者）"]);
   const l = describeCareerPhase({ phase: "student", graduationYm: "2027-03", graduationKind: "planned", desiredStartYm: "2027-04", licenseStatus: "studying" })!;
   assert.deepEqual(l, ["美容学生（在学中）", "2027年03月 卒業予定", "就業開始の希望: 2027年04月", "免許: 取得に向けて在学中"]);
-  assert.equal(renderToStaticMarkup(createElement(CareerPhaseSummary, { value: EMPTY_CAREER_PHASE, hasStudentResult: false })), "");
-  assert.ok(renderToStaticMarkup(createElement(CareerPhaseSummary, { value: EMPTY_CAREER_PHASE, hasStudentResult: true })).includes("診断結果を見る"));
+  const sum = (v: typeof EMPTY_CAREER_PHASE, k: "current" | "past" | "none") => renderToStaticMarkup(createElement(CareerPhaseSummary, { value: v, studentLink: k })).replace(/<[^>]+>/g, " ");
+  assert.ok(sum(EMPTY_CAREER_PHASE, "none").includes("未設定") && sum(EMPTY_CAREER_PHASE, "none").includes("学生・新卒の診断を受ける") && !sum(EMPTY_CAREER_PHASE, "none").includes("経験者"));
+  assert.ok(sum(EMPTY_CAREER_PHASE, "current").includes("学生・新卒の診断結果を見る"));
+  assert.ok(sum(EMPTY_CAREER_PHASE, "past").includes("現在の結果ではありません"));
 });
 
 test("区分の読み取り: 列なし(42703)はunsupported、その他の失敗はerror（未設定と取り違えない）", async () => {

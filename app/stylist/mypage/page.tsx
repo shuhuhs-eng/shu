@@ -6,7 +6,11 @@ import { GUEST_NOT_CARRIED_NOTICE_COOKIE } from "@/lib/diagnosis-handoff/constan
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { DiagnosisSummary } from "@/components/mypage/diagnosis-summary";
 import { CareerPhaseSummary } from "@/components/student-diagnosis/career-phase-summary";
+import { StudentCurrentCard } from "@/components/student-diagnosis/student-current-card";
 import { readOwnCareerPhase } from "@/lib/student-diagnosis/career-phase";
+import { decideDiagnosisView, mypageSections, readCurrentDiagnosis } from "@/lib/student-diagnosis/current";
+import { computeStudentResult } from "@/lib/student-diagnosis/result";
+import { STUDENT_DIAGNOSIS_VERSION, isValidStudentAnswers } from "@/lib/student-diagnosis/questions";
 import { CoreTypeHeader } from "@/components/mypage/core-type-header";
 import { CoreTypeDetails } from "@/components/mypage/core-type-details";
 import { MarketValueCard } from "@/components/mypage/market-value-card";
@@ -53,11 +57,27 @@ export default async function StylistMyPage() {
     redirect("/login?next=/stylist/mypage");
   }
 
-  // 0071の区分（学生・新卒）。列が無い・読めないときは何も出さない（既存の表示は変えない）。
+  // 0071の区分（学生・新卒）と「現在の診断」。表・列が無い（0071未適用）ときは従来の表示のまま。
+  // 現在の診断が学生・新卒なら、過去の経験者診断（才能グラフ・経験分析・AI解説）を現在の結果として出さない。
   const careerPhase = await readOwnCareerPhase(supabase, user.id);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const studentResultRes = careerPhase.status === "ok" ? await (supabase as any).from("student_diagnosis_results").select("id").eq("user_id", user.id).limit(1) : null;
-  const hasStudentResult = !!studentResultRes && !studentResultRes.error && (studentResultRes.data?.length ?? 0) > 0;
+  const currentRead = careerPhase.status === "ok" ? await readCurrentDiagnosis(supabase, user.id) : ({ status: "unsupported" } as const);
+  const diagView = decideDiagnosisView(currentRead);
+  const sections = mypageSections(diagView);
+  let studentResult: ReturnType<typeof computeStudentResult> | null = null;
+  let hasAnyStudentResult = false;
+  if (careerPhase.status === "ok") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sdb = (supabase as any).from("student_diagnosis_results");
+    if (sections.showStudent && currentRead.status === "ok" && currentRead.current) {
+      const { data, error } = await sdb.select("answers, version").eq("id", currentRead.current.resultId).eq("user_id", user.id).maybeSingle();
+      if (!error && data && isValidStudentAnswers(data.answers)) studentResult = computeStudentResult(data.answers, data.version ?? STUDENT_DIAGNOSIS_VERSION);
+      hasAnyStudentResult = true;
+    } else {
+      const { data, error } = await sdb.select("id").eq("user_id", user.id).limit(1);
+      hasAnyStudentResult = !error && (data?.length ?? 0) > 0;
+    }
+  }
+  const studentLink = sections.showStudent ? "current" : hasAnyStudentResult ? "past" : "none";
 
   // 以下の取得は互いに依存しないため、まとめて並列に実行する（以前は1件ずつ直列で、表示まで10回以上の
   // DB往復を順番に待っていた）。取得する内容・認証/権限確認（getUser・role確認）は変えていない。
@@ -212,7 +232,37 @@ export default async function StylistMyPage() {
         </p>
       )}
 
-      {showNewStylistDesign && coreTypeCode && traitScores && latest ? (
+      {/* 「いまの立場」と学生・新卒診断への導線。経験者向けの診断結果の表示の有無に左右されない位置。 */}
+      {careerPhase.status === "ok" && <CareerPhaseSummary value={careerPhase.value} studentLink={studentLink} />}
+
+      {sections.showUnknownNotice && (
+        <p role="status" className="mt-6 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">
+          現在の診断結果を確認できませんでした。しばらくしてから、もう一度開いてください。
+        </p>
+      )}
+
+      {sections.showStudent && (
+        <div className="mt-6 space-y-4">
+          {studentResult ? (
+            <StudentCurrentCard result={studentResult} hasPastExperienced={!!latest} />
+          ) : (
+            <p role="status" className="rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">学生・新卒の診断結果を読み込めませんでした。しばらくしてから、もう一度開いてください。</p>
+          )}
+          {!retakeNotice(retakeLimit).canStart ? (
+            <>
+              <span aria-disabled="true" className="flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-4 text-[15px] font-semibold text-sub/70">診断を受け直す（いまは変更できません）</span>
+              <p className="text-center text-[12.5px] leading-relaxed text-sub">{retakeNotice(retakeLimit).lockedText}</p>
+            </>
+          ) : (
+            <div className="grid gap-3">
+              <Link href="/stylist/diagnosis/student" className="flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-4 text-[15px] font-semibold text-ink">学生・新卒の診断を受け直す</Link>
+              <Link href="/stylist/diagnosis" className="flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-3.5 text-[14px] font-semibold text-ink">現役の美容師向けの診断を受ける</Link>
+            </div>
+          )}
+        </div>
+      )}
+
+      {sections.showExperienced && (showNewStylistDesign && coreTypeCode && traitScores && latest ? (
         <>
           <CoreTypeHeader coreTypeCode={coreTypeCode} />
 
@@ -238,11 +288,6 @@ export default async function StylistMyPage() {
           <div className="mt-6">
             <DiagnosisSummary latest={latest} aiByType={aiByType} />
           </div>
-          {careerPhase.status === "ok" && (
-            <div className="mt-6">
-              <CareerPhaseSummary value={careerPhase.value} hasStudentResult={hasStudentResult} />
-            </div>
-          )}
 
           {!latest && guestNotCarried && (
             <p className="mt-6 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">
@@ -268,7 +313,7 @@ export default async function StylistMyPage() {
             </Link>
           )}
         </>
-      )}
+      ))}
 
       {/* ★「働きたいサロン環境」Preference診断（8軸、既存30問診断とは別物）。
           既存の8タイプ・6才能・市場価値・AI解説ブロックとは視覚的に明確に
