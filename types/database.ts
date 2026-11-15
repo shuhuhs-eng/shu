@@ -925,6 +925,11 @@ export type Database = {
         };
         Returns: Database["public"]["Tables"]["salary_offers"]["Row"];
       };
+      get_stylist_public_extended_enabled: {
+        // 0070（草案・未適用）。サロン向け公開プロフィールの追加表示が有効かを返す（本人プレビュー用）。
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
       set_stylist_birth_date: {
         // 0070（草案・未適用）。本人の生年月日だけを保存する。NULLで未登録に戻す。
         Args: { p_birth_date: string | null };

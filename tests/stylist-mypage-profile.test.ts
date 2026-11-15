@@ -22,6 +22,7 @@ import { profileFieldsKey } from "../lib/profile/fields-key";
 import { isSalaryOfferPresentationPaused } from "../lib/salary-offers/pause";
 import { profileFormSchema } from "../lib/validation/profile";
 import { ageOn, validateBirthDate, todayJst, isMissingBirthDateColumn, readOwnBirthDate } from "../lib/profile/birth-date";
+import { readPublicExtendedStatus, isMissingFunction } from "../lib/profile/public-extended";
 import { BirthDateField } from "../components/profile/birth-date-field";
 
 const scores = { T: 72, S: 55, H: 80, B: 30, A: 64, M: 41 };
@@ -264,4 +265,15 @@ test("運営からの連絡: 「マイページへ戻る」は共通の行き先
   assert.ok(!html.includes('href="/"'));
   assert.match(html, /マイページへ戻る/);
   assert.match(html, /min-h-\[44px\]/);
+});
+
+test("プレビューの追加表示は、公開機能のフラグで判定する（列の有無では判定しない）。関数が無い場合だけ未対応", async () => {
+  const rpc = (res: { data: unknown; error: unknown }) => ({ rpc: async () => res }) as never;
+  assert.equal(await readPublicExtendedStatus(rpc({ data: true, error: null })), "enabled");
+  assert.equal(await readPublicExtendedStatus(rpc({ data: false, error: null })), "disabled");
+  assert.equal(await readPublicExtendedStatus(rpc({ data: null, error: { code: "PGRST202", message: "Could not find the function" } })), "unsupported");
+  assert.equal(await readPublicExtendedStatus(rpc({ data: null, error: { code: "42883" } })), "unsupported");
+  assert.equal(await readPublicExtendedStatus(rpc({ data: null, error: { code: "42501", message: "permission denied for function" } })), "error");
+  assert.equal(await readPublicExtendedStatus(rpc({ data: null, error: { message: "fetch failed" } })), "error");
+  assert.equal(isMissingFunction({ code: "PGRST301" }), false);
 });

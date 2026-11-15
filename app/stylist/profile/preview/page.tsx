@@ -5,6 +5,7 @@ import { StylistPublicView } from "@/components/profile/stylist-public-view";
 import { StatusPanel } from "@/components/error-panel";
 import { initialVisibility } from "@/lib/profile/get-initial-values";
 import { ageOn, readOwnBirthDate, todayJst } from "@/lib/profile/birth-date";
+import { readPublicExtendedStatus } from "@/lib/profile/public-extended";
 import { getAvatarSignedUrl } from "@/lib/storage/avatar";
 import type { SnsLink } from "@/types/database";
 
@@ -22,12 +23,14 @@ export default async function StylistProfilePreviewPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/stylist/profile/preview");
 
-  const [{ data: pub, error }, { data: profile }, birth] = await Promise.all([
+  const [{ data: pub, error }, { data: profile }, extStatus] = await Promise.all([
     supabase.from("stylist_profiles").select("*").eq("user_id", user.id).maybeSingle(),
     supabase.from("profiles").select("avatar_path").eq("id", user.id).maybeSingle(),
-    readOwnBirthDate(supabase, user.id),
+    readPublicExtendedStatus(supabase),
   ]);
-  const extended = birth.status === "ok";
+  // 追加表示が「いまサロンに出ているか」は、DBの機能フラグで判定する（生年月日の列の有無では判定しない）。
+  const extended = extStatus === "enabled";
+  const birth = extended ? await readOwnBirthDate(supabase, user.id) : ({ status: "unsupported" } as const);
   const birthDate = birth.status === "ok" ? birth.birthDate : null;
   const avatarUrl = extended ? await getAvatarSignedUrl(supabase, profile?.avatar_path ?? null) : null;
   const instagramHandle = ((pub?.sns_links ?? []) as SnsLink[]).find((l) => l.platform === "instagram")?.handle || null;
@@ -39,7 +42,7 @@ export default async function StylistProfilePreviewPage() {
   );
 
   // 生年月日の読み込み失敗は「未対応」ではない。従来表示に切り替えず、エラーとして伝える。
-  if (error || birth.status === "error") {
+  if (error || extStatus === "error" || birth.status === "error") {
     return (
       <StatusPanel
         title="プレビューを表示できませんでした"
@@ -103,7 +106,7 @@ export default async function StylistProfilePreviewPage() {
             氏名・性別・年代・生年月日・希望年収帯は、サロンには表示されません（保存済みの内容は削除されません）。
             {extended
               ? "年齢は満年齢だけが表示され、生年月日が未入力の場合は「未登録」と表示されます。"
-              : "プロフィール画像・雇用形態・Instagram・大切にしたいこと・年齢は、サービスの更新後にサロンへ表示されます（更新前はこのプレビューにも出ません）。"}
+              : "プロフィール画像・雇用形態・Instagram・大切にしたいこと・年齢は、現在サロンには表示されていません（サービスの更新前、または一時停止中）。表示が始まると、このプレビューにも同じ内容が出ます。"}
           </p>
         </>
       )}
