@@ -11,6 +11,9 @@
 
 適用したSQLの版: コミット `ab48003`。`0065_verify.sql` はローカル検証用で、本番では実行していません。
 
+## 再適用しない（訂正・明記）
+0065は**本番適用・適用後チェックまで完了済み**です。`0065_admin_billing_reads.draft.sql` はファイル名に draft が残っていますが、**再実行しません**（関数は適用済み。再実行が必要になるのは巻き戻し後のみ）。以後の0065の扱いは「適用済み」です。
+
 ## 現在の状態
 - 追加: `admin_billing_summary` / `admin_list_quotes` / `admin_list_invoices` / `admin_get_invoice` / `admin_list_billable_cases` / `admin_list_unresolved_billing_cases` / `company_billing_overview` / `company_get_invoice`（いずれも読み取り専用、authenticatedのみ実行可、一覧は limit/offset と総件数つき）。
 - データの変更・料金方式の切替・請求・課金・メール送信は行っていません。アプリ側（運営画面・会社画面）はまだ呼んでいません。
