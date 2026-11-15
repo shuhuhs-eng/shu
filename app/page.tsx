@@ -283,7 +283,7 @@ export default async function Home() {
                   className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full px-6 py-3.5 text-[14.5px] font-semibold text-surface lg:mt-2.5 lg:py-2.5 lg:text-[13.5px]"
                   style={{ backgroundColor: "#6E4AA6" }}
                 >
-                  美容師マイページへ
+                  マイページ
                   <ArrowRight size={15} />
                 </Link>
               ) : (
