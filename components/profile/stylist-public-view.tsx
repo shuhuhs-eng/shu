@@ -1,4 +1,5 @@
 import { EMPLOYMENT_TYPE_LABELS, JOB_CHANGE_INTENT_LABELS, VALUE_PRIORITY_OPTIONS } from "@/lib/validation/profile-options";
+import { formatExperienceValue } from "@/lib/profile/experience-years";
 import type { EmploymentType, JobChangeIntent } from "@/types/database";
 
 export type StylistPublicViewData = {
@@ -93,7 +94,7 @@ export function StylistPublicView({ data }: { data: StylistPublicViewData }) {
         <section aria-label="経験" className="py-2">
           <p className="mb-0.5 text-[11px] font-bold tracking-wide text-sub">経験</p>
           <dl>
-            <Row label="経験年数">{data.experienceYears != null ? `${data.experienceYears}年` : "未設定"}</Row>
+            <Row label="経験年数">{formatExperienceValue(data.experienceYears)}</Row>
             <Row label="現在の役職">{data.currentPosition || "未設定"}</Row>
             {ext && <Row label="雇用形態">{data.employmentType ? EMPLOYMENT_TYPE_LABELS[data.employmentType] : "未設定"}</Row>}
           </dl>

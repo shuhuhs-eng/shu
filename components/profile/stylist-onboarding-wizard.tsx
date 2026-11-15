@@ -109,7 +109,6 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
       return null;
     }
     if (targetStep === 2) {
-      if (!get("experienceYears")) return "美容師経験年数を入力してください";
       if (fd.getAll("specialties").length === 0) return "得意技術を1つ以上選択してください";
       if (!get("employmentType")) return "現在の雇用形態を選択してください";
       return null;
@@ -255,9 +254,10 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
             <TextField
               id="experienceYears"
               name="experienceYears"
-              label="美容師経験年数"
+              label="美容師経験年数（任意）"
               type="number"
               required={false}
+              placeholder="空欄のままで構いません（0年の場合は 0）"
               defaultValue={initialValues.experienceYears}
               errors={state.fieldErrors?.experienceYears}
             />

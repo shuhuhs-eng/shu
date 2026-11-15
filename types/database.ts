@@ -658,7 +658,7 @@ export type Database = {
           p_gender: GenderType;
           p_prefecture: string;
           p_desired_work_location: string | null;
-          p_experience_years: number;
+          p_experience_years: number | null;
           p_current_position: string | null;
           p_specialties: string[];
           p_employment_type: EmploymentType;
@@ -681,7 +681,7 @@ export type Database = {
           p_gender: GenderType;
           p_prefecture: string;
           p_desired_work_location: string | null;
-          p_experience_years: number;
+          p_experience_years: number | null;
           p_current_position: string | null;
           p_specialties: string[];
           p_employment_type: EmploymentType;

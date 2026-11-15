@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatExperienceInline } from "@/lib/profile/experience-years";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
@@ -348,11 +349,9 @@ export default async function SalonMyPage() {
                         "プロフィール情報未設定"}
                     </p>
                   </div>
-                  {interest.experience_years != null && (
-                    <span className="shrink-0 text-[12px] text-sub">
-                      経験{interest.experience_years}年
-                    </span>
-                  )}
+                  <span className="shrink-0 text-[12px] text-sub">
+                    {formatExperienceInline(interest.experience_years)}
+                  </span>
                 </div>
 
                 {interest.desired_work_location && (

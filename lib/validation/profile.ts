@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseExperienceYears } from "@/lib/profile/experience-years";
 import { validateBirthDate } from "@/lib/profile/birth-date";
 import { SPECIALTY_OPTIONS, VALUE_PRIORITY_OPTIONS, SNS_PLATFORMS } from "./profile-options";
 
@@ -40,11 +41,15 @@ export const profileFormSchema = z.object({
   publicName: z.string().trim().min(1, "公開名を入力してください").max(40, "公開名は40文字以内で入力してください"),
   prefecture: z.string().trim().min(1, "都道府県を選択してください"),
   desiredWorkLocation: z.string().trim().max(100, "100文字以内で入力してください").optional().or(z.literal("")),
-  experienceYears: z.coerce
-    .number({ message: "半角数字で入力してください" })
-    .int("整数で入力してください")
-    .min(0, "0以上で入力してください")
-    .max(60, "60以下で入力してください"),
+  // 空欄・空白は NULL（未登録）。明示的な 0 は 0。0へは変換しない（lib/profile/experience-years.ts）。
+  experienceYears: z.unknown().transform((v, ctx): number | null => {
+    const r = parseExperienceYears(v);
+    if (!r.ok) {
+      ctx.addIssue({ code: "custom", message: r.message });
+      return z.NEVER;
+    }
+    return r.value;
+  }),
   currentPosition: z.string().trim().max(60, "60文字以内で入力してください").optional().or(z.literal("")),
   specialties: z
     .array(z.enum(SPECIALTY_OPTIONS))

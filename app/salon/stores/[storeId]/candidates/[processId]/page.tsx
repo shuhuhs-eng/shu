@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatExperienceInline } from "@/lib/profile/experience-years";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -85,7 +86,7 @@ export default async function CandidateDetailPage({ params }: Props) {
         <div>
           <h2 className="font-serif text-xl font-bold text-ink">{p.public_name ?? "美容師"}</h2>
           <p className="mt-1 text-[12px] text-sub">
-            {[p.prefecture, p.current_position, p.experience_years != null ? `経験${p.experience_years}年` : null]
+            {[p.prefecture, p.current_position, formatExperienceInline(p.experience_years)]
               .filter(Boolean)
               .join(" / ") || "プロフィール情報未設定"}
           </p>

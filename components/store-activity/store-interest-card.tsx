@@ -1,4 +1,5 @@
 import { SalonOfferForm } from "@/components/salary-offers/salon-offer-form";
+import { formatExperienceInline } from "@/lib/profile/experience-years";
 import { isSalaryOfferPresentationPaused } from "@/lib/salary-offers/pause";
 import { JOB_CHANGE_INTENT_LABELS } from "@/lib/validation/profile-options";
 import { CAREER_GOAL_LABELS, type CareerGoalCode } from "@/lib/match-profile/options";
@@ -63,9 +64,7 @@ export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPa
           ) : (
             <p className="text-[11px] text-sub">相性診断準備中</p>
           )}
-          {interest.experience_years != null && (
-            <p className="mt-1 text-[12px] text-sub">経験{interest.experience_years}年</p>
-          )}
+          <p className="mt-1 text-[12px] text-sub">{formatExperienceInline(interest.experience_years)}</p>
         </div>
       </div>
 

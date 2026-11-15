@@ -153,8 +153,10 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
             <TextField
               id="experienceYears"
               name="experienceYears"
-              label="美容師経験年数"
+              label="美容師経験年数（任意）"
               type="number"
+              required={false}
+              placeholder="空欄のままで構いません（0年の場合は 0）"
               defaultValue={initialValues.experienceYears}
               errors={state.fieldErrors?.experienceYears}
             />

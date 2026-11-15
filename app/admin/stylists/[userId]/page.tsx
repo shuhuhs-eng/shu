@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatExperienceValue } from "@/lib/profile/experience-years";
 import { requireAdminPage } from "@/lib/admin/guard";
 import { getStylist } from "@/lib/admin/directory";
 import { ErrorBox, Where, VIS_LABEL, STATE_LABEL } from "@/components/admin/directory-ui";
@@ -29,7 +30,7 @@ export default async function AdminStylistDetailPage({ params }: { params: Promi
             <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-2xl border border-line bg-surface p-4 text-[12.5px]">
               {row("登録状態", `${STATE_LABEL[d.registration_state] ?? d.registration_state}（ステップ ${d.onboarding_step}）`)}
               {row("公開状態", d.visibility ? VIS_LABEL[d.visibility] ?? d.visibility : "未設定")}
-              {row("経験年数", d.experience_years ?? "未設定")}
+              {row("経験年数", formatExperienceValue(d.experience_years))}
               {row("現在の役職", d.current_position ?? "未設定")}
               {row("得意分野", d.specialties?.length ? d.specialties?.join("、") : "未設定")}
               {row("転職意向", d.job_change_intent ?? "未設定")}
