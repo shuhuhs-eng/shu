@@ -42,7 +42,7 @@ export function formatJstDateTime(iso: string): string {
   return `${g("year")}年${g("month")}月${g("day")}日 ${g("hour")}時${g("minute")}分`;
 }
 
-export const RETAKE_RULE_TEXT = "初回診断後、変更は1回できます。変更後は3か月間変更できません。";
+export const RETAKE_RULE_TEXT = "初回診断後、変更は1回できます。変更後は3か月間、診断を変更できません。";
 
 export type RetakeNotice = {
   /** 制限が有効なときだけ出す説明。無効（unknown）のときは null。 */

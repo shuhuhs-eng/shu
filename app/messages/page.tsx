@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { inboxList } from "@/lib/messages/rpc";
 import { parsePage, PAGE_SIZE } from "@/lib/admin/directory";
+import { BackToMypage } from "@/components/messages/back-to-mypage";
 import { InboxCard } from "@/components/messages/cards";
 import { ErrorBox, Pager } from "@/components/admin/directory-ui";
 
@@ -16,7 +17,8 @@ export default async function MessagesPage({ searchParams }: { searchParams: SP 
   const res = await inboxList(supabase, PAGE_SIZE, (page - 1) * PAGE_SIZE);
   return (
     <main className="mx-auto max-w-[720px] px-5 py-10">
-      <h1 className="font-serif text-2xl font-bold text-ink">運営からの連絡</h1>
+      <BackToMypage />
+      <h1 className="mt-1 font-serif text-2xl font-bold text-ink">運営からの連絡</h1>
       {!res.ok ? <ErrorBox reason={res.reason === "forbidden" ? "forbidden" : "error"} /> : res.data.rows.length === 0 ? (
         <p className="mt-8 rounded-2xl border border-line bg-surface p-8 text-center text-[13px] text-sub">連絡はありません。</p>
       ) : (

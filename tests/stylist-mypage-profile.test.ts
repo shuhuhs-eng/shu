@@ -12,6 +12,7 @@ import { MarketValueCard } from "../components/mypage/market-value-card";
 import { AiNarrativeBlocks } from "../components/mypage/ai-narrative-blocks";
 import { splitLead, splitStep } from "../lib/diagnosis/ai-text";
 import { parseRetakeLimit, retakeNotice, RETAKE_RULE_TEXT, LIMIT_UNKNOWN } from "../lib/diagnosis-limit/retake-status";
+import { BackToMypage } from "../components/messages/back-to-mypage";
 import { RetakeLink } from "../components/mypage/retake-link";
 import { OrderMadeMatchCard } from "../components/mypage/order-made-match-card";
 import { StylistPublicView } from "../components/profile/stylist-public-view";
@@ -20,7 +21,7 @@ import { initialVisibility } from "../lib/profile/get-initial-values";
 import { profileFieldsKey } from "../lib/profile/fields-key";
 import { isSalaryOfferPresentationPaused } from "../lib/salary-offers/pause";
 import { profileFormSchema } from "../lib/validation/profile";
-import { ageOn, validateBirthDate, todayJst } from "../lib/profile/birth-date";
+import { ageOn, validateBirthDate, todayJst, isMissingBirthDateColumn, readOwnBirthDate } from "../lib/profile/birth-date";
 import { BirthDateField } from "../components/profile/birth-date-field";
 
 const scores = { T: 72, S: 55, H: 80, B: 30, A: 64, M: 41 };
@@ -36,7 +37,7 @@ test("才能は6項目のまま（削除・合算なし）で、六角形の頂�
 
 test("全項目が0〜100の共通尺度。想定外の値は丸める", () => {
   const bank = bankFor("stylist");
-  const best = bank.map((q) => 0);
+  const best = bank.map(() => 0);
   const { traits } = scoreTraits(best, bank);
   for (const t of TRAITS) assert.ok(traits[t.key] >= 0 && traits[t.key] <= 100);
   assert.equal(clampScore(150), 100);
@@ -107,12 +108,15 @@ test("再診断: 制限が有効でない（0058未適用＝unknown）ときは�
   assert.deepEqual(parseRetakeLimit({ state: "locked" }), LIMIT_UNKNOWN); // 日時が無い＝不正
   assert.deepEqual(parseRetakeLimit({ state: "weird" }), LIMIT_UNKNOWN);
   const unk = renderToStaticMarkup(createElement(RetakeLink, { limit: LIMIT_UNKNOWN }));
-  assert.ok(!unk.includes("3か月") && !unk.includes("1回できます"));
+  assert.ok(!unk.includes("1回できます") && !unk.includes("診断を変更できません")); // 制限が有効でないので、制限の説明は出さない
+  const BASE = "才能は経験とともに変わります。3か月〜半年ごとに診断を受け直すことをおすすめします。";
+  assert.ok(unk.includes(BASE));
+  assert.ok(!unk.includes("必要なときに診断を受け直せます") && !unk.includes("必要な時に診断を受け直せます"));
   assert.match(unk, /診断を受け直す/);
   assert.match(unk, /min-h-\[48px\]/);
   const can = renderToStaticMarkup(createElement(RetakeLink, { limit: parseRetakeLimit({ state: "can_change" }) }));
-  assert.ok(can.includes(RETAKE_RULE_TEXT));
-  assert.equal(RETAKE_RULE_TEXT, "初回診断後、変更は1回できます。変更後は3か月間変更できません。");
+  assert.ok(can.includes(RETAKE_RULE_TEXT) && can.includes(BASE));
+  assert.equal(RETAKE_RULE_TEXT, "初回診断後、変更は1回できます。変更後は3か月間、診断を変更できません。");
   const locked = parseRetakeLimit({ state: "locked", locked_until: "2027-02-13T09:10:00Z" });
   assert.equal(retakeNotice(locked).canStart, false);
   const lockedHtml = renderToStaticMarkup(createElement(RetakeLink, { limit: locked }));
@@ -237,4 +241,27 @@ test("生年月日の保存入力: 項目なし(DB未対応)は何もしない�
   assert.match(field, /type="date"/);
   assert.match(field, /value="1995-06-15"/);
   assert.match(field, /未登録/);
+});
+
+test("生年月日の未対応判定: 列が存在しないときだけ unsupported。権限・通信エラーは error（従来表示へ切り替えない）", async () => {
+  assert.equal(isMissingBirthDateColumn({ code: "42703" }), true);
+  assert.equal(isMissingBirthDateColumn({ code: "PGRST204" }), true);
+  assert.equal(isMissingBirthDateColumn({ message: 'column stylist_private.birth_date does not exist' }), true);
+  assert.equal(isMissingBirthDateColumn({ code: "42501", message: "permission denied for table stylist_private" }), false);
+  assert.equal(isMissingBirthDateColumn({ message: "TypeError: fetch failed" }), false);
+  assert.equal(isMissingBirthDateColumn({ code: "PGRST301", message: "JWT expired" }), false);
+  const fake = (res: { data: unknown; error: unknown }) => ({ from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => res }) }) }) }) as never;
+  assert.deepEqual(await readOwnBirthDate(fake({ data: { birth_date: "1995-06-15" }, error: null }), "u"), { status: "ok", birthDate: "1995-06-15" });
+  assert.deepEqual(await readOwnBirthDate(fake({ data: null, error: null }), "u"), { status: "ok", birthDate: null });
+  assert.deepEqual(await readOwnBirthDate(fake({ data: null, error: { code: "42703", message: "x" } }), "u"), { status: "unsupported" });
+  assert.deepEqual(await readOwnBirthDate(fake({ data: null, error: { code: "42501", message: "permission denied" } }), "u"), { status: "error" });
+  assert.deepEqual(await readOwnBirthDate(fake({ data: null, error: { message: "fetch failed" } }), "u"), { status: "error" });
+});
+
+test("運営からの連絡: 「マイページへ戻る」は共通の行き先(/mypage)へ。ホーム(/)へは戻さない。タップ領域44px以上", () => {
+  const html = renderToStaticMarkup(createElement(BackToMypage));
+  assert.match(html, /href="\/mypage"/);
+  assert.ok(!html.includes('href="/"'));
+  assert.match(html, /マイページへ戻る/);
+  assert.match(html, /min-h-\[44px\]/);
 });

@@ -9,7 +9,7 @@ export function RetakeLink({ limit }: { limit: RetakeLimit }) {
   const n = retakeNotice(limit);
   return (
     <section aria-label="診断のやり直し" className="mt-10 border-t border-line pt-4 text-center">
-      <p className="text-[12px] leading-relaxed text-sub">才能は経験とともに変わります。必要なときに診断を受け直せます。</p>
+      <p className="text-[12px] leading-relaxed text-sub">才能は経験とともに変わります。3か月〜半年ごとに診断を受け直すことをおすすめします。</p>
       {n.canStart ? (
         <Link href="/stylist/diagnosis" className="mt-1 inline-flex min-h-[48px] min-w-[48px] items-center justify-center px-4 text-[13px] text-sub underline">
           診断を受け直す
