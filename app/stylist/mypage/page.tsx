@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { GUEST_NOT_CARRIED_NOTICE_COOKIE } from "@/lib/diagnosis-handoff/constants";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { DiagnosisSummary } from "@/components/mypage/diagnosis-summary";
+import { CareerPhaseSummary } from "@/components/student-diagnosis/career-phase-summary";
+import { readOwnCareerPhase } from "@/lib/student-diagnosis/career-phase";
 import { CoreTypeHeader } from "@/components/mypage/core-type-header";
 import { CoreTypeDetails } from "@/components/mypage/core-type-details";
 import { MarketValueCard } from "@/components/mypage/market-value-card";
@@ -50,6 +52,12 @@ export default async function StylistMyPage() {
   if (!user) {
     redirect("/login?next=/stylist/mypage");
   }
+
+  // 0071の区分（学生・新卒）。列が無い・読めないときは何も出さない（既存の表示は変えない）。
+  const careerPhase = await readOwnCareerPhase(supabase, user.id);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const studentResultRes = careerPhase.status === "ok" ? await (supabase as any).from("student_diagnosis_results").select("id").eq("user_id", user.id).limit(1) : null;
+  const hasStudentResult = !!studentResultRes && !studentResultRes.error && (studentResultRes.data?.length ?? 0) > 0;
 
   // 以下の取得は互いに依存しないため、まとめて並列に実行する（以前は1件ずつ直列で、表示まで10回以上の
   // DB往復を順番に待っていた）。取得する内容・認証/権限確認（getUser・role確認）は変えていない。
@@ -230,6 +238,11 @@ export default async function StylistMyPage() {
           <div className="mt-6">
             <DiagnosisSummary latest={latest} aiByType={aiByType} />
           </div>
+          {careerPhase.status === "ok" && (
+            <div className="mt-6">
+              <CareerPhaseSummary value={careerPhase.value} hasStudentResult={hasStudentResult} />
+            </div>
+          )}
 
           {!latest && guestNotCarried && (
             <p className="mt-6 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">

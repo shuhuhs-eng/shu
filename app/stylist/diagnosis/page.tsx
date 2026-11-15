@@ -5,6 +5,7 @@ import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { getDiagnosisChangeStatus } from "@/lib/diagnosis-limit/status";
 import { formatJstDateTime } from "@/lib/diagnosis-limit/messages";
 import Link from "next/link";
+import { readOwnCareerPhase } from "@/lib/student-diagnosis/career-phase";
 
 // ログイン状態をサーバー側で確認し、DiagnosisQuizへ渡す。ログイン済みの
 // 場合は診断完了時に /api/diagnosis/guest ではなくログイン済み専用の
@@ -46,5 +47,20 @@ export default async function StylistDiagnosisPage() {
     );
   }
 
-  return <DiagnosisQuiz mode="stylist" isLoggedIn={!!user} limitStatus={limitStatus} />;
+  // 美容学生・新卒の入口（0071適用済みで、ログイン中のときだけ）。選ぶまで区分は未設定のまま・推測しない。
+  const studentSupported = user ? (await readOwnCareerPhase(supabase, user.id)).status === "ok" : false;
+
+  return (
+    <>
+      {studentSupported && (
+        <div className="mx-auto max-w-[520px] px-5 pt-6">
+          <p className="rounded-2xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">
+            美容学生（在学中）・新卒の方は、実績を聞かない専用の診断があります。
+            <Link href="/stylist/diagnosis/student" className="ml-1 font-semibold text-ink underline">学生・新卒の診断へ</Link>
+          </p>
+        </div>
+      )}
+      <DiagnosisQuiz mode="stylist" isLoggedIn={!!user} limitStatus={limitStatus} />
+    </>
+  );
 }

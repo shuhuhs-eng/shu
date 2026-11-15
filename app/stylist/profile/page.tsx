@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getProfileFormInitialValues } from "@/lib/profile/get-initial-values";
 import { ProfileForm } from "@/components/profile/profile-form";
+import { CareerPhaseForm } from "@/components/student-diagnosis/career-phase-form";
+import { readOwnCareerPhase } from "@/lib/student-diagnosis/career-phase";
+import { saveCareerPhaseAction } from "@/lib/student-diagnosis/actions";
 
 export default async function StylistProfileEditPage() {
   const supabase = await createClient();
@@ -20,6 +23,9 @@ export default async function StylistProfileEditPage() {
     user.id,
     typeof user.user_metadata?.display_name === "string" ? user.user_metadata.display_name : null,
   );
+
+  // 0071が未適用のDB（列なし）では、区分の入力欄そのものを出さない。読み込みに失敗したときも出さない（未設定と取り違えて上書きしない）。
+  const careerPhase = await readOwnCareerPhase(supabase, user.id);
 
   return (
     <main className="mx-auto max-w-[560px] px-5 py-12">
@@ -42,6 +48,11 @@ export default async function StylistProfileEditPage() {
       <div className="mt-6">
         <ProfileForm mode="edit" userId={user.id} initialValues={initialValues} />
       </div>
+      {careerPhase.status === "ok" && (
+        <div className="mt-6">
+          <CareerPhaseForm initial={careerPhase.value} action={saveCareerPhaseAction} />
+        </div>
+      )}
     </main>
   );
 }
