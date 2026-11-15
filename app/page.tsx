@@ -6,6 +6,8 @@ import { signOutAction } from "@/lib/auth/actions";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { LegalLinks } from "@/components/legal/legal-links";
 import { HeroCharacter } from "@/components/home/hero-character";
+import { HomeNotificationLink } from "@/components/notifications/home-notification-link";
+import { getUnreadNotificationCount } from "@/lib/notifications/get-notifications";
 
 /**
  * 「/」は常にBeauty Reachの一般TOPページを表示する（ログイン状態に関係なく）。
@@ -59,6 +61,8 @@ export default async function Home() {
     }
   }
   const adminCheckFailed = view === "check_failed";
+  // 美容師・サロンのログイン中だけ、ヘッダーの通知ベルに出す未読件数（マイページと同じ数え方）。
+  const unreadNotifications = user && (view === "stylist" || view === "salon") ? await getUnreadNotificationCount(supabase, user.id) : null;
   const showStylistCard = view === "guest" || view === "stylist";
   const showSalonEntry = view === "guest" || view === "salon";
 
@@ -105,7 +109,11 @@ export default async function Home() {
             <Link href="/admin" className="inline-flex min-h-[44px] items-center rounded-full border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-ink lg:text-[12.5px]">
               管理画面へ
             </Link>
+          ) : view === "stylist" || view === "salon" ? (
+            // 美容師・サロン: ログアウトの左は「マイページ」ではなく通知ベル（マイページへの導線は下部カード・本文内に残る）。
+            <HomeNotificationLink role={view} unread={unreadNotifications} />
           ) : (
+            // 役割が未登録（オンボーディング前など）: 従来どおり共通の「マイページ」から振り分ける。
             <Link href="/mypage" className="inline-flex min-h-[44px] items-center rounded-full border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-ink lg:text-[12.5px]">
               マイページ
             </Link>

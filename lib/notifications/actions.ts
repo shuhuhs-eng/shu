@@ -18,6 +18,7 @@ export async function markNotificationRead(
   if (error) return { success: false, error: "既読にできませんでした。" };
   revalidatePath("/stylist/mypage");
   revalidatePath("/salon/mypage");
+  revalidatePath("/"); // トップ画面の通知ベルの未読件数も合わせる
   return { success: true };
 }
 
@@ -29,6 +30,7 @@ export async function markAllNotificationsRead(): Promise<
   if (error) return { success: false, error: "既読にできませんでした。" };
   revalidatePath("/stylist/mypage");
   revalidatePath("/salon/mypage");
+  revalidatePath("/"); // トップ画面の通知ベルの未読件数も合わせる
   return { success: true, count: data ?? 0 };
 }
 
@@ -49,5 +51,6 @@ export async function markNotificationsReadForEntities(
   if (error) return { success: false, error: "既読にできませんでした。" };
   revalidatePath("/stylist/mypage");
   revalidatePath("/salon/mypage");
+  revalidatePath("/"); // トップ画面の通知ベルの未読件数も合わせる
   return { success: true, count: data ?? 0 };
 }

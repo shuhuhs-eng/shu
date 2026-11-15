@@ -46,3 +46,19 @@ export async function getUnreadNotificationRefs(
     .eq("is_read", false);
   return data ?? [];
 }
+
+/**
+ * トップ画面の通知ベル用の未読件数。マイページの通知ベルと同じ数え方（DBの現在値・notifications の本人分・is_read=false）。
+ * 取得できなかったときは null（0件と区別する。呼び出し側はバッジを出さないだけで、画面は止めない）。
+ */
+export async function getUnreadNotificationCount(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<number | null> {
+  const { count, error } = await supabase
+    .from("notifications")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("is_read", false);
+  return error ? null : (count ?? 0);
+}

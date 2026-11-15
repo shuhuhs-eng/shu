@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Bell } from "lucide-react";
 import { markAllNotificationsRead, markNotificationRead } from "@/lib/notifications/actions";
@@ -91,10 +92,21 @@ export function NotificationBell({
   unreadCount: number;
   role: "stylist" | "salon";
 }) {
-  const [open, setOpen] = useState(false);
+  // トップ画面の通知ベルから来たとき（?notifications=open）は、この通知一覧を開いた状態にする（表示する一覧・未読件数・既読処理は従来と同じ）。
+  const openedFromHome = useSearchParams().get("notifications") === "open";
+  const [open, setOpen] = useState(openedFromHome);
   const [items, setItems] = useState(notifications);
   const [unread, setUnread] = useState(unreadCount);
   const [busy, setBusy] = useState(false);
+
+  // 目印（?notifications=open）はURLから消す（再読み込みで開き直さない）。
+  useEffect(() => {
+    if (!openedFromHome) return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete("notifications");
+    const qs = params.toString();
+    window.history.replaceState(null, "", window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash);
+  }, [openedFromHome]);
 
   async function handleOpenItem(notification: NotificationRow) {
     if (!notification.is_read) {
