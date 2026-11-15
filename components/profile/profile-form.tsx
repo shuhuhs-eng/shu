@@ -1,12 +1,10 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { saveProfileAction } from "@/lib/profile/actions";
 import { initialAuthActionState } from "@/lib/auth/types";
-import { SubmitButton } from "@/components/auth/submit-button";
-import { PendingFieldset } from "@/components/auth/pending-fieldset";
-import { FormErrorBanner, FormSuccessBanner } from "@/components/auth/form-messages";
+import { SaveFeedback } from "@/components/profile/save-feedback";
 import { TextField } from "@/components/auth/text-field";
 import { SelectField } from "@/components/profile/select-field";
 import { CheckboxGroupField } from "@/components/profile/checkbox-group-field";
@@ -74,23 +72,51 @@ type Props = {
 const toOptions = (labels: Record<string, string>) =>
   Object.entries(labels).map(([value, label]) => ({ value, label }));
 
+/** 保存完了の文言（ボタン直下に表示）。 */
+export const PROFILE_SAVED_MESSAGE = "保存しました";
+
 export function ProfileForm({ mode, userId, initialValues }: Props) {
   const router = useRouter();
-  const [state, formAction] = useActionState(saveProfileAction, initialAuthActionState);
+  const [state, formAction, isPending] = useActionState(saveProfileAction, initialAuthActionState);
+  // 成功メッセージを消した（再編集を始めた）時点の state。同じ state の成功メッセージは再表示しない。
+  const [dismissedFor, setDismissedFor] = useState<unknown>(null);
+  const submittingRef = useRef(false);
 
-  // 初回オンボーディングは保存完了後にマイページへ遷移する。編集画面はその場に留まり成功メッセージを表示する。
+  // 初回オンボーディングは保存完了後にマイページへ遷移する。編集画面はその場に留まり、ボタン直下に成功メッセージを表示する。
   useEffect(() => {
     if (mode === "create" && state.success) {
       router.push("/stylist/mypage");
     }
   }, [mode, state.success, router]);
 
-  return (
-    <form action={formAction} className="space-y-8">
-      <FormErrorBanner message={state.error} />
-      {mode === "edit" && <FormSuccessBanner message={state.success} />}
+  // 送信が終わったら、二重送信のガードを外す。
+  useEffect(() => {
+    if (!isPending) submittingRef.current = false;
+  }, [isPending, state]);
 
-      <PendingFieldset key={profileFieldsKey(initialValues)}>
+  // <form action> ではなく onSubmit から直接送る。<form action> は完了後に入力欄を初期値へ戻す（React 19）ため、
+  // 失敗したときに入力内容が消えてしまう。ここでは入力欄に触れないので、失敗しても入力内容が残る。
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (isPending || submittingRef.current) return; // 二重送信の防止
+    submittingRef.current = true;
+    const formData = new FormData(e.currentTarget);
+    startTransition(() => {
+      formAction(formData);
+    });
+  }
+
+  // 成功の表示は、実際の保存成功後だけ（保存中は出さない）。再編集を始めたら消す。
+  const successMessage =
+    mode === "edit" && !isPending && state.success && dismissedFor !== state ? PROFILE_SAVED_MESSAGE : undefined;
+  const errorMessage = isPending ? undefined : state.error;
+  const dismissSuccess = () => {
+    if (state.success) setDismissedFor(state);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} onChange={dismissSuccess} onInput={dismissSuccess} className="space-y-8">
+      <fieldset disabled={isPending} key={profileFieldsKey(initialValues)} className="contents m-0 border-0 p-0">
         <div className="space-y-8">
           <section className="space-y-4">
             <h2 className="eyebrow">公開プロフィール</h2>
@@ -233,11 +259,19 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
             <p className="text-[12px] leading-relaxed text-sub">公開にすると、サービス内のスカウトを受け取れます。氏名・性別・年代・生年月日は、公開にしてもサロンへ表示されません（年齢は満年齢のみ表示）。</p>
           </section>
         </div>
-      </PendingFieldset>
+      </fieldset>
 
-      <SubmitButton pendingText="保存中...">
-        {mode === "create" ? "プロフィールを保存して始める" : "変更を保存"}
-      </SubmitButton>
+      <div>
+        <button
+          type="submit"
+          disabled={isPending}
+          aria-busy={isPending}
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface transition-opacity disabled:opacity-60"
+        >
+          {isPending ? "保存中…" : mode === "create" ? "プロフィールを保存して始める" : "変更を保存"}
+        </button>
+        <SaveFeedback success={successMessage} error={errorMessage} />
+      </div>
     </form>
   );
 }
