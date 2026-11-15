@@ -7,6 +7,8 @@ import { computeStudentResult } from "@/lib/student-diagnosis/result";
 import { STUDENT_DIAGNOSIS_VERSION, isValidStudentAnswers } from "@/lib/student-diagnosis/questions";
 import { readCurrentDiagnosis } from "@/lib/student-diagnosis/current";
 import { loadStudentResultForPage } from "@/lib/student-diagnosis/current-results";
+import { ApplyValuesToProfile } from "@/components/student-diagnosis/apply-values-to-profile";
+import { applyValuePrioritiesAction } from "@/lib/profile/apply-diagnosis-actions";
 import { StudentResultView } from "@/components/student-diagnosis/student-result-view";
 
 /** 学生・新卒診断の結果（本人のみ。RLSで本人の行だけ読める）。保存済みの回答から表示用の結果を作り直す。 */
@@ -24,6 +26,9 @@ export default async function StudentDiagnosisResultPage() {
   const row = load.kind === "current" || load.kind === "past" ? load.row : null;
   const valid = !!row && isValidStudentAnswers(row.answers);
   const status = load.kind === "current" || load.kind === "past" ? load.kind : null;
+  const result = valid ? computeStudentResult(row!.answers as never, row!.version ?? STUDENT_DIAGNOSIS_VERSION) : null;
+  // プロフィールへの反映は、現在の結果のときだけ（過去の結果は反映の対象にしない）。保存済みの設定は本人の行だけ読む。
+  const profileRead = status === "current" ? await supabase.from("stylist_profiles").select("value_priorities").eq("user_id", user.id).maybeSingle() : null;
   return (
     <main className="mx-auto max-w-[560px] px-5 py-12">
       <div className="mb-7 flex items-center gap-2.5"><span className="eyebrow">Beauty Reach</span><hr className="h-px flex-1 border-0 bg-line" /></div>
@@ -35,7 +40,14 @@ export default async function StudentDiagnosisResultPage() {
         </p>
       )}
       {valid ? (
-        <StudentResultView result={computeStudentResult(row!.answers as never, row!.version ?? STUDENT_DIAGNOSIS_VERSION)} />
+        <>
+          <StudentResultView result={result!} />
+          {status === "current" && profileRead && !profileRead.error && (
+            <div className="mt-6">
+              <ApplyValuesToProfile diagnosisValues={result!.values} current={profileRead.data?.value_priorities ?? null} hasProfile={!!profileRead.data} action={applyValuePrioritiesAction} />
+            </div>
+          )}
+        </>
       ) : (
         <div className="rounded-2xl border border-line bg-surface p-5 text-[14px] leading-relaxed text-charcoal">
           {load.kind === "error" || load.kind === "unavailable" || (row && !valid)
