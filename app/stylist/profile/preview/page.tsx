@@ -6,6 +6,8 @@ import { StatusPanel } from "@/components/error-panel";
 import { initialVisibility } from "@/lib/profile/get-initial-values";
 import { ageOn, decadeOf, readOwnAgeDisplayMode, readOwnBirthDate, todayJst } from "@/lib/profile/birth-date";
 import { readPublicExtendedStatus } from "@/lib/profile/public-extended";
+import { readOwnCareerPhase } from "@/lib/student-diagnosis/career-phase";
+import { CareerPhaseOwnView } from "@/components/student-diagnosis/career-phase-own-view";
 import { getAvatarSignedUrl } from "@/lib/storage/avatar";
 import type { SnsLink } from "@/types/database";
 
@@ -23,10 +25,11 @@ export default async function StylistProfilePreviewPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/stylist/profile/preview");
 
-  const [{ data: pub, error }, { data: profile }, extStatus] = await Promise.all([
+  const [{ data: pub, error }, { data: profile }, extStatus, careerPhase] = await Promise.all([
     supabase.from("stylist_profiles").select("*").eq("user_id", user.id).maybeSingle(),
     supabase.from("profiles").select("avatar_path").eq("id", user.id).maybeSingle(),
     readPublicExtendedStatus(supabase),
+    readOwnCareerPhase(supabase, user.id), // 本人の「いまの立場」。サロン向けの表示とは別に出す（0071未適用なら出さない）
   ]);
   // 追加表示が「いまサロンに出ているか」は、DBの機能フラグで判定する（生年月日の列の有無では判定しない）。
   const extended = extStatus === "enabled";
@@ -126,6 +129,8 @@ export default async function StylistProfilePreviewPage() {
           </p>
         </>
       )}
+
+      {careerPhase.status !== "unsupported" && <CareerPhaseOwnView load={careerPhase} />}
 
       <Link href="/stylist/profile" className="mt-6 flex min-h-[48px] w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-3.5 text-[14px] font-semibold text-ink">
         プロフィールを編集する
