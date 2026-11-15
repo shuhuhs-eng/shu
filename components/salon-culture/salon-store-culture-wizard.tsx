@@ -10,7 +10,6 @@ import { ChangeLimitBanner } from "@/components/salon-culture/change-limit-banne
 import type { DraftState } from "@/lib/salon-culture/draft";
 import type { LimitStatus } from "@/lib/diagnosis-limit/messages";
 import type { SupplementAnswers } from "@/lib/salon-culture/analysis/v1";
-import type { Database } from "@/types/database";
 
 /**
  * 店舗単位「サロンらしさ」入力ウィザード（法人・複数店舗対応 Phase 3B）。

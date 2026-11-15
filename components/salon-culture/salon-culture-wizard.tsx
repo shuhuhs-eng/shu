@@ -10,7 +10,6 @@ import { ChangeLimitBanner } from "@/components/salon-culture/change-limit-banne
 import type { DraftState } from "@/lib/salon-culture/draft";
 import type { LimitStatus } from "@/lib/diagnosis-limit/messages";
 import type { SupplementAnswers } from "@/lib/salon-culture/analysis/v1";
-import type { Database } from "@/types/database";
 
 /**
  * ★0009で新12問(5段階評価)へ再構築。旧5問(q1_new_hire_mistake等)は
