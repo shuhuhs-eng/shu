@@ -20,6 +20,8 @@ import { initialVisibility } from "../lib/profile/get-initial-values";
 import { profileFieldsKey } from "../lib/profile/fields-key";
 import { isSalaryOfferPresentationPaused } from "../lib/salary-offers/pause";
 import { profileFormSchema } from "../lib/validation/profile";
+import { ageOn, validateBirthDate, todayJst } from "../lib/profile/birth-date";
+import { BirthDateField } from "../components/profile/birth-date-field";
 
 const scores = { T: 72, S: 55, H: 80, B: 30, A: 64, M: 41 };
 
@@ -140,7 +142,10 @@ test("サロン向け表示: 項目を整理して表示。年齢は値がある
   const html = renderToStaticMarkup(createElement(StylistPublicView, { data: base }));
   for (const w of ["基本情報", "経験", "希望する働き方", "さくら", "5年", "カット", "横浜", "自己紹介"]) assert.ok(html.includes(w), w);
   assert.ok(!html.includes("年齢"));
-  const withAge = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, age: 29 } }));
+  // DB未対応（extended未指定）のときは、従来の項目だけ。年齢・雇用形態・Instagram・大切にしたいことは出さない。
+  const legacy = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, age: 29, instagramHandle: "x", employmentType: "full_time" as const } }));
+  assert.ok(!/年齢|雇用形態|Instagram/.test(legacy));
+  const withAge = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, extended: true, age: 29 } }));
   assert.match(withAge, /29歳/);
   assert.ok(!/氏名|性別|年代|生年月日|希望年収/.test(withAge));
   const long = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, bio: "あ".repeat(200) } }));
@@ -183,4 +188,53 @@ test("給与条件の提示の一時停止: 既定は停止中。環境変数 fa
   assert.equal(isSalaryOfferPresentationPaused({}), true);
   assert.equal(isSalaryOfferPresentationPaused({ SALARY_OFFER_PRESENTATION_PAUSED: "true" }), true);
   assert.equal(isSalaryOfferPresentationPaused({ SALARY_OFFER_PRESENTATION_PAUSED: "false" }), false);
+});
+
+test("サロン向け表示（0070対応）: 画像・雇用形態・Instagram・大切にしたいこと・年齢。未登録は「未登録」と表示。個人情報は出さない", () => {
+  const base = { publicName: "さくら", prefecture: "東京都", currentPosition: null, experienceYears: 3, desiredWorkLocation: null, jobChangeIntent: "active" as const, specialties: ["カット"], bio: null, extended: true };
+  const html = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, avatarUrl: "https://example.test/a.webp", employmentType: "full_time" as const, instagramHandle: "sakura_hair", valuePriorities: ["work_life_balance", "unknown_code"], age: 28 } }));
+  assert.match(html, /<img[^>]+a\.webp/);
+  assert.match(html, /28歳/);
+  assert.match(html, /雇用形態/);
+  assert.match(html, /@sakura_hair/);
+  assert.match(html, /instagram\.com\/sakura_hair/);
+  assert.match(html, /サロン選びで大切にしたいこと/);
+  assert.match(html, /ワークライフバランス重視/);
+  assert.ok(!html.includes("unknown_code"));
+  const none = renderToStaticMarkup(createElement(StylistPublicView, { data: { ...base, age: null } }));
+  assert.match(none, /未登録/);
+  assert.ok(!/<img/.test(none)); // 画像なしは頭文字の丸
+  assert.ok(!/氏名|性別|年代|生年月日|希望年収/.test(html + none));
+});
+
+test("生年月日: 満年齢は誕生日の前日までは上がらない。範囲外・実在しない日付は拒否。年代からは推測しない", () => {
+  assert.equal(ageOn("1995-06-15", "2026-06-14"), 30);
+  assert.equal(ageOn("1995-06-15", "2026-06-15"), 31);
+  assert.equal(ageOn("2000-02-29", "2026-02-28"), 25);
+  assert.equal(ageOn("2000-02-29", "2026-03-01"), 26);
+  assert.equal(ageOn(null, "2026-06-15"), null);
+  assert.equal(ageOn("", "2026-06-15"), null);
+  const today = "2026-11-15";
+  assert.equal(validateBirthDate("1995-06-15", today), null);
+  assert.equal(validateBirthDate("2011-11-15", today), null); // ちょうど満15歳
+  assert.ok(validateBirthDate("2011-11-16", today)); // 満14歳
+  assert.ok(validateBirthDate("2026-11-16", today)); // 未来
+  assert.ok(validateBirthDate("1925-11-14", today)); // 満101歳
+  assert.ok(validateBirthDate("2001-02-30", today)); // 実在しない
+  assert.match(todayJst(new Date("2026-11-14T16:00:00Z")), /^2026-11-15$/); // 日本時間
+});
+
+test("生年月日の保存入力: 項目なし(DB未対応)は何もしない・空は未登録に戻す・不正は拒否", () => {
+  const ok = { publicName: "A", prefecture: "東京都", experienceYears: "3", specialties: ["カット"], employmentType: "full_time", jobChangeIntent: "active", snsLinks: [], fullName: "山田", ageBand: "25_29", gender: "female", valuePriorities: ["work_life_balance", "skill_growth", "teamwork"], visibility: "PUBLIC" };
+  const none = profileFormSchema.safeParse(ok);
+  assert.ok(none.success); assert.equal(none.data.birthDate, undefined);
+  const empty = profileFormSchema.safeParse({ ...ok, birthDate: "" });
+  assert.ok(empty.success); assert.equal(empty.data.birthDate, "");
+  assert.ok(profileFormSchema.safeParse({ ...ok, birthDate: "1995-06-15" }).success);
+  assert.ok(!profileFormSchema.safeParse({ ...ok, birthDate: "2999-01-01" }).success);
+  assert.ok(!profileFormSchema.safeParse({ ...ok, birthDate: "abc" }).success);
+  const field = renderToStaticMarkup(createElement(BirthDateField, { defaultValue: "1995-06-15" }));
+  assert.match(field, /type="date"/);
+  assert.match(field, /value="1995-06-15"/);
+  assert.match(field, /未登録/);
 });

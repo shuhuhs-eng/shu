@@ -4,10 +4,15 @@ import { createClient } from "@/lib/supabase/server";
 import { StylistPublicView } from "@/components/profile/stylist-public-view";
 import { StatusPanel } from "@/components/error-panel";
 import { initialVisibility } from "@/lib/profile/get-initial-values";
+import { ageOn, readOwnBirthDate, todayJst } from "@/lib/profile/birth-date";
+import { getAvatarSignedUrl } from "@/lib/storage/avatar";
+import type { SnsLink } from "@/types/database";
 
 /**
  * サロン向けプレビュー。本人が保存した内容を、サロン側の一覧と同じ部品（StylistPublicView）で表示する。
- * 読むのは本人の行だけ（本人のRLSの範囲）。氏名・性別・年代・Instagram・希望年収帯などは表示しない。
+ * 読むのは本人の行だけ（本人のRLSの範囲）。氏名・性別・年代・生年月日・希望年収帯は表示しない。
+ * 画像・雇用形態・Instagram・大切にしたいこと・年齢は、DBが0070（草案・未適用）に対応しているときだけ
+ * サロン側にも出るため、プレビューも同じ条件（生年月日列を読めるか）で出し分け、実際のサロン表示と揃える。
  * 公開／非公開の状態を明示し、非公開のときは「サロンには表示されない」ことを示す。
  */
 export default async function StylistProfilePreviewPage() {
@@ -17,7 +22,14 @@ export default async function StylistProfilePreviewPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/stylist/profile/preview");
 
-  const { data: pub, error } = await supabase.from("stylist_profiles").select("*").eq("user_id", user.id).maybeSingle();
+  const [{ data: pub, error }, { data: profile }, birth] = await Promise.all([
+    supabase.from("stylist_profiles").select("*").eq("user_id", user.id).maybeSingle(),
+    supabase.from("profiles").select("avatar_path").eq("id", user.id).maybeSingle(),
+    readOwnBirthDate(supabase, user.id),
+  ]);
+  const extended = birth.supported;
+  const avatarUrl = extended ? await getAvatarSignedUrl(supabase, profile?.avatar_path ?? null) : null;
+  const instagramHandle = ((pub?.sns_links ?? []) as SnsLink[]).find((l) => l.platform === "instagram")?.handle || null;
 
   const back = (
     <Link href="/stylist/profile" className="text-[12px] font-semibold text-sub underline shrink-0">
@@ -75,12 +87,21 @@ export default async function StylistProfilePreviewPage() {
                 jobChangeIntent: pub.job_change_intent,
                 specialties: pub.specialties,
                 bio: pub.bio,
+                extended,
+                avatarUrl,
+                employmentType: pub.employment_type,
+                instagramHandle,
+                valuePriorities: pub.value_priorities,
+                age: ageOn(birth.birthDate, todayJst()),
               }}
             />
           </div>
 
           <p className="mt-4 text-[12px] leading-relaxed text-sub">
-            氏名・性別・年代・Instagram・希望年収帯は、サロンには表示されません（保存済みの内容は削除されません）。年齢の表示は準備中です。
+            氏名・性別・年代・生年月日・希望年収帯は、サロンには表示されません（保存済みの内容は削除されません）。
+            {extended
+              ? "年齢は満年齢だけが表示され、生年月日が未入力の場合は「未登録」と表示されます。"
+              : "プロフィール画像・雇用形態・Instagram・大切にしたいこと・年齢は、サービスの更新後にサロンへ表示されます（更新前はこのプレビューにも出ません）。"}
           </p>
         </>
       )}

@@ -62,6 +62,7 @@ export async function saveProfileAction(
     fullName: formData.get("fullName"),
     ageBand: formData.get("ageBand"),
     gender: formData.get("gender"),
+    birthDate: formData.get("birthDate") ?? undefined,
     valuePriorities: formData.getAll("valuePriorities"),
     visibility: formData.get("visibility"),
   };
@@ -131,6 +132,14 @@ export async function saveProfileAction(
     // 固定パス方式のため、失敗時にStorage側を削除する補償処理は行わない
     // （削除すると既存の正常なアバターを消してしまう可能性があるため）。
     return { error: "保存に失敗しました。しばらくしてから再度お試しください。" };
+  }
+
+  // 生年月日（入力欄があるときだけ＝DB対応時のみ）。プロフィール本体の保存後に、専用RPCで本人分だけ保存する。
+  if (v.birthDate !== undefined) {
+    const { error: birthError } = await supabase.rpc("set_stylist_birth_date", { p_birth_date: v.birthDate || null });
+    if (birthError) {
+      return { error: "プロフィールは保存しましたが、生年月日を保存できませんでした。もう一度お試しください。" };
+    }
   }
 
   // 保存成功後にのみ、不要になった旧画像を削除する。

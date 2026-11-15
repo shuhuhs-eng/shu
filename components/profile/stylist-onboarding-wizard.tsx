@@ -24,6 +24,7 @@ import {
   EMPLOYMENT_TYPE_LABELS,
   JOB_CHANGE_INTENT_LABELS,
 } from "@/lib/validation/profile-options";
+import { BirthDateField } from "@/components/profile/birth-date-field";
 import type { ProfileFormInitialValues } from "@/components/profile/profile-form";
 
 const STEP_LABELS = ["基本情報", "キャリア", "希望条件", "働き方・価値観"];
@@ -231,6 +232,9 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
               options={toOptions(GENDER_LABELS)}
               errors={state.fieldErrors?.gender}
             />
+            {initialValues.birthDateSupported && (
+              <BirthDateField defaultValue={initialValues.birthDate} errors={state.fieldErrors?.birthDate} />
+            )}
           </div>
 
           {/* ステップ2: キャリア */}

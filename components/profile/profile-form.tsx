@@ -14,6 +14,7 @@ import { TextareaField } from "@/components/profile/textarea-field";
 import { AvatarUploader } from "@/components/profile/avatar-uploader";
 import { SnsLinksField } from "@/components/profile/sns-links-field";
 import { ValuePrioritySelector } from "@/components/profile/value-priority-selector";
+import { BirthDateField } from "@/components/profile/birth-date-field";
 import { VisibilityField } from "@/components/profile/visibility-field";
 import { profileFieldsKey } from "@/lib/profile/fields-key";
 import {
@@ -38,6 +39,10 @@ export type ProfileFormInitialValues = {
   fullName: string;
   ageBand: AgeBand | "";
   gender: GenderType | "";
+  /** 生年月日（YYYY-MM-DD）。未登録は空文字。 */
+  birthDate: string;
+  /** DBが生年月日に対応しているときだけtrue（0070適用前は入力欄を出さない）。 */
+  birthDateSupported: boolean;
   prefecture: string;
   desiredWorkLocation: string;
   experienceYears: string;
@@ -166,7 +171,7 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
 
           <section className="space-y-4">
             <h2 className="eyebrow">本人情報（サロンへは表示されません）</h2>
-            <p className="text-[12px] leading-relaxed text-sub">サロンに表示される名前は、上の「公開名」です。ここで入力する氏名・性別・年代は、ご本人の確認用で、サロンには表示されません。</p>
+            <p className="text-[12px] leading-relaxed text-sub">サロンに表示される名前は、上の「公開名」です。ここで入力する氏名・性別・年代は、ご本人の確認用で、サロンには表示されません。生年月日はご本人だけが確認でき、公開中のときサロンには満年齢だけが表示されます。</p>
             <TextField
               id="fullName"
               name="fullName"
@@ -192,6 +197,9 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
               options={toOptions(GENDER_LABELS)}
               errors={state.fieldErrors?.gender}
             />
+            {initialValues.birthDateSupported && (
+              <BirthDateField defaultValue={initialValues.birthDate} errors={state.fieldErrors?.birthDate} />
+            )}
           </section>
 
           <section className="space-y-4">
@@ -208,7 +216,7 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
           <section className="space-y-4">
             <h2 className="eyebrow">公開範囲</h2>
             <VisibilityField defaultValue={initialValues.visibility} errors={state.fieldErrors?.visibility} />
-            <p className="text-[12px] leading-relaxed text-sub">公開にすると、サービス内のスカウトを受け取れます。氏名・性別・年代は、公開にしてもサロンへ表示されません。</p>
+            <p className="text-[12px] leading-relaxed text-sub">公開にすると、サービス内のスカウトを受け取れます。氏名・性別・年代・生年月日は、公開にしてもサロンへ表示されません（年齢は満年齢のみ表示）。</p>
           </section>
         </div>
       </PendingFieldset>

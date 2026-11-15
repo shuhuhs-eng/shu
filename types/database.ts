@@ -195,7 +195,8 @@ export type Database = {
       stylist_private: {
         // 書き込みは save_stylist_profile() RPC経由のみ（直接INSERT/UPDATE権限は無い）。
         // handle_new_user()では作成しない（upsertのため事前作成不要）。
-        Row: { user_id: string; full_name: string | null; age_band: AgeBand | null; gender: GenderType | null } & Timestamps;
+        // birth_date: 0070（草案・未適用）で追加予定。未適用のDBには存在しないため任意扱い（本人のみ閲覧。サロンへは満年齢のみ）。
+        Row: { user_id: string; full_name: string | null; age_band: AgeBand | null; gender: GenderType | null; birth_date?: string | null } & Timestamps;
         Insert: Record<string, never>;
         Update: Record<string, never>;
         Relationships: [];
@@ -924,6 +925,11 @@ export type Database = {
         };
         Returns: Database["public"]["Tables"]["salary_offers"]["Row"];
       };
+      set_stylist_birth_date: {
+        // 0070（草案・未適用）。本人の生年月日だけを保存する。NULLで未登録に戻す。
+        Args: { p_birth_date: string | null };
+        Returns: undefined;
+      };
       create_salary_offer_v2: {
         // 0035で追加。store単位給与オファー作成。アクセス権はis_store_accessible(p_store_id)、
         // Interest確認はstore_id単位。evidence/verification条件は旧create_salary_offerと同一。
@@ -1358,6 +1364,12 @@ export type Database = {
           specialties: string[];
           job_change_intent: JobChangeIntent;
           bio: string | null;
+          // 以下5項目は0070（草案・未適用）で追加予定。未適用のDBでは含まれない（キー自体が無い）。
+          employment_type?: EmploymentType | null;
+          value_priorities?: string[] | null;
+          avatar_path?: string | null;
+          instagram_handle?: string | null;
+          age?: number | null;
           match: {
             available: boolean;
             reason: string | null;

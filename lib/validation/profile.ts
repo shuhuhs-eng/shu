@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { validateBirthDate } from "@/lib/profile/birth-date";
 import { SPECIALTY_OPTIONS, VALUE_PRIORITY_OPTIONS, SNS_PLATFORMS } from "./profile-options";
 
 const ageBandEnum = z.enum([
@@ -67,6 +68,16 @@ export const profileFormSchema = z.object({
   fullName: z.string().trim().min(1, "氏名を入力してください").max(60, "60文字以内で入力してください"),
   ageBand: ageBandEnum,
   gender: genderEnum,
+  // 生年月日（本人のみ確認・編集。サロンには満年齢だけを返す）。DB未対応のときは入力欄ごと出さないため、項目が無い(undefined)場合は何もしない。空文字は「未登録に戻す」。
+  birthDate: z
+    .string()
+    .trim()
+    .optional()
+    .superRefine((v, ctx) => {
+      if (!v) return;
+      const msg = validateBirthDate(v);
+      if (msg) ctx.addIssue({ code: "custom", message: msg });
+    }),
 
   // --- 働き方・価値観（stylist_profiles.value_priorities） ---
   // 候補約12項目から、重要な3つを優先順位付きで選択する（ちょうど3件必須）。

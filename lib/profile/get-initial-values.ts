@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import type { ProfileFormInitialValues } from "@/components/profile/profile-form";
 import { getAvatarSignedUrl } from "@/lib/storage/avatar";
+import { readOwnBirthDate } from "@/lib/profile/birth-date";
 
 /**
  * 公開範囲の初期値。
@@ -37,10 +38,11 @@ export async function getProfileFormInitialValues(
   userId: string,
   fallbackPublicName: string | null = null,
 ): Promise<{ initialValues: ProfileFormInitialValues }> {
-  const [{ data: profile }, { data: priv }, { data: pub }] = await Promise.all([
+  const [{ data: profile }, { data: priv }, { data: pub }, birth] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).single(),
     supabase.from("stylist_private").select("*").eq("user_id", userId).maybeSingle(),
     supabase.from("stylist_profiles").select("*").eq("user_id", userId).maybeSingle(),
+    readOwnBirthDate(supabase, userId),
   ]);
 
   const avatarPath = profile?.avatar_path ?? null;
@@ -51,6 +53,8 @@ export async function getProfileFormInitialValues(
     fullName: priv?.full_name ?? "",
     ageBand: priv?.age_band ?? "",
     gender: priv?.gender ?? "",
+    birthDate: birth.birthDate ?? "",
+    birthDateSupported: birth.supported,
     prefecture: pub?.prefecture ?? "",
     desiredWorkLocation: pub?.desired_work_location ?? "",
     experienceYears: pub?.experience_years != null ? String(pub.experience_years) : "",

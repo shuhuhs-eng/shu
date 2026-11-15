@@ -9,6 +9,7 @@ import { RECRUITING_PAUSED_MESSAGE } from "@/lib/contracts/recruiting-access";
 import { ScoutQuotaCard } from "@/components/store-activity/scout-quota-card";
 import { StoreStylistCard } from "@/components/scouts/store-stylist-card";
 import type { PublicStylistForScout } from "@/lib/scouts/types";
+import { AVATAR_SIGNED_URL_EXPIRES_IN } from "@/lib/storage/avatar";
 
 type Props = {
   params: Promise<{ storeId: string }>;
@@ -65,6 +66,17 @@ export default async function StoreStylistsPage({ params }: Props) {
     console.error("[StoreStylistsPage] get_public_stylists_for_scout failed", { message: error.message, code: error.code });
   }
   const stylists: PublicStylistForScout[] = stylistsData ?? [];
+
+  // プロフィール画像の署名付きURL（0070適用後のみavatar_pathが返る。公開美容師の「現在の画像1枚」だけ読める権限をDB側で付与）。
+  const avatarUrlByStylist = new Map<string, string>();
+  const avatarEntries = stylists.filter((s) => s.avatar_path).map((s) => ({ id: s.stylist_user_id, path: s.avatar_path as string }));
+  if (avatarEntries.length > 0) {
+    const { data: signed } = await supabase.storage.from("avatars").createSignedUrls(avatarEntries.map((e) => e.path), AVATAR_SIGNED_URL_EXPIRES_IN);
+    for (const row of signed ?? []) {
+      const entry = avatarEntries.find((e) => e.path === row.path);
+      if (entry && row.signedUrl && !row.error) avatarUrlByStylist.set(entry.id, row.signedUrl);
+    }
+  }
 
   // ★直近の回答状況表示用。get_store_scoutsは新しい順（sent_at desc）で返す。
   const sentScouts = (await getStoreScouts(storeId)) ?? [];
@@ -130,6 +142,7 @@ export default async function StoreStylistsPage({ params }: Props) {
               storeId={storeId}
               recruitingPaused={recruitingPaused}
               stylist={stylist}
+              avatarUrl={avatarUrlByStylist.get(stylist.stylist_user_id) ?? null}
               match={match}
               latestScout={latestScoutByStylist.get(stylist.stylist_user_id) ?? null}
             />

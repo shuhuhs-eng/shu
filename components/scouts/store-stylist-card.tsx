@@ -20,6 +20,8 @@ type Props = {
   latestScout: LatestScout | null;
   /** 新しい採用活動を受け付けていない店舗か（trueなら新規Scoutの送信を止める。最終防衛はDB）。 */
   recruitingPaused?: boolean;
+  /** プロフィール画像の署名付きURL（サロン側で発行。画像が無い／取得できないときはnull）。 */
+  avatarUrl?: string | null;
 };
 
 /**
@@ -38,7 +40,7 @@ type Props = {
  *     送信自体はsend_scout_v2内部のquotaで保護され、枠超過時は専用の
  *     メッセージを表示する。
  */
-export function StoreStylistCard({ storeId, stylist, match, latestScout, recruitingPaused = false }: Props) {
+export function StoreStylistCard({ storeId, stylist, match, latestScout, recruitingPaused = false, avatarUrl = null }: Props) {
   const [message, setMessage] = useState("");
   const [templateType, setTemplateType] = useState<ScoutTemplateType | null>(null);
   const [step, setStep] = useState<"compose" | "confirm-resend">("compose");
@@ -83,7 +85,13 @@ export function StoreStylistCard({ storeId, stylist, match, latestScout, recruit
               jobChangeIntent: stylist.job_change_intent,
               specialties: stylist.specialties,
               bio: stylist.bio,
-              age: (stylist as { age?: number | null }).age ?? null,
+              // 0070適用後のRPCだけが返す項目。キーが無い（未適用）ときは従来の項目だけを表示する。
+              extended: "employment_type" in stylist,
+              avatarUrl,
+              employmentType: stylist.employment_type ?? null,
+              instagramHandle: stylist.instagram_handle ?? null,
+              valuePriorities: stylist.value_priorities ?? null,
+              age: stylist.age ?? null,
             }}
           />
         </div>
