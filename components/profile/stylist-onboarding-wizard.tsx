@@ -232,6 +232,11 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
               options={toOptions(GENDER_LABELS)}
               errors={state.fieldErrors?.gender}
             />
+            {initialValues.birthDateLoadFailed && (
+              <p role="alert" className="rounded-xl border border-line bg-surface2 px-4 py-3 text-[12.5px] leading-relaxed text-charcoal">
+                生年月日を読み込めませんでした。通信状況を確認して、ページを再読み込みしてください（この間、生年月日は変更されません）。
+              </p>
+            )}
             {initialValues.birthDateSupported && (
               <BirthDateField defaultValue={initialValues.birthDate} errors={state.fieldErrors?.birthDate} />
             )}

@@ -42,15 +42,28 @@ export function validateBirthDate(s: string, today: string = todayJst()): string
   return null;
 }
 
+export type BirthDateRead =
+  | { status: "ok"; birthDate: string | null }
+  /** 生年月日の列が存在しない（0070が未適用）。従来の表示に切り替えてよい唯一の場合。 */
+  | { status: "unsupported" }
+  /** 権限・通信・その他のエラー。未対応とは扱わない（画面側でエラーとして伝える）。 */
+  | { status: "error" };
+
+/** 「列が存在しない」エラーだけを機能未対応とみなす（PostgreSQL 42703 / PostgREST PGRST204）。 */
+export function isMissingBirthDateColumn(error: { code?: string | null; message?: string | null }): boolean {
+  if (error.code === "42703" || error.code === "PGRST204") return true;
+  return /column\b.*birth_date.*does not exist/i.test(error.message ?? "");
+}
+
 /**
- * 本人の生年月日を読む。0070（生年月日列）が未適用のDBでは列が無くエラーになるため、
- * その場合は supported:false を返す（入力欄を出さない・年齢を出さない。既存画面は壊さない）。
+ * 本人の生年月日を読む。0070（生年月日列）が未適用のDBでは列が無いため unsupported を返す。
+ * 権限エラー・通信エラー・保存エラーなど、列が無いこと以外の失敗は error として返し、未対応扱いにしない。
  */
 export async function readOwnBirthDate(
   supabase: SupabaseClient<Database>,
   userId: string,
-): Promise<{ supported: boolean; birthDate: string | null }> {
+): Promise<BirthDateRead> {
   const { data, error } = await supabase.from("stylist_private").select("birth_date").eq("user_id", userId).maybeSingle();
-  if (error) return { supported: false, birthDate: null };
-  return { supported: true, birthDate: data?.birth_date ?? null };
+  if (error) return isMissingBirthDateColumn(error) ? { status: "unsupported" } : { status: "error" };
+  return { status: "ok", birthDate: data?.birth_date ?? null };
 }

@@ -27,7 +27,8 @@ export default async function StylistProfilePreviewPage() {
     supabase.from("profiles").select("avatar_path").eq("id", user.id).maybeSingle(),
     readOwnBirthDate(supabase, user.id),
   ]);
-  const extended = birth.supported;
+  const extended = birth.status === "ok";
+  const birthDate = birth.status === "ok" ? birth.birthDate : null;
   const avatarUrl = extended ? await getAvatarSignedUrl(supabase, profile?.avatar_path ?? null) : null;
   const instagramHandle = ((pub?.sns_links ?? []) as SnsLink[]).find((l) => l.platform === "instagram")?.handle || null;
 
@@ -37,7 +38,8 @@ export default async function StylistProfilePreviewPage() {
     </Link>
   );
 
-  if (error) {
+  // 生年月日の読み込み失敗は「未対応」ではない。従来表示に切り替えず、エラーとして伝える。
+  if (error || birth.status === "error") {
     return (
       <StatusPanel
         title="プレビューを表示できませんでした"
@@ -92,7 +94,7 @@ export default async function StylistProfilePreviewPage() {
                 employmentType: pub.employment_type,
                 instagramHandle,
                 valuePriorities: pub.value_priorities,
-                age: ageOn(birth.birthDate, todayJst()),
+                age: ageOn(birthDate, todayJst()),
               }}
             />
           </div>

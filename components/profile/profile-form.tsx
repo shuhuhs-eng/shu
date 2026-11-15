@@ -43,6 +43,8 @@ export type ProfileFormInitialValues = {
   birthDate: string;
   /** DBが生年月日に対応しているときだけtrue（0070適用前は入力欄を出さない）。 */
   birthDateSupported: boolean;
+  /** 生年月日の読み込みに失敗した（未対応ではない）。入力欄は出さず、保存でも生年月日は変更しない。 */
+  birthDateLoadFailed: boolean;
   prefecture: string;
   desiredWorkLocation: string;
   experienceYears: string;
@@ -197,6 +199,11 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
               options={toOptions(GENDER_LABELS)}
               errors={state.fieldErrors?.gender}
             />
+            {initialValues.birthDateLoadFailed && (
+              <p role="alert" className="rounded-xl border border-line bg-surface2 px-4 py-3 text-[12.5px] leading-relaxed text-charcoal">
+                生年月日を読み込めませんでした。通信状況を確認して、ページを再読み込みしてください（この間、生年月日は変更されません）。
+              </p>
+            )}
             {initialValues.birthDateSupported && (
               <BirthDateField defaultValue={initialValues.birthDate} errors={state.fieldErrors?.birthDate} />
             )}
