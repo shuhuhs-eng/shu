@@ -9,8 +9,8 @@ bash "$R/docs/verify-0070-0071/pack_0070_0071.sh" "$OUT/verify" >/dev/null || ex
 cp "$D"/0071_review_packet.md "$D"/experience_years_investigation.md "$D"/experience_years_readonly.sql "$OUT/docs/"
 cp "$R"/docs/review-diagnosis-limit/0059_close_direct_paths.draft.sql "$R"/docs/review-diagnosis-limit/0059_postapply_check.sql "$R"/docs/review-diagnosis-limit/0059_rollback_permissions.sql "$OUT/verify/" || exit 2
 cp "$R/docs/verify-0070-0071/experience_years_verify.sh" "$OUT/verify/"
-# アプリ変更（今回の2コミット: 画面・保存処理・テスト）
-( cd "$R" && git diff --stat 125ef50 df9f809 -- app components lib tests > "$OUT/app/CHANGES.txt"; git diff 125ef50 df9f809 -- app components lib tests > "$OUT/app/app_changes.patch"
-  for f in $(git diff --name-only --diff-filter=AM 125ef50 df9f809 -- app components lib tests); do mkdir -p "$OUT/app/files/$(dirname "$f")"; cp "$f" "$OUT/app/files/$f"; done )
+# アプリ変更（125ef50 以降: 学生診断の画面・保存処理・経験年数の変更・テスト）
+( cd "$R" && git diff --stat 125ef50 HEAD -- app components lib tests types > "$OUT/app/CHANGES.txt"; git diff 125ef50 HEAD -- app components lib tests types > "$OUT/app/app_changes.patch"
+  for f in $(git diff --name-only --diff-filter=AM 125ef50 HEAD -- app components lib tests types); do mkdir -p "$OUT/app/files/$(dirname "$f")"; cp "$f" "$OUT/app/files/$f"; done )
 ( cd "$OUT" && find . -type f ! -name MANIFEST.txt | sort | xargs sha256sum > MANIFEST.txt )
 echo "一式を $OUT に集めました（$(find "$OUT" -type f | wc -l) ファイル）"
