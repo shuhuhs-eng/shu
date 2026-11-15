@@ -8,7 +8,6 @@ import { STUDENT_DIAGNOSIS_VERSION, isValidStudentAnswers } from "@/lib/student-
 import { readCurrentDiagnosis } from "@/lib/student-diagnosis/current";
 import { loadStudentResultForPage } from "@/lib/student-diagnosis/current-results";
 import { ApplyValuesToProfile } from "@/components/student-diagnosis/apply-values-to-profile";
-import { applyValuePrioritiesAction } from "@/lib/profile/apply-diagnosis-actions";
 import { StudentResultView } from "@/components/student-diagnosis/student-result-view";
 
 /** 学生・新卒診断の結果（本人のみ。RLSで本人の行だけ読める）。保存済みの回答から表示用の結果を作り直す。 */
@@ -44,7 +43,7 @@ export default async function StudentDiagnosisResultPage() {
           <StudentResultView result={result!} />
           {status === "current" && profileRead && !profileRead.error && (
             <div className="mt-6">
-              <ApplyValuesToProfile diagnosisValues={result!.values} current={profileRead.data?.value_priorities ?? null} hasProfile={!!profileRead.data} action={applyValuePrioritiesAction} />
+              <ApplyValuesToProfile diagnosisValues={result!.values} current={profileRead.data?.value_priorities ?? null} hasProfile={!!profileRead.data} />
             </div>
           )}
         </>
