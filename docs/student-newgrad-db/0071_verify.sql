@@ -101,17 +101,68 @@ begin
   reset role;
   perform pg_temp.chk('C9 経験者診断への切替でも回避できない（ロック中は拒否）', m <> 'OK', m);
   select count(*) into n from public.diagnosis_results where user_id=u1 and answers='[3,3]'::jsonb; perform pg_temp.chk('C10 拒否された経験者診断は保存されない', n=0, n::text);
-  -- 別ユーザー: 経験者診断で初回→学生診断へ切替は「変更」として数える
+  -- 別ユーザー: 経験者A → 学生B → 経験者A（共通ロック・現在の診断はバンクを横断）
   set local role service_role;
-  r := pg_temp.ecommit(u2, gen_random_uuid(), '[0,0]'::jsonb); perform pg_temp.chk('D1 経験者診断 初回', r->>'action'='initial', r::text);
-  r := pg_temp.scommit(u2, gen_random_uuid(), pg_temp.ans('a')); perform pg_temp.chk('D2 学生診断へ切替は変更1回目', r->>'action'='change', r::text);
-  m := pg_temp.try(format($q$select pg_temp.ecommit(%L, %L, '[9,9]'::jsonb)$q$, u2, gen_random_uuid()));
-  perform pg_temp.chk('D3 すぐ経験者へ（別回答）戻すのは拒否（ロック中）', m like '%diagnosis_change_locked%', m);
-  -- 既知の注意点: 元の経験者回答と同じ内容を再保存すると0058の仕様どおり「変更なし」(unchanged)で、行は増えない
-  r := pg_temp.ecommit(u2, gen_random_uuid(), '[0,0]'::jsonb);
-  perform pg_temp.chk('D4 【注意点】元と同じ経験者回答の再保存は変更なし扱い（行は増えず、現在の診断は学生診断のまま）', r->>'action'='unchanged', r::text);
+  r := pg_temp.ecommit(u2, gen_random_uuid(), '[0,0]'::jsonb); perform pg_temp.chk('D1 経験者診断A 初回', r->>'action'='initial', r::text);
+  r := pg_temp.scommit(u2, gen_random_uuid(), pg_temp.ans('a')); perform pg_temp.chk('D2 学生診断Bへ切替は変更1回目', r->>'action'='change', r::text);
+  m := pg_temp.try(format($q$select pg_temp.ecommit(%L, %L, '[0,0]'::jsonb)$q$, u2, gen_random_uuid()));
+  perform pg_temp.chk('D3 経験者A（元と同じ回答）へ戻すのはロック中は拒否', m like '%diagnosis_change_locked%', m);
   reset role;
+  select count(*) into n from public.diagnosis_results where user_id=u2; perform pg_temp.chk('D4 拒否された戻しは保存されない（経験者の行は1件のまま）', n=1, n::text);
+  perform pg_temp.chk('D5 現在の診断は学生B（seq=2）のまま', (select bank='student' and seq=2 from public.stylist_diagnosis_current where user_id=u2));
+  -- ロック解除後（時間経過をlocked_untilの更新で再現）: 経験者Aは「変更」として保存、現在の診断が経験者へ
+  update public.diagnosis_change_limits set locked_until = now() - interval '1 minute' where user_id=u2 and kind='stylist';
+  set local role service_role;
+  r := pg_temp.ecommit(u2, gen_random_uuid(), '[0,0]'::jsonb);
+  perform pg_temp.chk('D6 解除後の経験者A再保存は「変更」（同じ回答でもバンクが違う）', r->>'action'='change', r::text);
+  reset role;
+  select count(*) into n from public.diagnosis_results where user_id=u2; perform pg_temp.chk('D7 経験者の行が増える（2件）', n=2, n::text);
+  perform pg_temp.chk('D8 現在の診断は経験者A（seq=3）・回数は2回・再ロック', (select c.bank='experienced' and c.seq=3 and l.change_count=2 and l.locked_until > now() from public.stylist_diagnosis_current c join public.diagnosis_change_limits l on l.user_id=c.user_id and l.kind='stylist' where c.user_id=u2));
+  -- 同じバンク・同じ回答だけ「変更なし」
+  set local role service_role;
+  r := pg_temp.ecommit(u2, gen_random_uuid(), '[0,0]'::jsonb);
+  perform pg_temp.chk('D9 現在と同じバンク・同じ回答は変更なし（ロック中でも拒否されず、消費もしない）', r->>'action'='unchanged', r::text);
+  reset role;
+  perform pg_temp.chk('D10 変更なしは回数・連番を動かさない', (select c.seq=3 and l.change_count=2 from public.stylist_diagnosis_current c join public.diagnosis_change_limits l on l.user_id=c.user_id and l.kind='stylist' where c.user_id=u2));
 end $$;
+reset role;
+-- 再送（同じ送信ID）は、現在の診断を過去へ戻さず、二重保存・二重消費もしない
+do $$
+declare u uuid := '00000000-0000-0000-0000-0000000c0003'; r1 uuid := gen_random_uuid(); r2 uuid := gen_random_uuid(); a jsonb; b jsonb; n1 int; n2 int; cc int; cur record;
+begin
+  insert into public.stylist_profiles (user_id) values (u) on conflict do nothing;
+  set local role service_role;
+  a := pg_temp.ecommit(u, r1, '[5,5]'::jsonb);
+  b := pg_temp.scommit(u, r2, pg_temp.ans('z'));
+  perform pg_temp.chk('E1 A(初回)→学生B(変更1回)', a->>'action'='initial' and b->>'action'='change', a::text || b::text);
+  a := pg_temp.ecommit(u, r1, '[5,5]'::jsonb);
+  perform pg_temp.chk('E2 Aの送信IDを再送 → replay（現在の診断をAへ戻さない）', (a->>'replay')::boolean and a->>'action'='initial', a::text);
+  b := pg_temp.scommit(u, r2, pg_temp.ans('z'));
+  perform pg_temp.chk('E3 Bの送信IDを再送 → replay', (b->>'replay')::boolean, b::text);
+  reset role;
+  select * into cur from public.stylist_diagnosis_current where user_id=u;
+  select change_count into cc from public.diagnosis_change_limits where user_id=u and kind='stylist';
+  select count(*) into n1 from public.diagnosis_results where user_id=u; select count(*) into n2 from public.student_diagnosis_results where user_id=u;
+  perform pg_temp.chk('E4 現在の診断は学生Bのまま・連番2・変更回数1・各表1件ずつ', cur.bank='student' and cur.seq=2 and cc=1 and n1=1 and n2=1, format('%s %s %s %s %s', cur.bank, cur.seq, cc, n1, n2));
+end $$;
+reset role;
+-- 保存時刻の値ではなく保存順で決まる（同時刻・未来時刻でも一意）
+do $$
+declare u uuid := '00000000-0000-0000-0000-0000000c0003'; t timestamptz := now() + interval '1 day'; r jsonb; cur record;
+begin
+  delete from public.diagnosis_change_limits where user_id=u; delete from public.diagnosis_results where user_id=u; delete from public.student_diagnosis_results where user_id=u; delete from public.stylist_diagnosis_current where user_id=u;
+  set local role service_role;
+  r := public.commit_diagnosis_result(u, gen_random_uuid(), true, '1.0.0', 'stylist', '[7,7]'::jsonb, 50::smallint,50::smallint,50::smallint,50::smallint,50::smallint,50::smallint,'T1','タイプ',50::smallint,'300-350', null, t);
+  reset role;
+  update public.diagnosis_change_limits set locked_until = null where user_id=u;
+  set local role service_role;
+  r := pg_temp.scommit(u, gen_random_uuid(), pg_temp.ans('t'));
+  reset role;
+  select * into cur from public.stylist_diagnosis_current where user_id=u;
+  perform pg_temp.chk('F1 経験者(created_atが未来)→学生: 現在の診断は後から保存した学生（時刻値でなく保存順）', cur.bank='student' and cur.seq=2, cur::text);
+end $$;
+reset role;
+
 reset role;
 
 -- 権限
@@ -128,7 +179,7 @@ select pg_temp.chk('P3 結果表は authenticated が SELECT のみ',
   and not has_table_privilege('authenticated','public.student_diagnosis_results','insert')
   and not has_table_privilege('anon','public.student_diagnosis_results','select')
   and not has_table_privilege('service_role','public.student_diagnosis_results','insert'));
-select pg_temp.chk('P4 0058の関数(commit_diagnosis_result・ゲート・ロック)は0071適用前後で無変更', (select md5(string_agg(pg_get_functiondef(p.oid), '' order by p.proname)) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('commit_diagnosis_result','_diagnosis_limit_gate','_diag_owner_lock','_diag_gate_open','_diag_gate_close')) = 'bc7e8397093015794000f50deb0f49dc');
+select pg_temp.chk('P4 ゲート・ロック・開閉の関数は0058と無変更（置き換えは commit_diagnosis_result と経験者トリガーの2つだけ）', (select md5(string_agg(pg_get_functiondef(p.oid), '' order by p.proname)) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('_diagnosis_limit_gate','_diag_owner_lock','_diag_gate_open','_diag_gate_close')) = '9c02acbe4e4bc29167011aef348bb555');
 
 select n, case when ok then 'PASS' else 'FAIL' end as r, name, left(info,110) from t_log order by n;
 select case when bool_and(ok) then 'ALL PASS' else 'HAS FAIL' end from t_log;
