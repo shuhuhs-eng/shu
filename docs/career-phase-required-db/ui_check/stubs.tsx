@@ -7,6 +7,6 @@ export const saveProfileAction = async (_p: any, fd: FormData) => {
   if (w.__mode === "fail") return { error: "保存に失敗しました。しばらくしてから再度お試しください。" };
   // サーバー側の必須検証（実物と同じ規則）を模す
   if (!obj.careerPhase) return { error: "入力内容をご確認ください。", fieldErrors: { careerPhase: ["いまの立場を選んでください。"] } };
-  w.__saved = obj; return { success: "プロフィールを保存しました。" };
+  w.__saved = obj; w.__persist?.(obj); return { success: "プロフィールを保存しました。" };
 };
 export const AvatarUploader = () => null;

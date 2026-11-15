@@ -7,7 +7,7 @@ const config = [
   ...nextTypescript,
   // React Compiler 系の新ルール。既存コードの挙動を変えずに CI を通すため警告に留める（販売開始後に個別整理）。
   { rules: { "react-hooks/set-state-in-effect": "warn" } },
-  { ignores: [".next/**", "node_modules/**", "next-env.d.ts", "scripts/**"] },
+  { ignores: [".next/**", "node_modules/**", "next-env.d.ts", "scripts/**", "docs/career-phase-required-db/ui_check/**"] },
 ];
 
 export default config;

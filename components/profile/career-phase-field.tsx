@@ -57,7 +57,7 @@ export function CareerPhaseField({ defaultValue, errors }: { defaultValue: Caree
           <div>
             <label className="text-[13px] font-semibold text-ink" htmlFor="cp-lic">美容師免許の取得状況（任意）</label>
             <select id="cp-lic" name="licenseStatus" defaultValue={defaultValue.licenseStatus ?? ""} className={input}>
-              <option value="">選ばない</option>
+              <option value="">未入力</option>
               {LICENSE_STATUSES.map((l) => <option key={l} value={l}>{LICENSE_STATUS_LABEL[l]}</option>)}
             </select>
             {pick("licenseStatus") && <p role="alert" className="mt-1 text-[12.5px] text-[#8A2E2E]">{pick("licenseStatus")}</p>}

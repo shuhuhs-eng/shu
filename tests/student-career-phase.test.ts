@@ -56,14 +56,10 @@ test("立場の表示: 未選択は何も出さない（旧データ含む）。
   const l = describeCareerPhase({ ...EMPTY_CAREER_PHASE, phase: "new_graduate", graduationYm: "2027-03", graduationKind: "planned", desiredStartYm: "2027-04", licenseStatus: "studying" })!;
   assert.deepEqual(l, ["新卒", "2027年03月 卒業予定", "就業開始の希望: 2027年04月", "免許: 取得に向けて在学中"]);
   assert.equal(describeCareerPhase({ ...EMPTY_CAREER_PHASE, legacyStudent: true, graduationYm: "2027-03", graduationKind: "planned" }), null, "美容学生（旧）は新卒等へ変換せず未選択のまま");
-  const sum = (v: typeof EMPTY_CAREER_PHASE, k: "current" | "past" | "none") => renderToStaticMarkup(createElement(CareerPhaseSummary, { value: v, studentLink: k })).replace(/<[^>]+>/g, " ");
-  const unset = sum(EMPTY_CAREER_PHASE, "none");
-  assert.ok(unset.includes("未選択") && unset.includes("選んでください") && !unset.includes("経験者") && !unset.includes("美容学生") && !unset.includes("未設定"));
-  assert.ok(!unset.includes("診断を受ける"), "新卒以外には新卒向け診断を『受ける』入口を出さない");
-  assert.ok(sum({ ...EMPTY_CAREER_PHASE, phase: "experienced" }, "none").indexOf("診断") < 0);
-  assert.ok(sum({ ...EMPTY_CAREER_PHASE, phase: "new_graduate" }, "none").includes("新卒の診断を受ける"));
-  assert.ok(sum(EMPTY_CAREER_PHASE, "current").includes("新卒の診断結果を見る"), "受けた結果へのリンクは立場にかかわらず残す");
-  assert.ok(sum(EMPTY_CAREER_PHASE, "past").includes("現在の結果ではありません"));
+  const sum = (v: typeof EMPTY_CAREER_PHASE) => renderToStaticMarkup(createElement(CareerPhaseSummary, { load: { status: "ok", value: v } })).replace(/<[^>]+>/g, " ");
+  const unset = sum(EMPTY_CAREER_PHASE);
+  assert.ok(unset.includes("未選択") && !unset.includes("経験者") && !unset.includes("美容学生") && !unset.includes("未設定"));
+  assert.ok(sum({ ...EMPTY_CAREER_PHASE, phase: "experienced" }).includes("現役の美容師"));
 });
 
 test("区分の読み取り: 列なし(42703)はunsupported、その他の失敗はerror（未設定と取り違えない）", async () => {

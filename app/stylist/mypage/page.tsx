@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { GUEST_NOT_CARRIED_NOTICE_COOKIE } from "@/lib/diagnosis-handoff/constants";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { DiagnosisSummary } from "@/components/mypage/diagnosis-summary";
-import { CareerPhaseSummary } from "@/components/student-diagnosis/career-phase-summary";
+import { CareerPhaseSummary, StudentPastResultLink } from "@/components/student-diagnosis/career-phase-summary";
 import { StudentCurrentCard } from "@/components/student-diagnosis/student-current-card";
 import { canStartStudentDiagnosis, readOwnCareerPhase } from "@/lib/student-diagnosis/career-phase";
 import { decideDiagnosisView, decideMypageView, mypageSections, readCurrentDiagnosis } from "@/lib/student-diagnosis/current";
@@ -80,7 +80,7 @@ export default async function StylistMyPage() {
       hasAnyStudentResult = !error && (data?.length ?? 0) > 0;
     }
   }
-  const studentLink = earlySections.showStudent ? "current" : hasAnyStudentResult ? "past" : "none";
+  const studentLink = earlySections.showStudent ? "current" : hasAnyStudentResult ? "past" : "none"; // current の結果は下の現在の診断カードから見られる
 
   // 以下の取得は互いに依存しないため、まとめて並列に実行する（以前は1件ずつ直列で、表示まで10回以上の
   // DB往復を順番に待っていた）。取得する内容・認証/権限確認（getUser・role確認）は変えていない。
@@ -239,8 +239,9 @@ export default async function StylistMyPage() {
         </p>
       )}
 
-      {/* 「いまの立場」と学生・新卒診断への導線。経験者向けの診断結果の表示の有無に左右されない位置。 */}
-      {careerPhase.status === "ok" && <CareerPhaseSummary value={careerPhase.value} studentLink={studentLink} />}
+      {/* 「いまの立場」カード（表示だけ。変更はプロフィール編集）。経験者向けの診断結果の表示の有無に左右されない位置。0071未適用なら出さない。 */}
+      {careerPhase.status !== "unsupported" && <CareerPhaseSummary load={careerPhase} />}
+      {studentLink === "past" && <StudentPastResultLink />}
 
       {sections.showUnknownNotice && (
         <p role="status" className="mt-6 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">
