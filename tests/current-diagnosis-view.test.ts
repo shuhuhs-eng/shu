@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { decideDiagnosisView, decideStudentResultStatus, mypageSections, readCurrentDiagnosis, type CurrentDiagnosisRead } from "../lib/student-diagnosis/current";
+import { reconcileExperiencedView, decideDiagnosisView, decideStudentResultStatus, mypageSections, readCurrentDiagnosis, type CurrentDiagnosisRead } from "../lib/student-diagnosis/current";
 import { StudentCurrentCard } from "../components/student-diagnosis/student-current-card";
 import { computeStudentResult } from "../lib/student-diagnosis/result";
 import { STUDENT_QUESTIONS, STUDENT_DIAGNOSIS_VERSION, type StudentAnswers } from "../lib/student-diagnosis/questions";
@@ -58,7 +58,42 @@ test("画面の構造: 「いまの立場」は経験者向けの表示（条件
   const iPhase = my.indexOf("<CareerPhaseSummary"), iExp = my.indexOf("sections.showExperienced &&");
   assert.ok(iPhase > 0 && iExp > iPhase, "いまの立場は経験者向けの分岐より前（分岐の外）");
   assert.ok(my.indexOf("<DiagnosisSummary") > iExp && my.indexOf("<CoreTypeHeader") > iExp, "経験者向けの部品は経験者のときだけの分岐の中");
-  assert.ok(my.includes('{ status: "unsupported" } as const'), "0071未適用は従来表示");
+  assert.ok(my.includes("await readCurrentDiagnosis(supabase, user.id)") && !my.includes('{ status: "unsupported" } as const'), "現在の診断は区分の読み取りとは独立に読む。区分の失敗で従来表示に倒さない");
+  assert.ok(my.includes("reconcileExperiencedView("), "経験者の表示は現在の診断の result_id と一致するときだけ");
+  assert.ok(my.includes("現在の診断結果を読み込めませんでした"));
   const res = readFileSync("app/stylist/diagnosis/student/result/page.tsx", "utf8");
   assert.ok(res.includes("現在の結果ではありません") && res.includes('status === "past"') && res.includes("decideStudentResultStatus("));
+});
+
+test("読み取り失敗: 0071未適用と確認できた場合だけ従来表示。権限・JWT・通信・他の表の不在はすべて「読み込めませんでした」で、過去の経験者結果で代用しない", async () => {
+  const mk = (res: unknown) => ({ from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => res }) }) }) }) as never;
+  const throwing = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => { throw new Error("fetch failed"); } }) }) }) } as never;
+  const failures: unknown[] = [
+    { data: null, error: { code: "42501", message: "permission denied for table stylist_diagnosis_current" } },
+    { data: null, error: { code: "PGRST301", message: "JWT expired" } },
+    { data: null, error: { code: "57014", message: "canceling statement due to statement timeout" } },
+    { data: null, error: { code: "42P01", message: 'relation "some_other_table" does not exist' } },
+    { data: null, error: { message: "TypeError: fetch failed" } },
+  ];
+  for (const f of failures) {
+    const r = await readCurrentDiagnosis(mk(f), "u");
+    assert.equal(r.status, "error", JSON.stringify(f));
+    assert.equal(decideDiagnosisView(r), "unknown");
+    const s = mypageSections(reconcileExperiencedView(decideDiagnosisView(r), r, "old-experienced-id"));
+    assert.deepEqual(s, { showExperienced: false, showStudent: false, showUnknownNotice: true }, "古い経験者結果を出さない");
+  }
+  const t = await readCurrentDiagnosis(throwing, "u");
+  assert.equal(t.status, "error");
+  assert.equal(mypageSections(decideDiagnosisView(t)).showExperienced, false);
+  // 0071未適用と確認できたときだけ従来表示
+  const u = await readCurrentDiagnosis(mk({ data: null, error: { code: "42P01", message: 'relation "stylist_diagnosis_current" does not exist' } }), "u");
+  assert.equal(mypageSections(reconcileExperiencedView(decideDiagnosisView(u), u, "e1")).showExperienced, true);
+});
+test("経験者の表示は現在の診断の result_id と一致する結果だけ。食い違い・結果なしは過去の結果で代用しない", () => {
+  assert.equal(reconcileExperiencedView("experienced", ok("experienced", "e2"), "e2"), "experienced");
+  assert.equal(reconcileExperiencedView("experienced", ok("experienced", "e2"), "e1"), "unknown", "最新の行が現在のIDと違う");
+  assert.equal(reconcileExperiencedView("experienced", ok("experienced", "e2"), null), "unknown");
+  assert.equal(reconcileExperiencedView("experienced", ok(null), "e1"), "experienced", "現在の診断の行がまだ無い（診断履歴のみ）は従来表示");
+  assert.equal(reconcileExperiencedView("student", ok("student", "s1"), "e1"), "student");
+  assert.equal(reconcileExperiencedView("experienced", { status: "unsupported" }, "e1"), "experienced");
 });

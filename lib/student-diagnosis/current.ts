@@ -15,12 +15,20 @@ export type CurrentDiagnosisRead =
 
 /** 本人の「現在の診断」を読む（本人のRLS）。表が無い（0071未適用）なら unsupported。それ以外の失敗は error。 */
 export async function readCurrentDiagnosis(supabase: SupabaseClient, userId: string): Promise<CurrentDiagnosisRead> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any).from("stylist_diagnosis_current").select("bank, result_id, seq").eq("user_id", userId).maybeSingle();
+  let res: { data: { bank?: unknown; result_id?: unknown; seq?: unknown } | null; error: { code?: string; message?: string } | null };
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    res = await (supabase as any).from("stylist_diagnosis_current").select("bank, result_id, seq").eq("user_id", userId).maybeSingle();
+  } catch {
+    return { status: "error" }; // 通信の例外など。0071未適用とは確認できないので error（従来表示にしない）
+  }
+  const { data, error } = res;
   if (error) {
-    return error.code === "42P01" || error.code === "PGRST205" || /stylist_diagnosis_current/i.test(error.message ?? "") && /does not exist|could not find/i.test(error.message ?? "")
-      ? { status: "unsupported" }
-      : { status: "error" };
+    // 「表が無い」と確認できるときだけ unsupported。権限（42501）・JWT・通信などは error。
+    const msg = error.message ?? "";
+    const tableMissing = (error.code === "42P01" || error.code === "PGRST205") && /stylist_diagnosis_current/i.test(msg)
+      || (/stylist_diagnosis_current/i.test(msg) && /does not exist|could not find/i.test(msg));
+    return tableMissing ? { status: "unsupported" } : { status: "error" };
   }
   if (!data) return { status: "ok", current: null };
   if ((data.bank !== "experienced" && data.bank !== "student") || typeof data.result_id !== "string") return { status: "error" };
@@ -33,6 +41,12 @@ export function decideDiagnosisView(read: CurrentDiagnosisRead): DiagnosisView {
   if (read.status === "unsupported") return "experienced";
   if (read.status === "error") return "unknown";
   return read.current?.bank === "student" ? "student" : "experienced";
+}
+
+/** 経験者の表示は、現在の診断の result_id と一致する結果があるときだけ。食い違うときは古い結果で代用せず unknown。 */
+export function reconcileExperiencedView(view: DiagnosisView, read: CurrentDiagnosisRead, latestExperiencedId: string | null): DiagnosisView {
+  if (view !== "experienced" || read.status !== "ok" || !read.current) return view;
+  return latestExperiencedId !== null && latestExperiencedId === read.current.resultId ? "experienced" : "unknown";
 }
 
 /** 画面の部品の出し分け（マイページ）。「いまの立場」は診断の種類に左右されず常に出す。 */

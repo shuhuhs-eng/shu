@@ -8,7 +8,7 @@ import { DiagnosisSummary } from "@/components/mypage/diagnosis-summary";
 import { CareerPhaseSummary } from "@/components/student-diagnosis/career-phase-summary";
 import { StudentCurrentCard } from "@/components/student-diagnosis/student-current-card";
 import { readOwnCareerPhase } from "@/lib/student-diagnosis/career-phase";
-import { decideDiagnosisView, mypageSections, readCurrentDiagnosis } from "@/lib/student-diagnosis/current";
+import { decideDiagnosisView, mypageSections, reconcileExperiencedView, readCurrentDiagnosis } from "@/lib/student-diagnosis/current";
 import { computeStudentResult } from "@/lib/student-diagnosis/result";
 import { STUDENT_DIAGNOSIS_VERSION, isValidStudentAnswers } from "@/lib/student-diagnosis/questions";
 import { CoreTypeHeader } from "@/components/mypage/core-type-header";
@@ -60,15 +60,17 @@ export default async function StylistMyPage() {
   // 0071の区分（学生・新卒）と「現在の診断」。表・列が無い（0071未適用）ときは従来の表示のまま。
   // 現在の診断が学生・新卒なら、過去の経験者診断（才能グラフ・経験分析・AI解説）を現在の結果として出さない。
   const careerPhase = await readOwnCareerPhase(supabase, user.id);
-  const currentRead = careerPhase.status === "ok" ? await readCurrentDiagnosis(supabase, user.id) : ({ status: "unsupported" } as const);
+  // 現在の診断は区分の読み取り結果とは独立に読む。従来表示に戻すのは「0071未適用と確認できた」ときだけ。
+  // 対応済みDBでの通信・権限などのエラーは「読み込めませんでした」を出し、過去の結果で代用しない。
+  const currentRead = await readCurrentDiagnosis(supabase, user.id);
   const diagView = decideDiagnosisView(currentRead);
-  const sections = mypageSections(diagView);
+  const earlySections = mypageSections(diagView);
   let studentResult: ReturnType<typeof computeStudentResult> | null = null;
   let hasAnyStudentResult = false;
-  if (careerPhase.status === "ok") {
+  if (currentRead.status !== "unsupported") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sdb = (supabase as any).from("student_diagnosis_results");
-    if (sections.showStudent && currentRead.status === "ok" && currentRead.current) {
+    if (earlySections.showStudent && currentRead.status === "ok" && currentRead.current) {
       const { data, error } = await sdb.select("answers, version").eq("id", currentRead.current.resultId).eq("user_id", user.id).maybeSingle();
       if (!error && data && isValidStudentAnswers(data.answers)) studentResult = computeStudentResult(data.answers, data.version ?? STUDENT_DIAGNOSIS_VERSION);
       hasAnyStudentResult = true;
@@ -77,7 +79,7 @@ export default async function StylistMyPage() {
       hasAnyStudentResult = !error && (data?.length ?? 0) > 0;
     }
   }
-  const studentLink = sections.showStudent ? "current" : hasAnyStudentResult ? "past" : "none";
+  const studentLink = earlySections.showStudent ? "current" : hasAnyStudentResult ? "past" : "none";
 
   // 以下の取得は互いに依存しないため、まとめて並列に実行する（以前は1件ずつ直列で、表示まで10回以上の
   // DB往復を順番に待っていた）。取得する内容・認証/権限確認（getUser・role確認）は変えていない。
@@ -171,6 +173,8 @@ export default async function StylistMyPage() {
   });
   // 履歴が無い場合（8タイプ判定の保存に失敗した等）は、最新診断のスコアから同じ判定式（SQLと一致）で求める。
   // 初回確定のassignment（過去の診断由来）は表示に使わない＝古いタイプが現在の結果として出ない。
+  // 現在の診断（bank / result_id）を基準にする。経験者の表示は、現在の診断の result_id と一致する結果だけ。
+  const sections = mypageSections(reconcileExperiencedView(diagView, currentRead, latest?.id ?? null));
   const coreTypeCode: CoreTypeCode | null = latest
     ? ((latestCoreTypeCode as CoreTypeCode | null) ??
       calculateCoreType({
@@ -237,7 +241,7 @@ export default async function StylistMyPage() {
 
       {sections.showUnknownNotice && (
         <p role="status" className="mt-6 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">
-          現在の診断結果を確認できませんでした。しばらくしてから、もう一度開いてください。
+          現在の診断結果を読み込めませんでした。しばらくしてから、もう一度開いてください。
         </p>
       )}
 
