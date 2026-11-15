@@ -2,8 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { getDiagnosisChangeStatus } from "@/lib/diagnosis-limit/status";
-import { formatJstDateTime } from "@/lib/diagnosis-limit/messages";
 import { GUEST_NOT_CARRIED_NOTICE_COOKIE } from "@/lib/diagnosis-handoff/constants";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { DiagnosisSummary } from "@/components/mypage/diagnosis-summary";
@@ -14,7 +12,7 @@ import { AiNarrativeBlocks } from "@/components/mypage/ai-narrative-blocks";
 import { TraitRadar } from "@/components/diagnosis/trait-radar";
 import { OrderMadeMatchCard } from "@/components/mypage/order-made-match-card";
 import { RetakeLink } from "@/components/mypage/retake-link";
-import { getStylistRetakeLimit } from "@/lib/diagnosis-limit/retake-status";
+import { getStylistRetakeLimit, retakeNotice } from "@/lib/diagnosis-limit/retake-status";
 import { buildExperienceProfile } from "@/lib/diagnosis/experience-profile";
 import { CORE_TYPE_CONTENT } from "@/lib/diagnosis/core-type-content";
 import type { AiOutputType, Database } from "@/types/database";
@@ -57,7 +55,6 @@ export default async function StylistMyPage() {
   // role未完了の場合はこの直後にredirectするので、並列に取得した結果は使われず破棄される。
   const [
     hasStylistRole,
-    limitStatus,
     { data: latest },
     { data: preferenceProfile },
     { data: matchProfile, error: matchProfileError },
@@ -70,7 +67,6 @@ export default async function StylistMyPage() {
     { notifications, unreadCount },
   ] = await Promise.all([
     hasCompletedRole(supabase, user.id, "stylist"),
-    getDiagnosisChangeStatus(supabase, "stylist"),
     supabase
       .from("diagnosis_results")
       .select("*")
@@ -219,16 +215,20 @@ export default async function StylistMyPage() {
               お手数ですが、もう一度診断を受けてください。
             </p>
           )}
-          <Link
-            href="/stylist/diagnosis"
-            className="mt-6 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-4 text-[15px] font-semibold text-ink"
-          >
-            {latest ? "診断を受け直す" : "診断を受ける"}
-          </Link>
-          {latest && limitStatus.state === "locked" && limitStatus.lockedUntil && (
-            <p className="mt-2 text-center text-[12.5px] leading-relaxed text-sub">
-              結果を次に変更できるのは {formatJstDateTime(limitStatus.lockedUntil)} 以降です。
-            </p>
+          {latest && !retakeNotice(retakeLimit).canStart ? (
+            <>
+              <span aria-disabled="true" className="mt-6 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-4 text-[15px] font-semibold text-sub/70">
+                診断を受け直す（いまは変更できません）
+              </span>
+              <p className="mt-2 text-center text-[12.5px] leading-relaxed text-sub">{retakeNotice(retakeLimit).lockedText}</p>
+            </>
+          ) : (
+            <Link
+              href="/stylist/diagnosis"
+              className="mt-6 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-4 text-[15px] font-semibold text-ink"
+            >
+              {latest ? "診断を受け直す" : "診断を受ける"}
+            </Link>
           )}
         </>
       )}

@@ -11,7 +11,7 @@ import { buildExperienceProfile } from "../lib/diagnosis/experience-profile";
 import { MarketValueCard } from "../components/mypage/market-value-card";
 import { AiNarrativeBlocks } from "../components/mypage/ai-narrative-blocks";
 import { splitLead, splitStep } from "../lib/diagnosis/ai-text";
-import { parseRetakeLimit, retakeNotice, RETAKE_RULE_TEXT, LIMIT_UNKNOWN } from "../lib/diagnosis-limit/retake-status";
+import { parseRetakeLimit, retakeNotice, RETAKE_RULE_TEXT, RETAKE_BASE_TEXT, LIMIT_UNKNOWN } from "../lib/diagnosis-limit/retake-status";
 import { BackToMypage } from "../components/messages/back-to-mypage";
 import { RetakeLink } from "../components/mypage/retake-link";
 import { OrderMadeMatchCard } from "../components/mypage/order-made-match-card";
@@ -109,15 +109,17 @@ test("再診断: 制限が有効でない（0058未適用＝unknown）ときは�
   assert.deepEqual(parseRetakeLimit({ state: "locked" }), LIMIT_UNKNOWN); // 日時が無い＝不正
   assert.deepEqual(parseRetakeLimit({ state: "weird" }), LIMIT_UNKNOWN);
   const unk = renderToStaticMarkup(createElement(RetakeLink, { limit: LIMIT_UNKNOWN }));
-  assert.ok(!unk.includes("1回できます") && !unk.includes("診断を変更できません")); // 制限が有効でないので、制限の説明は出さない
-  const BASE = "才能は経験とともに変わります。3か月〜半年ごとに診断を受け直すことをおすすめします。";
+  assert.ok(!unk.includes("計2回") && !unk.includes("3か月間変更できません")); // 制限が有効でないので、制限の説明は出さない
+  const BASE = "才能は経験とともに変わります。3か月〜半年ごとの見直しをおすすめします。";
+  assert.equal(RETAKE_BASE_TEXT, BASE);
   assert.ok(unk.includes(BASE));
   assert.ok(!unk.includes("必要なときに診断を受け直せます") && !unk.includes("必要な時に診断を受け直せます"));
   assert.match(unk, /診断を受け直す/);
   assert.match(unk, /min-h-\[48px\]/);
   const can = renderToStaticMarkup(createElement(RetakeLink, { limit: parseRetakeLimit({ state: "can_change" }) }));
-  assert.ok(can.includes(RETAKE_RULE_TEXT) && can.includes(BASE));
-  assert.equal(RETAKE_RULE_TEXT, "初回診断後、変更は1回できます。変更後は3か月間、診断を変更できません。");
+  const FULL = "才能は経験とともに変わります。3か月〜半年ごとの見直しをおすすめします。初回と受け直し1回の計2回まで診断できます。2回目以降は、診断を変更するたびに3か月間変更できません。";
+  assert.equal(BASE + RETAKE_RULE_TEXT, FULL); // 依頼された説明文と一字一句同じ
+  assert.ok(can.includes(FULL));
   const locked = parseRetakeLimit({ state: "locked", locked_until: "2027-02-13T09:10:00Z" });
   assert.equal(retakeNotice(locked).canStart, false);
   const lockedHtml = renderToStaticMarkup(createElement(RetakeLink, { limit: locked }));

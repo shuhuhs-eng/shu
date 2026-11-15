@@ -42,7 +42,10 @@ export function formatJstDateTime(iso: string): string {
   return `${g("year")}年${g("month")}月${g("day")}日 ${g("hour")}時${g("minute")}分`;
 }
 
-export const RETAKE_RULE_TEXT = "初回診断後、変更は1回できます。変更後は3か月間、診断を変更できません。";
+/** 常に表示する説明（制限の有無に関係なく事実として正しい部分）。 */
+export const RETAKE_BASE_TEXT = "才能は経験とともに変わります。3か月〜半年ごとの見直しをおすすめします。";
+/** 制限が実際に有効（0058適用済みで状態が取れた）ときだけ、基本文に続けて表示する。 */
+export const RETAKE_RULE_TEXT = "初回と受け直し1回の計2回まで診断できます。2回目以降は、診断を変更するたびに3か月間変更できません。";
 
 export type RetakeNotice = {
   /** 制限が有効なときだけ出す説明。無効（unknown）のときは null。 */
