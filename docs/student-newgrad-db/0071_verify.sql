@@ -79,6 +79,14 @@ begin
   perform pg_temp.chk('B20 新卒で卒業区分NULLは制約が拒否（RPCを通さない直接書き込みでも）', m like '%career_phase_consistent%', m);
   m := pg_temp.try(format($q$update public.stylist_profiles set career_phase='student', graduation_ym=%L, graduation_kind=null where user_id=%L$q$, (md + interval '3 months')::date, u2));
   perform pg_temp.chk('B21 学生で卒業区分NULLも制約が拒否', m like '%career_phase_consistent%', m);
+  set local role authenticated; perform pg_temp.as_user(u1);
+  m := pg_temp.try(format($q$select public.set_stylist_career_phase(null, %L, 'planned', null, null)$q$, (md + interval '3 months')::date));
+  perform pg_temp.chk('B22 区分NULLに卒業情報を付けるのはRPCが拒否', m like '%must be empty%', m);
+  m := pg_temp.try($q$select public.set_stylist_career_phase('experienced', null, null, null, null)$q$);
+  perform pg_temp.chk('B23 経験者（本人が選択）は設定できる', m = 'OK', m);
+  m := pg_temp.try($q$select public.set_stylist_career_phase(null, null, null, null, null)$q$);
+  perform pg_temp.chk('B24 未設定へ戻せる', m = 'OK', m);
+  reset role;
   -- 整合制約（直接）
   m := pg_temp.try($q$update public.stylist_profiles set career_phase='experienced', license_status='obtained' where user_id='00000000-0000-0000-0000-0000000c0002'$q$);
   perform pg_temp.chk('B17 整合制約: 経験者+免許は不可', m like '%consistent%', m);

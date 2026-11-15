@@ -52,13 +52,15 @@ alter table public.stylist_profiles
   add column graduation_kind  text check (graduation_kind in ('planned','completed')),
   add column desired_start_ym date check (desired_start_ym is null or desired_start_ym = date_trunc('month', desired_start_ym)::date),
   add column license_status   text check (license_status in ('studying','exam_planned','passed_waiting','obtained'));
--- ★NULLの扱いを明示: 「卒業区分がNULL」の新卒・学生は、制約でも拒否する（CHECKはNULLを通すため、is not null を必ず書く）。
-alter table public.stylist_profiles add constraint stylist_profiles_career_phase_consistent check (
+-- ★NULLの扱い: CHECK は結果が NULL でも通してしまうため、式全体を「IS TRUE」で判定し、許可する組み合わせだけを通す。
+--   （例: career_phase が NULL のまま卒業月だけが入る状態は、式が NULL になって旧定義では通っていた）
+--   許可する組み合わせ: ①全項目NULL（未設定）②経験者（他は全てNULL）③学生（卒業月あり・区分=予定）④新卒（卒業月あり・区分=予定か済）
+alter table public.stylist_profiles add constraint stylist_profiles_career_phase_consistent check ((
   (career_phase is null and graduation_ym is null and graduation_kind is null and desired_start_ym is null and license_status is null)
   or (career_phase = 'experienced' and graduation_ym is null and graduation_kind is null and desired_start_ym is null and license_status is null)
   or (career_phase = 'student' and graduation_ym is not null and graduation_kind is not null and graduation_kind = 'planned')
   or (career_phase = 'new_graduate' and graduation_ym is not null and graduation_kind is not null and graduation_kind in ('planned','completed'))
-);
+) is true);
 alter table public.stylist_profiles add constraint stylist_profiles_start_after_graduation check (
   desired_start_ym is null or graduation_ym is null or desired_start_ym >= graduation_ym
 );

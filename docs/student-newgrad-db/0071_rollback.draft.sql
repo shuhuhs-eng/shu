@@ -3,7 +3,23 @@
 -- 0058の2関数は、0058の定義（docs/review-diagnosis-limit/0058_diagnosis_change_limits.draft.sql の該当部分）へ戻す。
 -- 末尾の2関数の定義は、0058本体から機械的に抜き出したもの（内容は0058と同一）。
 begin;
+-- ★同時保存からの保護（中止判定より前にロック。取得できなければ15秒で中止し、何も変更しない）
+--   書き込み経路: 経験者診断=commit_diagnosis_result・直接INSERT ／ 学生診断=commit_student_diagnosis・直接INSERT ／ 区分=set_stylist_career_phase。
+--   診断の保存処理は「現在の診断（stylist_diagnosis_current）を読む → 結果表へINSERT → 現在の診断を更新」の順に触る。
+--   この巻き戻しも同じ順序で、削除・変更する表を ACCESS EXCLUSIVE で最初にロックする（あとから強いロックへ格上げすると、
+--   保存中の処理とデッドロックしうるため）。
+--     順序: stylist_diagnosis_current → student_diagnosis_results → diagnosis_results（トリガーを外す）→ stylist_profiles（列・制約を外す）
+--   保存中の診断が読み取りを済ませていれば、その確定まで待つ（読み取りのロックが確定まで残るため）。
+--   確認→削除・復元→コミットまで同じトランザクションで保持される。
+--   ・保存が先に確定した場合: 待ったあと、下の確認が最新のデータを見て中止する。
+--   ・巻き戻しが先に取った場合: 後続の保存は、巻き戻しのコミットまで待たされ、途中状態には割り込めない（コミット後は関数・表が無いのでエラーで終わる）。
+--   ※ 運用開始前の取り消し用のため、診断・プロフィールの表が数秒間読み書きできなくなることを許容している。
 set local lock_timeout = '15s';
+lock table public.stylist_diagnosis_current in access exclusive mode;
+lock table public.student_diagnosis_results in access exclusive mode;
+lock table public.diagnosis_results in access exclusive mode;
+lock table public.stylist_profiles in access exclusive mode;
+-- ROLLBACK_LOCK_ACQUIRED（検証スクリプトが保持時間を挿入する目印。本番では単なるコメント）
 do $$
 begin
   if exists (select 1 from public.stylist_profiles where career_phase is not null)
