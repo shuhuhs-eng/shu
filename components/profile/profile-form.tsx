@@ -15,6 +15,8 @@ import { ValuePrioritySelector } from "@/components/profile/value-priority-selec
 import { BirthDateField } from "@/components/profile/birth-date-field";
 import { AgeDisplayModeField } from "@/components/profile/age-display-mode-field";
 import { VisibilityField } from "@/components/profile/visibility-field";
+import { CareerPhaseField } from "@/components/profile/career-phase-field";
+import type { CareerPhaseValue } from "@/lib/student-diagnosis/career-phase";
 import { profileFieldsKey } from "@/lib/profile/fields-key";
 import {
   PREFECTURES,
@@ -61,6 +63,11 @@ export type ProfileFormInitialValues = {
   /** 画面で選べるのは公開／非公開のみ（既存の一部公開は非公開として表示）。 */
   visibility: "PUBLIC" | "PRIVATE";
   valuePriorities: string[];
+  /** 「いまの立場」。DBが対応している（0071適用済み）ときだけ入力欄を出す。旧データ（未設定・美容学生）は phase=null（未選択）。 */
+  careerPhaseSupported: boolean;
+  /** 立場の読み込みに失敗した（未対応ではない）。この間は保存しない。 */
+  careerPhaseLoadFailed: boolean;
+  careerPhase: CareerPhaseValue;
 };
 
 type Props = {
@@ -243,6 +250,19 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
               </>
             )}
           </section>
+
+          {initialValues.careerPhaseLoadFailed && (
+            <p role="alert" className="rounded-xl border border-line bg-surface2 px-4 py-3 text-[12.5px] leading-relaxed text-charcoal">
+              いまの立場を読み込めませんでした。通信状況を確認して、ページを再読み込みしてください（この間、プロフィールは保存できません）。
+            </p>
+          )}
+          {initialValues.careerPhaseSupported && (
+            <section className="space-y-4">
+              <h2 className="eyebrow">いまの立場</h2>
+              <CareerPhaseField defaultValue={initialValues.careerPhase} errors={state.fieldErrors} />
+              <p className="text-[12px] leading-relaxed text-sub">この情報は現在サロン側には表示されません。診断の採点・変更回数・マッチングの計算には影響しません。</p>
+            </section>
+          )}
 
           <section className="space-y-4">
             <h2 className="eyebrow">働き方・価値観</h2>

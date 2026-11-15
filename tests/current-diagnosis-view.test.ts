@@ -142,7 +142,7 @@ for (const q of STUDENT_QUESTIONS) {
 test("学生の現在結果カード: 学生用の内容だけ。経験者の才能・市場価値・AIの語を出さず、過去の経験者診断が残る旨を明示", () => {
   const r = computeStudentResult(answers, STUDENT_DIAGNOSIS_VERSION);
   const withPast = renderToStaticMarkup(createElement(StudentCurrentCard, { result: r, hasPastExperienced: true })).replace(/<[^>]+>/g, " ");
-  assert.ok(withPast.includes("いまの診断（美容学生・新卒向け）") && withPast.includes("現在の結果ではないため、ここには表示していません"));
+  assert.ok(withPast.includes("いまの診断（新卒向け）") && withPast.includes("現在の結果ではないため、ここには表示していません"));
   assert.ok(!/才能|市場価値|年収|AI|6つ/.test(withPast.replace("現役の美容師向けの診断", "")));
   const noPast = renderToStaticMarkup(createElement(StudentCurrentCard, { result: r, hasPastExperienced: false })).replace(/<[^>]+>/g, " ");
   assert.ok(!noPast.includes("以前に受けた"));

@@ -16,7 +16,7 @@ const shell = (children: React.ReactNode) => (
   </main>
 );
 
-/** 美容学生・新卒 診断（ログイン必須）。0071が未適用のDBでは、まだ利用できない案内だけを出す（診断は始めない）。 */
+/** 新卒向け診断（ログイン必須）。0071が未適用のDBでは、まだ利用できない案内だけを出す（診断は始めない）。 */
 export default async function StudentDiagnosisPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -27,7 +27,7 @@ export default async function StudentDiagnosisPage() {
   if (support.status !== "ok") {
     return shell(
       <>
-        <h1 className="font-serif text-xl font-bold text-ink">美容学生・新卒の診断</h1>
+        <h1 className="font-serif text-xl font-bold text-ink">新卒の診断</h1>
         <p className="mt-3 text-[14px] leading-relaxed text-charcoal">
           {support.status === "unsupported" ? "この診断は、まだご利用いただけません。" : "いま状態を確認できませんでした。しばらくしてからもう一度お試しください。"}
         </p>
@@ -43,7 +43,7 @@ export default async function StudentDiagnosisPage() {
       <>
         <h1 className="font-serif text-xl font-bold text-ink">いまは診断結果を変更できません</h1>
         <p className="mt-3 text-[14px] leading-relaxed text-charcoal">
-          次に変更できるのは {formatJstDateTime(limit.lockedUntil)} 以降です。学生・新卒の診断と、現役の美容師向けの診断は、変更の回数を共有しています。
+          次に変更できるのは {formatJstDateTime(limit.lockedUntil)} 以降です。新卒向けの診断と、現役の美容師向けの診断は、変更の回数を共有しています。
         </p>
         <Link href="/stylist/diagnosis/student/result" className="mt-6 flex min-h-[48px] w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface">いまの結果を見る</Link>
       </>,
@@ -58,7 +58,7 @@ export default async function StudentDiagnosisPage() {
   }
   return shell(
     <>
-      <h1 className="mb-5 font-serif text-xl font-bold text-ink">美容学生・新卒の診断</h1>
+      <h1 className="mb-5 font-serif text-xl font-bold text-ink">新卒の診断</h1>
       <StudentQuiz submit={submit} resultHref="/stylist/diagnosis/student/result" cancelHref="/stylist/mypage" notices={notices} />
     </>,
   );

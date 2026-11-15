@@ -7,7 +7,7 @@ import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { DiagnosisSummary } from "@/components/mypage/diagnosis-summary";
 import { CareerPhaseSummary } from "@/components/student-diagnosis/career-phase-summary";
 import { StudentCurrentCard } from "@/components/student-diagnosis/student-current-card";
-import { readOwnCareerPhase } from "@/lib/student-diagnosis/career-phase";
+import { canStartStudentDiagnosis, readOwnCareerPhase } from "@/lib/student-diagnosis/career-phase";
 import { decideDiagnosisView, decideMypageView, mypageSections, readCurrentDiagnosis } from "@/lib/student-diagnosis/current";
 import { fetchExperiencedForMypage, fetchStudentById } from "@/lib/student-diagnosis/current-results";
 import { computeStudentResult } from "@/lib/student-diagnosis/result";
@@ -260,7 +260,7 @@ export default async function StylistMyPage() {
           {studentResult ? (
             <StudentCurrentCard result={studentResult} hasPastExperienced={experiencedFetch.historyExists} />
           ) : (
-            <p role="status" className="rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">学生・新卒の診断結果を読み込めませんでした。しばらくしてから、もう一度開いてください。</p>
+            <p role="status" className="rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">新卒向けの診断結果を読み込めませんでした。しばらくしてから、もう一度開いてください。</p>
           )}
         </div>
       )}
@@ -444,8 +444,9 @@ export default async function StylistMyPage() {
 
       {/* 再診断は、働きたいサロン・職場の設定より下、ページ最下部の控えめなリンクにする。 */}
       {sections.showExperienced && showNewStylistDesign && <RetakeLink limit={retakeLimit} />}
+      {/* 新卒向け診断を受け直す入口は、立場が「新卒」のときだけ。現役・ブランクあり・未選択では出さない（現在の結果の表示は変えない）。 */}
       {sections.showStudent && (
-        <RetakeLink limit={retakeLimit} href="/stylist/diagnosis/student" hideBaseText secondary={{ href: "/stylist/diagnosis", label: "現役の美容師向けの診断を受ける" }} />
+        <RetakeLink limit={retakeLimit} href="/stylist/diagnosis/student" hideBaseText hidePrimary={!canStartStudentDiagnosis(careerPhase)} secondary={{ href: "/stylist/diagnosis", label: "現役の美容師向けの診断を受ける" }} />
       )}
     </main>
   );

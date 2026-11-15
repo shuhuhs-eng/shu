@@ -3,6 +3,7 @@ import type { Database } from "@/types/database";
 import type { ProfileFormInitialValues } from "@/components/profile/profile-form";
 import { getAvatarSignedUrl } from "@/lib/storage/avatar";
 import { readOwnAgeDisplayMode, readOwnBirthDate } from "@/lib/profile/birth-date";
+import { EMPTY_CAREER_PHASE, readOwnCareerPhase } from "@/lib/student-diagnosis/career-phase";
 
 /**
  * 公開範囲の初期値。
@@ -38,12 +39,13 @@ export async function getProfileFormInitialValues(
   userId: string,
   fallbackPublicName: string | null = null,
 ): Promise<{ initialValues: ProfileFormInitialValues }> {
-  const [{ data: profile }, { data: priv }, { data: pub }, birth, ageMode] = await Promise.all([
+  const [{ data: profile }, { data: priv }, { data: pub }, birth, ageMode, careerPhase] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).single(),
     supabase.from("stylist_private").select("*").eq("user_id", userId).maybeSingle(),
     supabase.from("stylist_profiles").select("*").eq("user_id", userId).maybeSingle(),
     readOwnBirthDate(supabase, userId),
     readOwnAgeDisplayMode(supabase, userId),
+    readOwnCareerPhase(supabase, userId),
   ]);
 
   const avatarPath = profile?.avatar_path ?? null;
@@ -71,6 +73,9 @@ export async function getProfileFormInitialValues(
     avatarSignedUrl,
     visibility: initialVisibility(pub),
     valuePriorities: pub?.value_priorities ?? [],
+    careerPhaseSupported: careerPhase.status === "ok",
+    careerPhaseLoadFailed: careerPhase.status === "error",
+    careerPhase: careerPhase.status === "ok" ? careerPhase.value : EMPTY_CAREER_PHASE,
   };
 
   return { initialValues };

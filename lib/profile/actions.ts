@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { profileFormSchema } from "@/lib/validation/profile";
 import { readOwnAgeDisplayMode } from "@/lib/profile/birth-date";
+import { parseCareerPhaseInput, readOwnCareerPhase, ymToDate } from "@/lib/student-diagnosis/career-phase";
 import { SNS_PLATFORMS } from "@/lib/validation/profile-options";
 import type { AuthActionState } from "@/lib/auth/types";
 import type { SnsLink } from "@/types/database";
@@ -119,6 +120,33 @@ export async function saveProfileAction(
     return { error: "保存に失敗しました。しばらくしてから再度お試しください。" };
   }
 
+  // 「いまの立場」は必須（3択）。DBが対応している（0071適用済み）ときは、未選択・不正な値は何も保存せずエラーにする。
+  //   ・保存は save_stylist_profile_v3 の1回（プロフィールと立場を同じトランザクションで保存。別々には保存できない）。
+  //   ・v3 が無い・読み取りに失敗したときは、旧い保存経路へ切り替えない（必須の回避になるため）。エラーにする。
+  //   ・0071未適用のDBだけは、従来どおり立場なしで保存する。
+  const careerSupport = await readOwnCareerPhase(supabase, user.id);
+  if (careerSupport.status === "error") {
+    return { error: "保存に失敗しました。しばらくしてから再度お試しください。" };
+  }
+  let careerArgs: { p_career_phase: string; p_graduation_ym: string | null; p_graduation_kind: string | null; p_desired_start_ym: string | null; p_license_status: string | null } | null = null;
+  if (careerSupport.status === "ok") {
+    const cp = parseCareerPhaseInput({
+      phase: formData.get("careerPhase"), graduationYm: formData.get("graduationYm"), graduationKind: formData.get("graduationKind"),
+      desiredStartYm: formData.get("desiredStartYm"), licenseStatus: formData.get("licenseStatus"),
+    });
+    if (!cp.ok) {
+      const fe: Record<string, string[]> = {};
+      if (cp.errors.phase) fe.careerPhase = [cp.errors.phase];
+      for (const k of ["graduationYm", "graduationKind", "desiredStartYm", "licenseStatus"] as const) if (cp.errors[k]) fe[k] = [cp.errors[k]!];
+      return { error: "入力内容をご確認ください。", fieldErrors: fe };
+    }
+    const c = cp.value;
+    careerArgs = {
+      p_career_phase: c.phase, p_graduation_ym: ymToDate(c.graduationYm), p_graduation_kind: c.graduationKind,
+      p_desired_start_ym: ymToDate(c.desiredStartYm), p_license_status: c.licenseStatus,
+    };
+  }
+
   const common = {
     p_public_name: v.publicName,
     p_full_name: v.fullName,
@@ -141,7 +169,18 @@ export async function saveProfileAction(
   };
 
   let error: { message?: string } | null;
-  if (support.status === "unsupported") {
+  if (careerArgs) {
+    const fieldErrors: Record<string, string[]> = {};
+    if (support.status !== "ok" || v.birthDate === undefined || v.ageDisplayMode === undefined) {
+      if (v.birthDate === undefined) fieldErrors.birthDate = ["生年月日を入力してください"];
+      if (v.ageDisplayMode === undefined) fieldErrors.ageDisplayMode = ["年齢の表示方法を選択してください"];
+      return { error: "入力内容をご確認ください。", fieldErrors };
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ({ error } = await (supabase as any).rpc("save_stylist_profile_v3", {
+      ...common, p_birth_date: v.birthDate, p_age_display_mode: v.ageDisplayMode, ...careerArgs,
+    }));
+  } else if (support.status === "unsupported") {
     ({ error } = await supabase.rpc("save_stylist_profile", common));
   } else {
     const fieldErrors: Record<string, string[]> = {};

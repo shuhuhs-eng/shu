@@ -47,16 +47,17 @@ export default async function StylistDiagnosisPage() {
     );
   }
 
-  // 美容学生・新卒の入口（0071適用済みで、ログイン中のときだけ）。選ぶまで区分は未設定のまま・推測しない。
-  const studentSupported = user ? (await readOwnCareerPhase(supabase, user.id)).status === "ok" : false;
+  // 新卒向け診断の入口は、0071適用済みで、本人が立場を「新卒」にしているときだけ出す（立場は本人の選択のみ・推測しない）。
+  const phaseRead = user ? await readOwnCareerPhase(supabase, user.id) : null;
+  const studentSupported = phaseRead?.status === "ok" && phaseRead.value.phase === "new_graduate";
 
   return (
     <>
       {studentSupported && (
         <div className="mx-auto max-w-[520px] px-5 pt-6">
           <p className="rounded-2xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">
-            美容学生（在学中）・新卒の方は、実績を聞かない専用の診断があります。
-            <Link href="/stylist/diagnosis/student" className="ml-1 font-semibold text-ink underline">学生・新卒の診断へ</Link>
+            新卒の方は、実績を聞かない専用の診断があります。
+            <Link href="/stylist/diagnosis/student" className="ml-1 font-semibold text-ink underline">新卒向けの診断へ</Link>
           </p>
         </div>
       )}

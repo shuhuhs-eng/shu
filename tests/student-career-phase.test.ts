@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   describeCareerPhase, parseCareerPhaseInput, readOwnCareerPhase, EMPTY_CAREER_PHASE, currentYmJst,
+  CAREER_PHASES, CAREER_PHASE_LABEL, CAREER_PHASE_REQUIRED_HEADING,
 } from "@/lib/student-diagnosis/career-phase";
 import { commitStudentDiagnosis, isMissingStudentFunction } from "@/lib/student-diagnosis/commit";
 import { STUDENT_QUESTIONS, STUDENT_DIAGNOSIS_VERSION, type StudentAnswers } from "@/lib/student-diagnosis/questions";
@@ -15,37 +16,53 @@ import { CareerPhaseSummary } from "@/components/student-diagnosis/career-phase-
 const NOW = new Date("2026-11-15T09:00:00+09:00");
 const ym = (d: number) => { const [y, m] = currentYmJst(NOW).split("-").map(Number); const i = y * 12 + (m - 1) + d; return `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`; };
 
-test("区分: 未設定・経験者は卒業・就業開始・免許を受け付けない（経験者と推測しない）", () => {
-  assert.deepEqual(parseCareerPhaseInput({}, NOW), { ok: true, value: { ...EMPTY_CAREER_PHASE } });
-  assert.deepEqual(parseCareerPhaseInput({ phase: "experienced" }, NOW), { ok: true, value: { ...EMPTY_CAREER_PHASE, phase: "experienced" } });
-  for (const extra of [{ graduationYm: ym(1) }, { graduationKind: "planned" }, { desiredStartYm: ym(2) }, { licenseStatus: "obtained" }]) {
-    assert.equal(parseCareerPhaseInput({ phase: "experienced", ...extra }, NOW).ok, false);
-    assert.equal(parseCareerPhaseInput({ phase: "", ...extra }, NOW).ok, false, "区分NULLに卒業情報だけは入れられない");
+test("立場: 必須。未選択・旧値(student)・不明な値は受け付けない。選べるのは3つだけ", () => {
+  for (const bad of [{}, { phase: "" }, { phase: "  " }, { phase: null }, { phase: "student" }, { phase: "bogus" }, { phase: "EXPERIENCED" }]) {
+    const r = parseCareerPhaseInput(bad as never, NOW);
+    assert.equal(r.ok, false, JSON.stringify(bad));
+    if (!r.ok) assert.ok(r.errors.phase);
+  }
+  assert.deepEqual(CAREER_PHASES, ["new_graduate", "experienced", "blank"]);
+  assert.deepEqual(CAREER_PHASES.map((p) => CAREER_PHASE_LABEL[p]), ["新卒", "現役の美容師", "ブランクあり"]);
+  assert.equal(CAREER_PHASE_REQUIRED_HEADING, "いまの立場（必須）");
+});
+
+test("立場: 現役・ブランクありは卒業・就業開始・免許を受け付けない", () => {
+  for (const ph of ["experienced", "blank"] as const) {
+    assert.deepEqual(parseCareerPhaseInput({ phase: ph }, NOW), { ok: true, value: { ...EMPTY_CAREER_PHASE, phase: ph } });
+    for (const extra of [{ graduationYm: ym(1) }, { graduationKind: "planned" }, { desiredStartYm: ym(2) }, { licenseStatus: "obtained" }]) {
+      assert.equal(parseCareerPhaseInput({ phase: ph, ...extra }, NOW).ok, false, `${ph} ${JSON.stringify(extra)}`);
+    }
   }
 });
 
-test("区分: 学生は卒業予定のみ・卒業年月と卒業区分が必須・免許は別項目", () => {
-  assert.equal(parseCareerPhaseInput({ phase: "student", graduationYm: ym(6), graduationKind: "planned" }, NOW).ok, true);
-  assert.equal(parseCareerPhaseInput({ phase: "student", graduationYm: ym(6), graduationKind: "planned", licenseStatus: "studying" }, NOW).ok, true);
-  assert.equal(parseCareerPhaseInput({ phase: "student", graduationYm: ym(0), graduationKind: "completed" }, NOW).ok, false, "学生で卒業済は不可");
-  assert.equal(parseCareerPhaseInput({ phase: "student", graduationYm: ym(6) }, NOW).ok, false, "卒業区分NULLは不可");
-  assert.equal(parseCareerPhaseInput({ phase: "student", graduationKind: "planned" }, NOW).ok, false, "卒業年月なしは不可");
+test("立場: 新卒は卒業年月と卒業区分が必須（予定・済みの両方可）・免許は別項目", () => {
+  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(6), graduationKind: "planned" }, NOW).ok, true);
+  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(6), graduationKind: "planned", licenseStatus: "studying" }, NOW).ok, true);
   assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(-2), graduationKind: "completed", licenseStatus: "obtained" }, NOW).ok, true);
+  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(6) }, NOW).ok, false, "卒業区分なしは不可");
+  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationKind: "planned" }, NOW).ok, false, "卒業年月なしは不可");
   assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(2), graduationKind: "completed" }, NOW).ok, false, "未来の卒業済は不可");
-  assert.equal(parseCareerPhaseInput({ phase: "student", graduationYm: ym(70), graduationKind: "planned" }, NOW).ok, false, "範囲外");
-  assert.equal(parseCareerPhaseInput({ phase: "student", graduationYm: ym(6), graduationKind: "planned", desiredStartYm: ym(3) }, NOW).ok, false, "就業開始が卒業より前は不可");
-  assert.equal(parseCareerPhaseInput({ phase: "student", graduationYm: "2027-13", graduationKind: "planned" }, NOW).ok, false);
-  assert.equal(parseCareerPhaseInput({ phase: "bogus" }, NOW).ok, false);
+  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(70), graduationKind: "planned" }, NOW).ok, false, "範囲外");
+  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(6), graduationKind: "planned", desiredStartYm: ym(3) }, NOW).ok, false, "就業開始が卒業より前は不可");
+  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: "2027-13", graduationKind: "planned" }, NOW).ok, false);
+  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(6), graduationKind: "planned", licenseStatus: "x" }, NOW).ok, false);
 });
 
-test("区分の表示: 未設定は何も出さない。学生・新卒は共通関数の文言", () => {
+test("立場の表示: 未選択は何も出さない（旧データ含む）。3択は共通関数の文言。旧データは未選択と案内", () => {
   assert.equal(describeCareerPhase(EMPTY_CAREER_PHASE), null);
-  assert.deepEqual(describeCareerPhase({ phase: "experienced", graduationYm: null, graduationKind: null, desiredStartYm: null, licenseStatus: null }), ["現役の美容師（経験者）"]);
-  const l = describeCareerPhase({ phase: "student", graduationYm: "2027-03", graduationKind: "planned", desiredStartYm: "2027-04", licenseStatus: "studying" })!;
-  assert.deepEqual(l, ["美容学生（在学中）", "2027年03月 卒業予定", "就業開始の希望: 2027年04月", "免許: 取得に向けて在学中"]);
+  assert.deepEqual(describeCareerPhase({ ...EMPTY_CAREER_PHASE, phase: "experienced" }), ["現役の美容師"]);
+  assert.deepEqual(describeCareerPhase({ ...EMPTY_CAREER_PHASE, phase: "blank" }), ["ブランクあり"]);
+  const l = describeCareerPhase({ ...EMPTY_CAREER_PHASE, phase: "new_graduate", graduationYm: "2027-03", graduationKind: "planned", desiredStartYm: "2027-04", licenseStatus: "studying" })!;
+  assert.deepEqual(l, ["新卒", "2027年03月 卒業予定", "就業開始の希望: 2027年04月", "免許: 取得に向けて在学中"]);
+  assert.equal(describeCareerPhase({ ...EMPTY_CAREER_PHASE, legacyStudent: true, graduationYm: "2027-03", graduationKind: "planned" }), null, "美容学生（旧）は新卒等へ変換せず未選択のまま");
   const sum = (v: typeof EMPTY_CAREER_PHASE, k: "current" | "past" | "none") => renderToStaticMarkup(createElement(CareerPhaseSummary, { value: v, studentLink: k })).replace(/<[^>]+>/g, " ");
-  assert.ok(sum(EMPTY_CAREER_PHASE, "none").includes("未設定") && sum(EMPTY_CAREER_PHASE, "none").includes("学生・新卒の診断を受ける") && !sum(EMPTY_CAREER_PHASE, "none").includes("経験者"));
-  assert.ok(sum(EMPTY_CAREER_PHASE, "current").includes("学生・新卒の診断結果を見る"));
+  const unset = sum(EMPTY_CAREER_PHASE, "none");
+  assert.ok(unset.includes("未選択") && unset.includes("選んでください") && !unset.includes("経験者") && !unset.includes("美容学生") && !unset.includes("未設定"));
+  assert.ok(!unset.includes("診断を受ける"), "新卒以外には新卒向け診断を『受ける』入口を出さない");
+  assert.ok(sum({ ...EMPTY_CAREER_PHASE, phase: "experienced" }, "none").indexOf("診断") < 0);
+  assert.ok(sum({ ...EMPTY_CAREER_PHASE, phase: "new_graduate" }, "none").includes("新卒の診断を受ける"));
+  assert.ok(sum(EMPTY_CAREER_PHASE, "current").includes("新卒の診断結果を見る"), "受けた結果へのリンクは立場にかかわらず残す");
   assert.ok(sum(EMPTY_CAREER_PHASE, "past").includes("現在の結果ではありません"));
 });
 
@@ -54,8 +71,11 @@ test("区分の読み取り: 列なし(42703)はunsupported、その他の失敗
   assert.deepEqual(await readOwnCareerPhase(mk({ data: null, error: { code: "42703", message: "column stylist_profiles.career_phase does not exist" } }), "u"), { status: "unsupported" });
   assert.deepEqual(await readOwnCareerPhase(mk({ data: null, error: { code: "PGRST301", message: "JWT expired" } }), "u"), { status: "error" });
   assert.deepEqual(await readOwnCareerPhase(mk({ data: null, error: null }), "u"), { status: "ok", value: EMPTY_CAREER_PHASE });
+  // 旧データの美容学生は、新卒等へ勝手に変換しない（未選択として返し、旧データだったことだけ保持する）
   const ok = await readOwnCareerPhase(mk({ data: { career_phase: "student", graduation_ym: "2027-03-01", graduation_kind: "planned", desired_start_ym: null, license_status: "studying" }, error: null }), "u");
-  assert.deepEqual(ok, { status: "ok", value: { phase: "student", graduationYm: "2027-03", graduationKind: "planned", desiredStartYm: null, licenseStatus: "studying" } });
+  assert.deepEqual(ok, { status: "ok", value: { phase: null, legacyStudent: true, graduationYm: "2027-03", graduationKind: "planned", desiredStartYm: null, licenseStatus: "studying" } });
+  const blank = await readOwnCareerPhase(mk({ data: { career_phase: "blank", graduation_ym: null, graduation_kind: null, desired_start_ym: null, license_status: null }, error: null }), "u");
+  assert.deepEqual(blank, { status: "ok", value: { ...EMPTY_CAREER_PHASE, phase: "blank" } });
 });
 
 // ---- 学生診断の確定保存 ----
@@ -104,9 +124,14 @@ test("学生診断のアプリ: 既存診断・採点・旧INSERTを使わず、
   const files = ["lib/student-diagnosis/commit.ts", "lib/student-diagnosis/actions.ts", "app/stylist/diagnosis/student/page.tsx"].map((f) => readFileSync(f, "utf8")).join("\n");
   assert.ok(!/scoreTraits|marketValue|commit_diagnosis_result|from\("diagnosis_results"\)|\.insert\(/.test(files.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")));
   const entry = readFileSync("app/stylist/diagnosis/page.tsx", "utf8");
-  assert.ok(entry.includes('readOwnCareerPhase(supabase, user.id)).status === "ok"'));
+  // 新卒向け診断の入口は、0071適用済みで、立場が「新卒」のときだけ。美容学生の入口は無い
+  assert.ok(entry.includes('phaseRead?.status === "ok" && phaseRead.value.phase === "new_graduate"'));
+  assert.ok(!entry.includes("美容学生") && !entry.includes("在学中"));
+  // 立場は、プロフィール保存と別に保存する画面・関数を持たない（プロフィール編集の入力欄から v3 で一緒に保存）
   const profile = readFileSync("app/stylist/profile/page.tsx", "utf8");
-  assert.ok(profile.includes('careerPhase.status === "ok" &&'));
+  assert.ok(!profile.includes("CareerPhaseForm") && !profile.includes("saveCareerPhaseAction"));
+  assert.ok(!readFileSync("lib/student-diagnosis/actions.ts", "utf8").includes("set_stylist_career_phase"));
+  assert.ok(!existsSync("components/student-diagnosis/career-phase-form.tsx"));
 });
 
 test("結果表示: 点数・割合・順位・禁止語を出さず、同数は同列のチップ", () => {

@@ -1,11 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, type FormEvent } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { saveProfileAction } from "@/lib/profile/actions";
 import { initialAuthActionState } from "@/lib/auth/types";
-import { SubmitButton } from "@/components/auth/submit-button";
-import { PendingFieldset } from "@/components/auth/pending-fieldset";
 import { FormErrorBanner } from "@/components/auth/form-messages";
 import { TextField } from "@/components/auth/text-field";
 import { SelectField } from "@/components/profile/select-field";
@@ -26,6 +24,8 @@ import {
 } from "@/lib/validation/profile-options";
 import { BirthDateField } from "@/components/profile/birth-date-field";
 import { AgeDisplayModeField } from "@/components/profile/age-display-mode-field";
+import { CareerPhaseField } from "@/components/profile/career-phase-field";
+import { CAREER_PHASE_REQUIRED_MESSAGE } from "@/lib/student-diagnosis/career-phase";
 import type { ProfileFormInitialValues } from "@/components/profile/profile-form";
 
 const STEP_LABELS = ["基本情報", "キャリア", "希望条件", "働き方・価値観"];
@@ -75,7 +75,9 @@ type Props = {
  */
 export function StylistOnboardingWizard({ userId, initialValues }: Props) {
   const router = useRouter();
-  const [state, formAction] = useActionState(saveProfileAction, initialAuthActionState);
+  const [state, formAction, isPending] = useActionState(saveProfileAction, initialAuthActionState);
+  const submittingRef = useRef(false);
+  useEffect(() => { if (!isPending) submittingRef.current = false; }, [isPending, state]);
   const [step, setStep] = useState(1);
   const [stepError, setStepError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -109,6 +111,15 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
       return null;
     }
     if (targetStep === 2) {
+      // いまの立場は必須（未選択のまま次へ・保存へ進めない。最終的な検証はサーバーとDB）
+      if (initialValues.careerPhaseSupported) {
+        const cp = get("careerPhase");
+        if (!cp) return CAREER_PHASE_REQUIRED_MESSAGE;
+        if (cp === "new_graduate") {
+          if (!get("graduationYm")) return "卒業（予定）の年月を選んでください。";
+          if (!get("graduationKind")) return "卒業予定か卒業済みかを選んでください。";
+        }
+      }
       if (fd.getAll("specialties").length === 0) return "得意技術を1つ以上選択してください";
       if (!get("employmentType")) return "現在の雇用形態を選択してください";
       return null;
@@ -154,10 +165,19 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
       }
     }
     setStepError(null);
+    // <form action> は完了後に入力欄を初期値へ戻す（React 19）ため、失敗すると入力内容が消える。
+    // 自前で送信し、入力欄に触れない（失敗しても立場を含む入力が残る。プロフィール編集と同じ方式）。
+    e.preventDefault();
+    if (isPending || submittingRef.current) return; // 二重送信の防止
+    submittingRef.current = true;
+    const formData = new FormData(e.currentTarget);
+    startTransition(() => {
+      formAction(formData);
+    });
   }
 
   return (
-    <form ref={formRef} action={formAction} onSubmit={handleSubmit} className="space-y-8">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-8">
       <FormErrorBanner message={state.error} />
 
       <div className="mb-2">
@@ -180,7 +200,7 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
         </p>
       )}
 
-      <PendingFieldset>
+      <fieldset disabled={isPending} className="contents border-0 p-0 m-0">
         <div>
           {/* ステップ1: 基本情報 */}
           <div className={step === 1 ? "space-y-4" : "hidden"}>
@@ -251,6 +271,17 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
 
           {/* ステップ2: キャリア */}
           <div className={step === 2 ? "space-y-4" : "hidden"}>
+            {initialValues.careerPhaseLoadFailed && (
+              <p role="alert" className="rounded-xl border border-line bg-surface2 px-4 py-3 text-[12.5px] leading-relaxed text-charcoal">
+                いまの立場を読み込めませんでした。通信状況を確認して、ページを再読み込みしてください（この間、プロフィールは保存できません）。
+              </p>
+            )}
+            {initialValues.careerPhaseSupported && (
+              <>
+                <CareerPhaseField defaultValue={initialValues.careerPhase} errors={state.fieldErrors} />
+                <p className="text-[12px] leading-relaxed text-sub">この情報は現在サロン側には表示されません。</p>
+              </>
+            )}
             <TextField
               id="experienceYears"
               name="experienceYears"
@@ -332,7 +363,7 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
             <p className="text-[12.5px] text-sub">入力内容は後からいつでも変更できます。</p>
           </div>
         </div>
-      </PendingFieldset>
+      </fieldset>
 
       <div className="flex items-center justify-between gap-3">
         <button
@@ -353,7 +384,14 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
             次へ
           </button>
         ) : (
-          <SubmitButton pendingText="保存中...">プロフィールを保存して始める</SubmitButton>
+          <button
+            type="submit"
+            disabled={isPending}
+            aria-busy={isPending}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface transition-opacity disabled:opacity-60"
+          >
+            {isPending ? "保存中..." : "プロフィールを保存して始める"}
+          </button>
         )}
       </div>
     </form>

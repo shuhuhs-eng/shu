@@ -19,6 +19,8 @@ function fakeSupabase() {
           if (env.support === "error") return { data: null, error: { code: "XX000", message: "boom" } };
           return { data: null, error: null };
         }
+        // 立場（0071）が未適用のDBとして扱う（このテストは年齢の保存経路だけを確認する。立場の必須は profile-save-career-phase.test.ts）
+        if (table === "stylist_profiles" && cols.includes("career_phase")) return { data: null, error: { code: "42703", message: "column stylist_profiles.career_phase does not exist" } };
         return { data: null, error: null };
       },
     }),
