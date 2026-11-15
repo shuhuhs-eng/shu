@@ -7,6 +7,7 @@ import { FivePointScale } from "@/components/shared/five-point-scale";
 import { SCENES, SUPPLEMENT_TITLES } from "@/lib/salon-culture/analysis/scenes";
 import { SUPPLEMENT_KEYS, type BaseAnswers, type SupplementAnswers, type SupplementKey, type SupplementValue } from "@/lib/salon-culture/analysis/v1";
 import type { SaveExtraResult } from "@/lib/salon-culture/draft-actions";
+import { SaveFeedback } from "@/components/profile/save-feedback";
 import { UNCERTAIN_ERROR } from "@/lib/diagnosis-limit/messages";
 
 type Props = {
@@ -34,6 +35,8 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
   const [values, setValues] = useState<Partial<SupplementAnswers>>(initial ?? {});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
+  // 実際に保存が成功した直後だけ true。回答を変え始めたら消す（保存済みの内容と食い違うため）。
+  const [saved, setSaved] = useState(false);
   // 保存の識別子。同じ回答の再送では同じ値（二重に数えない）、回答を変えたら作り直す。
   const requestRef = useRef<{ id: string; key: string } | null>(null);
   const inFlight = useRef(false);
@@ -41,6 +44,7 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
   const complete = SUPPLEMENT_KEYS.every((k) => values[k] != null);
 
   function set(key: SupplementKey, v: SupplementValue) {
+    setSaved(false);
     setValues((prev) => ({ ...prev, [key]: v }));
   }
 
@@ -49,6 +53,7 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
     inFlight.current = true;
     setSaving(true);
     setError(null);
+    setSaved(false);
     try {
       const key = JSON.stringify(values);
       if (!requestRef.current || requestRef.current.key !== key) requestRef.current = { id: crypto.randomUUID(), key };
@@ -57,7 +62,8 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
         setError({ code: result.code, message: result.error });
         return;
       }
-      router.push(doneHref);
+      // 5軸の図が出ない回答（「当てはまらない」を含む）でも保存できたと分かるよう、その場に結果を出す。
+      setSaved(true);
       router.refresh();
     } catch {
       setError({ code: "uncertain", message: UNCERTAIN_ERROR.message });
@@ -148,6 +154,14 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
         >
           {saving ? "保存しています…" : "回答を保存する"}
         </button>
+        {saved && (
+          <div className="w-full">
+            <SaveFeedback success="回答を保存しました" />
+            <Link href={doneHref} className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-full border border-line bg-surface px-4 py-2.5 text-[13px] font-semibold text-ink">
+              結果を見る
+            </Link>
+          </div>
+        )}
         {!complete && <p className="text-[12px] text-sub">すべての質問に回答すると保存できます。</p>}
         <Link href={cancelHref} className="inline-flex min-h-[44px] items-center text-[13px] text-sub underline">
           あとで回答する
