@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { bankFor, computeDiagnosis, type DiagnosisMode } from "@/lib/diagnosis";
 import { DIAGNOSIS_NEXT_CHANGE_STORAGE_KEY, DIAGNOSIS_RESULT_STORAGE_KEY, DIAGNOSIS_SAVED_STORAGE_KEY } from "@/lib/diagnosis-handoff/constants";
-import { confirmNotice, UNKNOWN_STATUS, type LimitErrorCode, type LimitStatus } from "@/lib/diagnosis-limit/messages";
+import { confirmNotice, UNCERTAIN_ERROR, UNKNOWN_STATUS, type LimitErrorCode, type LimitStatus } from "@/lib/diagnosis-limit/messages";
 import { submitDiagnosisForLoggedInUser } from "@/lib/diagnosis-handoff/submit-logged-in";
 
 const SECTION_SIZE = 5;
@@ -119,8 +119,8 @@ export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS }
         }
         const result = await submitDiagnosisForLoggedInUser(mode, finalAnswers, requestRef.current.id);
         if (!result.success) {
-          setError(result.message ?? "結果の保存に失敗しました。今回の保存は変更回数に数えていません。もう一度お試しください。");
-          setErrorCode(result.code ?? "unknown");
+          setError(result.message ?? UNCERTAIN_ERROR.message);
+          setErrorCode(result.code ?? "uncertain");
           inFlight.current = false;
           setSubmitting(false);
           return;
@@ -137,8 +137,8 @@ export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS }
         else sessionStorage.removeItem(DIAGNOSIS_NEXT_CHANGE_STORAGE_KEY);
         router.push("/diagnosis/result");
       } catch {
-        setError("結果の保存に失敗しました。通信状況を確認して、もう一度お試しください。同じ内容の再送は、二重には数えません。");
-        setErrorCode("unknown");
+        setError(UNCERTAIN_ERROR.message);
+        setErrorCode("uncertain");
         inFlight.current = false;
         setSubmitting(false);
       }

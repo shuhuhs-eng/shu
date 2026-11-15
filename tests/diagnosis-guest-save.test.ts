@@ -197,7 +197,7 @@ function fakeService() {
   return {
     // 0058 の commit_diagnosis_result の簡易再現（判定の詳細はSQL側の検証で行う。ここは呼び出し側の振る舞いの確認用）
     rpc: async (name: string, a: any) => {
-      if (env.failResultInsert && name === "commit_diagnosis_result") return { data: null, error: { message: "boom" } };
+      if (env.failResultInsert && name === "commit_diagnosis_result") return { data: null, error: { code: "XX000", message: "boom" } };
       if (name !== "commit_diagnosis_result" || env.rpcMissing)
         return { data: null, error: { code: "PGRST202", message: "Could not find the function public." + name } };
       const hash = JSON.stringify(a.p_answers);
@@ -257,7 +257,7 @@ function fakeService() {
               return { data: p, error: null };
             }
             if (table === "diagnosis_results") {
-              if (env.failResultInsert) return { data: null, error: { message: "boom" } };
+              if (env.failResultInsert) return { data: null, error: { code: "XX000", message: "boom" } };
               const r: Result = {
                 id: randomUUID(),
                 user_id: row.user_id,

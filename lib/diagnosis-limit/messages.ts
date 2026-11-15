@@ -106,11 +106,28 @@ export type LimitErrorCode =
   | "not_allowed"
   | "not_authenticated"
   | "busy"
+  | "uncertain"
   | "unknown";
 
-export type LimitError = { code: LimitErrorCode; message: string; lockedUntil: string | null };
+/** definite: DBが処理を取り消した（何も保存されず回数も数えられていない）と確定できるエラー。false は結果不明（通信切れ・応答なし等）。 */
+export type LimitError = { code: LimitErrorCode; message: string; lockedUntil: string | null; definite: boolean };
 
 const NOT_COUNTED = "今回の保存は変更回数に数えていません。";
+
+/** 結果不明（通信切れ・タイムアウト・原因不明）。保存されている可能性があるので、回数について断定しない。同じ送信IDで再送すれば、保存済みでも二重には数えない。 */
+export const UNCERTAIN_ERROR: LimitError = {
+  code: "uncertain",
+  lockedUntil: null,
+  definite: false,
+  message:
+    "保存できたかどうかを確認できませんでした（通信が切れた可能性があります）。回答はそのまま残っています。同じ内容でもう一度保存してください（すでに保存されていた場合も、二重には数えません）。マイページで結果が更新されているか確認することもできます。",
+};
+
+/** DB（またはPostgREST）が応答として返したエラーか。通信切れ・例外・コードなしは false。 */
+function isDbReportedError(err: { code?: string | null } | null | undefined): boolean {
+  const c = err?.code ?? "";
+  return /^[0-9A-Z]{5}$/.test(c) || /^PGRST\d+$/.test(c);
+}
 
 /** DB（0058）が返すエラーを、利用者向けの文言とコードに直す。 */
 export function mapLimitError(err: { message?: string | null; details?: string | null; code?: string | null } | null | undefined): LimitError {
@@ -121,34 +138,39 @@ export function mapLimitError(err: { message?: string | null; details?: string |
     return {
       code: "locked",
       lockedUntil: until,
+      definite: true,
       message: until
         ? `次に変更できるのは ${formatJstDateTime(until)} 以降です。${NOT_COUNTED}`
         : `いまは結果を変更できない期間です。${NOT_COUNTED}`,
     };
   }
   if (msg.includes("diagnosis_already_saved"))
-    return { code: "already_saved", lockedUntil: null, message: "すでに診断結果が保存されているため、ログイン前の診断は追加しませんでした。" };
+    return { code: "already_saved", lockedUntil: null, definite: true, message: "すでに診断結果が保存されているため、ログイン前の診断は追加しませんでした。" };
   if (msg.includes("diagnosis_use_confirm"))
-    return { code: "use_confirm", lockedUntil: null, message: `この画面からは保存できません。確認画面から保存してください。${NOT_COUNTED}` };
+    return { code: "use_confirm", lockedUntil: null, definite: true, message: `この画面からは保存できません。確認画面から保存してください。${NOT_COUNTED}` };
   if (msg.includes("request id content mismatch"))
-    return { code: "content_mismatch", lockedUntil: null, message: `回答の内容が前回の送信と違うため、保存しませんでした。確認画面からもう一度保存してください。${NOT_COUNTED}` };
+    return { code: "content_mismatch", lockedUntil: null, definite: true, message: `回答の内容が前回の送信と違うため、保存しませんでした。確認画面からもう一度保存してください。${NOT_COUNTED}` };
   if (msg.includes("request id reused"))
-    return { code: "request_reused", lockedUntil: null, message: `保存の操作を確認できませんでした。もう一度お試しください。${NOT_COUNTED}` };
+    return { code: "request_reused", lockedUntil: null, definite: true, message: `保存の操作を確認できませんでした。もう一度お試しください。${NOT_COUNTED}` };
   if (msg.includes("draft_changed"))
-    return { code: "draft_changed", lockedUntil: null, message: `別の画面で回答が更新されています。内容を確認して、もう一度保存してください。${NOT_COUNTED}` };
+    return { code: "draft_changed", lockedUntil: null, definite: true, message: `別の画面で回答が更新されています。内容を確認して、もう一度保存してください。${NOT_COUNTED}` };
   if (msg.includes("extra answers required"))
-    return { code: "extra_required", lockedUntil: null, message: `追加の質問への回答がそろっていないため、保存できません。${NOT_COUNTED}` };
+    return { code: "extra_required", lockedUntil: null, definite: true, message: `追加の質問への回答がそろっていないため、保存できません。${NOT_COUNTED}` };
   if (msg.includes("draft incomplete"))
-    return { code: "draft_incomplete", lockedUntil: null, message: `未回答の質問があります。すべて答えてから保存してください。${NOT_COUNTED}` };
+    return { code: "draft_incomplete", lockedUntil: null, definite: true, message: `未回答の質問があります。すべて答えてから保存してください。${NOT_COUNTED}` };
   if (msg.includes("not allowed to edit this store"))
-    return { code: "not_allowed", lockedUntil: null, message: "この店舗の診断を保存する権限がありません（閲覧のみの権限では保存できません）。" };
+    return { code: "not_allowed", lockedUntil: null, definite: true, message: "この店舗の診断を保存する権限がありません（閲覧のみの権限では保存できません）。" };
   if (msg.includes("not authenticated"))
-    return { code: "not_authenticated", lockedUntil: null, message: "ログインの有効期限が切れました。ログインし直してください。" };
+    return { code: "not_authenticated", lockedUntil: null, definite: true, message: "ログインの有効期限が切れました。ログインし直してください。" };
   // 同時操作の競合（デッドロック40P01・直列化失敗40001）。DBはその保存を丸ごと取り消すので、何も保存されず回数も数えられていない。
   // 同じ送信ID・同じ内容で、そのまま再試行できる。保存できたとは表示しない。
   if (err?.code === "40P01" || err?.code === "40001" || msg.includes("deadlock detected") || msg.includes("could not serialize"))
-    return { code: "busy", lockedUntil: null, message: `ほかの操作と重なったため、保存できませんでした。${NOT_COUNTED}同じ内容で、もう一度保存してください。` };
-  return { code: "unknown", lockedUntil: null, message: `結果の保存に失敗しました。${NOT_COUNTED}もう一度お試しください。` };
+    return { code: "busy", lockedUntil: null, definite: true, message: `ほかの操作と重なったため、保存できませんでした。${NOT_COUNTED}同じ内容で、もう一度保存してください。` };
+  // DBが返したエラー（SQLSTATE 5桁、またはPostgRESTのエラー）なら、その処理はDB側で取り消されている（何も保存されず、回数も数えていない）。
+  if (isDbReportedError(err))
+    return { code: "unknown", lockedUntil: null, definite: true, message: `結果の保存に失敗しました。${NOT_COUNTED}もう一度お試しください。` };
+  // それ以外（通信切れ・応答なし・原因不明）は、保存されたかどうかが分からない。「数えていません」とは言わない。
+  return UNCERTAIN_ERROR;
 }
 
 /** 追加5問の回答画面に出す、回数の案内（保存前）。判定は保存時にDB。 */

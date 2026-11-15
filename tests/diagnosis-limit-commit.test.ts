@@ -52,7 +52,7 @@ test("旧保存へ戻るのは「commit_diagnosis_result が存在しない」�
   assert.equal(r.ok && r.legacy, true);
 });
 
-test("制限エラーは利用者向けの文言と解除日時になり、失敗時は回数を数えていないと伝える", async () => {
+test("制限エラーは利用者向けの文言と解除日時になり、DBが取り消したと確定できる失敗は回数を数えていないと伝え、通信切れは結果不明として分ける", async () => {
   const { c } = client(() => ({ data: null, error: { code: "P0001", message: "diagnosis_change_locked", details: "2027-02-13T09:10:00Z" } }));
   const r = await commitDiagnosisResult(c, args);
   assert.equal(r.ok, false);
@@ -64,7 +64,13 @@ test("制限エラーは利用者向けの文言と解除日時になり、失�
   const t = client(() => { throw new Error("fetch failed"); });
   const r2 = await commitDiagnosisResult(t.c, args);
   assert.equal(r2.ok, false);
-  if (!r2.ok) assert.match(r2.error.message, /数えていません/);
+  if (!r2.ok) {
+    // 通信切れなど結果不明は、保存されたか分からないので「数えていません」とは言わない
+    assert.equal(r2.error.code, "uncertain");
+    assert.equal(r2.error.definite, false);
+    assert.doesNotMatch(r2.error.message, /数えていません/);
+    assert.match(r2.error.message, /二重には数えません/);
+  }
 });
 
 test("デッドロック（40P01）・直列化失敗（40001）で保存に失敗したときは、成功と表示せず、旧保存へも戻らず、同じ送信IDで再試行できる", async () => {

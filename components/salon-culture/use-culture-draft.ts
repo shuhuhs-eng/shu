@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { confirmCultureAction, saveCultureDraftAction } from "@/lib/salon-culture/draft-actions";
-import { confirmNotice, type LimitErrorCode, type LimitStatus } from "@/lib/diagnosis-limit/messages";
+import { confirmNotice, UNCERTAIN_ERROR, type LimitErrorCode, type LimitStatus } from "@/lib/diagnosis-limit/messages";
 import { previewConfirm, type CultureAnswers, type DraftState } from "@/lib/salon-culture/draft";
 import type { SupplementAnswers } from "@/lib/salon-culture/analysis/v1";
 
@@ -110,7 +110,7 @@ export function useCultureDraft(o: Options) {
       router.push(o.resultHref);
       router.refresh();
     } catch {
-      fail("unknown", "確定に失敗しました。通信状況を確認して、もう一度お試しください。同じ内容の再送は、二重には数えません。");
+      fail("uncertain", UNCERTAIN_ERROR.message);
     } finally {
       inFlight.current = false;
       setSaving(false);

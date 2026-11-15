@@ -7,6 +7,7 @@ import { FivePointScale } from "@/components/shared/five-point-scale";
 import { SCENES, SUPPLEMENT_TITLES } from "@/lib/salon-culture/analysis/scenes";
 import { SUPPLEMENT_KEYS, type BaseAnswers, type SupplementAnswers, type SupplementKey, type SupplementValue } from "@/lib/salon-culture/analysis/v1";
 import type { SaveExtraResult } from "@/lib/salon-culture/draft-actions";
+import { UNCERTAIN_ERROR } from "@/lib/diagnosis-limit/messages";
 
 type Props = {
   /** 回答の対象（例: サロン名・店舗名）。保存先と同じものを画面に出す。 */
@@ -59,7 +60,7 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
       router.push(doneHref);
       router.refresh();
     } catch {
-      setError({ code: "unknown", message: "保存に失敗しました。通信状況を確認して、もう一度お試しください。同じ内容の再送は、二重には数えません。結果と回数は変わっていません。" });
+      setError({ code: "uncertain", message: UNCERTAIN_ERROR.message });
     } finally {
       inFlight.current = false;
       setSaving(false);

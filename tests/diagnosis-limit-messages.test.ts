@@ -60,14 +60,37 @@ test("制限エラーの表示: DBのエラーを利用者向けの文言に直�
     ["draft incomplete", "draft_incomplete"],
     ["not allowed to edit this store", "not_allowed"],
     ["not authenticated", "not_authenticated"],
-    ["something else entirely", "unknown"],
+    ["something else entirely", "uncertain"], // コードの無い未知のエラー＝結果不明
   ];
   for (const [m, code] of table) {
     const e = mapLimitError({ message: `ERROR: ${m}` });
     assert.equal(e.code, code, m);
     assert.ok(e.message.length > 0 && !e.message.includes("diagnosis_") && !e.message.includes("request id"), "内部の語を画面に出さない: " + m);
   }
-  assert.equal(mapLimitError(null).code, "unknown");
+  assert.equal(mapLimitError(null).code, "uncertain");
+});
+
+test("「回数に数えていません」は、DBが処理を取り消したと確定できるエラーだけ。通信切れ・原因不明は結果不明として分ける", () => {
+  // 確定: 既知のDBエラー、SQLSTATE・PostgRESTのエラー
+  for (const e of [
+    { message: "diagnosis_change_locked", details: "2027-02-13T09:10:00Z" },
+    { code: "40P01", message: "deadlock detected" },
+    { code: "23505", message: "duplicate key" },
+    { code: "XX000", message: "internal" },
+    { code: "PGRST301", message: "JWT expired" },
+  ]) {
+    const m = mapLimitError(e);
+    assert.equal(m.definite, true, JSON.stringify(e));
+    if (m.code !== "already_saved" && m.code !== "not_allowed" && m.code !== "not_authenticated") assert.ok(m.message.includes("数えていません"), JSON.stringify(e));
+  }
+  // 不明: 通信切れ・タイムアウト・例外・コードの無いエラー・null
+  for (const e of [null, undefined, {}, { message: "fetch failed" }, { message: "The operation was aborted due to timeout" }, { code: "ECONNRESET", message: "socket hang up" }, { code: "504", message: "Gateway Timeout" }]) {
+    const m = mapLimitError(e as never);
+    assert.equal(m.definite, false, JSON.stringify(e));
+    assert.equal(m.code, "uncertain");
+    assert.ok(!m.message.includes("数えていません"), "結果不明のときは回数について断定しない");
+    assert.ok(m.message.includes("保存できたかどうかを確認できませんでした") && m.message.includes("二重には数えません") && m.message.includes("そのまま残っています"));
+  }
 });
 
 test("関数が無い（0058未適用）エラーの判定は、この関数の欠落だけ", () => {
