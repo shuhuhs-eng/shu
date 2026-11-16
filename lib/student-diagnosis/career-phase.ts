@@ -14,11 +14,11 @@ export const CAREER_PHASE_REQUIRED_HEADING = "いまの立場（必須）";
 export const CAREER_PHASE_REQUIRED_MESSAGE = "いまの立場を選んでください。";
 /** 卒業（予定）の月は3月・10月だけ（DBも同じ）。年は西暦の選択（範囲は graduationYearOptions）。 */
 export const GRADUATION_MONTHS = [3, 10] as const;
-/** ブランク期間の単位と上限（DB: 1以上の整数。ヶ月は120まで、年は10まで＝最長10年）。 */
+/** ブランク期間の単位と上限（DB: 1以上の整数。ヶ月は720まで、年は60まで＝経験年数の上限60と同じ。桁の入力ミスだけを弾く安全弁）。 */
 export const BLANK_PERIOD_UNITS = ["months", "years"] as const;
 export type BlankPeriodUnit = (typeof BLANK_PERIOD_UNITS)[number];
 export const BLANK_PERIOD_UNIT_LABEL: Record<BlankPeriodUnit, string> = { months: "ヶ月", years: "年" };
-export const BLANK_PERIOD_MAX: Record<BlankPeriodUnit, number> = { months: 120, years: 10 };
+export const BLANK_PERIOD_MAX: Record<BlankPeriodUnit, number> = { months: 720, years: 60 };
 export type BlankPeriod = { value: number; unit: BlankPeriodUnit };
 export const formatBlankPeriod = (p: BlankPeriod) => `${p.value}${BLANK_PERIOD_UNIT_LABEL[p.unit]}`;
 
@@ -67,7 +67,7 @@ export function isAllowedGraduationYm(ym: string | null | undefined, now: Date =
  * FormData相当の入力を、DB関数（save_stylist_profile_v4）と同じ規則で検査して正規化する。空文字は未入力（null）。
  * ・立場は必須: 未選択・旧値（student）・不明な値は保存しない。
  * ・新卒: 卒業の年と月（3月/10月）が必須。ブランク期間は受け付けない。
- * ・ブランクあり: ブランク期間は任意。数値は正の整数（空欄=未入力は可。0・負数・小数・不正値は不可。ヶ月は120まで・年は10まで）。数値を入れたら単位が必須。
+ * ・ブランクあり: ブランク期間は任意。数値は正の整数（空欄=未入力は可。0・負数・小数・不正値は不可。ヶ月は720まで・年は60まで）。数値を入れたら単位が必須。
  *     数値が空のときは単位は無視する（未入力。0ヶ月とは扱わない）。
  * ・現役: 卒業年月・ブランク期間は受け付けない。
  * 卒業の区分・就業開始・免許は受け付けない（項目自体を廃止。補完もしない）。

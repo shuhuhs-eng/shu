@@ -54,10 +54,10 @@ test("立場: ブランク期間は任意。数値（正の整数）＋単位（
   assert.deepEqual(r("6", "months"), { ok: true, value: { ...EMPTY_CAREER_PHASE, phase: "blank", blankPeriod: { value: 6, unit: "months" } } });
   assert.deepEqual(r("2", "years"), { ok: true, value: { ...EMPTY_CAREER_PHASE, phase: "blank", blankPeriod: { value: 2, unit: "years" } } });
   assert.deepEqual(r("120", "months").ok && (r("120", "months") as { value: { blankPeriod: unknown } }).value.blankPeriod, { value: 120, unit: "months" });
-  assert.equal(r("10", "years").ok, true);
+  for (const [v, u] of [["121", "months"], ["11", "years"], ["15", "years"], ["720", "months"], ["60", "years"]]) assert.equal(r(v, u).ok, true, `${v}${u}: 10年を超えるブランクも入力できる`);
   for (const e of [undefined, "", "  ", null]) assert.deepEqual(r(e, "months"), { ok: true, value: { ...EMPTY_CAREER_PHASE, phase: "blank" } }, "空欄は未入力（blankPeriod=null。0ヶ月ではない）");
   for (const bad of ["0", "-1", "1.5", "1,5", "abc", "6ヶ月", "６", "01", "+3", "1e2", " "]) if (bad.trim()) assert.equal(r(bad, "months").ok, false, `値 ${bad}`);
-  assert.equal(r("121", "months").ok, false); assert.equal(r("11", "years").ok, false);
+  assert.equal(r("721", "months").ok, false); assert.equal(r("61", "years").ok, false); assert.equal(r("9999", "months").ok, false);
   assert.equal(r("6", "weeks").ok, false); assert.equal(r("6", "").ok, false); assert.equal(r("6", undefined).ok, false);
 });
 
@@ -75,6 +75,15 @@ test("卒業年・ブランク期間の表示: 「2027年3月」「6ヶ月」「
   const unset = sum(EMPTY_CAREER_PHASE);
   assert.ok(unset.includes("未選択") && !unset.includes("経験者") && !unset.includes("美容学生") && !unset.includes("未設定"));
   assert.ok(sum({ ...EMPTY_CAREER_PHASE, phase: "experienced" }).includes("現役の美容師"));
+  // マイページのカードは立場名だけ（卒業年月・ブランク期間は出さない。詳細はプロフィール編集と本人プレビュー）
+  const ng = sum({ ...EMPTY_CAREER_PHASE, phase: "new_graduate", graduationYm: "2027-03" });
+  assert.ok(ng.includes("新卒") && !/卒業|2027|3月/.test(ng));
+  const bl = sum({ ...EMPTY_CAREER_PHASE, phase: "blank", blankPeriod: { value: 6, unit: "months" } });
+  assert.ok(bl.includes("ブランクあり") && !/ブランク期間|6ヶ月/.test(bl));
+  const bl2 = sum({ ...EMPTY_CAREER_PHASE, phase: "blank", blankPeriod: { value: 2, unit: "years" } });
+  assert.ok(bl2.includes("ブランクあり") && !/ブランク期間|2年/.test(bl2));
+  const html = renderToStaticMarkup(createElement(CareerPhaseSummary, { load: { status: "ok", value: { ...EMPTY_CAREER_PHASE, phase: "blank", blankPeriod: { value: 6, unit: "months" } } } }));
+  assert.ok(!html.includes("<a ") && !html.includes("<button"), "表示のみ（リンク・ボタンなし）");
 });
 
 test("区分の読み取り: 列なし(42703)はunsupported、その他の失敗はerror（未設定と取り違えない）", async () => {

@@ -76,7 +76,7 @@ export function CareerPhaseField({ defaultValue, errors }: { defaultValue: Caree
               {BLANK_PERIOD_UNITS.map((u) => <option key={u} value={u}>{BLANK_PERIOD_UNIT_LABEL[u]}</option>)}
             </select>
           </div>
-          <p className="text-[12px] leading-relaxed text-sub">1以上の整数で入力してください（ヶ月は120まで、年は10まで）。空欄のままでも保存できます。</p>
+          <p className="text-[12px] leading-relaxed text-sub">1以上の整数で入力してください（ヶ月は720まで、年は60まで）。空欄のままでも保存できます。</p>
           {pick("blankPeriod") && <p role="alert" className="text-[12.5px] text-[#8A2E2E]">{pick("blankPeriod")}</p>}
         </div>
       )}

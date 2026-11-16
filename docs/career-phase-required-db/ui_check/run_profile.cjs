@@ -27,12 +27,14 @@ const SP = process.argv[2]; let fail = 0; const ok = (n, c, i = "") => { console
     await ctx.close();
     // 不正なブランク期間はサーバー検証でエラー（入力は残る）
     ({ ctx, page } = await open()); await page.locator("input[name=careerPhase][value=blank]").check();
-    for (const bad of ["0", "-1", "1.5", "abc", "121"]) {
+    for (const bad of ["0", "-1", "1.5", "abc", "721"]) {
       await page.fill("#cp-blank-value", bad); await save(page, false); await page.waitForTimeout(300);
       ok(t(`ブランク期間 ${bad}: 保存されず、エラーが出て入力が残る`), (await page.evaluate(() => window.__saved)) === undefined && (await page.locator("[data-testid=career-phase-blank] [role=alert]").count()) === 1 && (await page.locator("#cp-blank-value").inputValue()) === bad);
     }
-    await page.fill("#cp-blank-value", "11"); await page.selectOption("select[name=blankPeriodUnit]", "years"); await save(page, false); await page.waitForTimeout(300);
-    ok(t("11年は上限（10年）超えで保存されない"), (await page.evaluate(() => window.__saved)) === undefined);
+    await page.fill("#cp-blank-value", "61"); await page.selectOption("select[name=blankPeriodUnit]", "years"); await save(page, false); await page.waitForTimeout(300);
+    ok(t("61年は上限（60年）超えで保存されない"), (await page.evaluate(() => window.__saved)) === undefined);
+    await page.fill("#cp-blank-value", "12"); await save(page);
+    ok(t("12年（10年超）は保存できる"), (await page.evaluate(() => window.__saved)).blankPeriodValue[0] === "12" && (await page.evaluate(() => window.__saved)).blankPeriodUnit[0] === "years");
     await ctx.close();
     for (const [val, f, text] of [
       ["experienced", async () => {}, "現役の美容師"],

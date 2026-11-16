@@ -120,8 +120,9 @@ test("検証: 新卒は卒業の年と月（3月/10月）が必須。ほかの�
   await bad({ careerPhase: "blank", graduationYear: String(GRAD.y), graduationMonth: "3" }, "careerPhase");
   await bad({ careerPhase: "experienced", graduationYear: String(GRAD.y), graduationMonth: "3" }, "careerPhase");
   await bad({ careerPhase: "experienced", blankPeriodValue: "6", blankPeriodUnit: "months" }, "careerPhase");
-  for (const v of ["0", "-1", "1.5", "abc", "6ヶ月", "１２", "121", "01"]) await bad({ careerPhase: "blank", blankPeriodValue: v, blankPeriodUnit: "months" }, "blankPeriod");
-  await bad({ careerPhase: "blank", blankPeriodValue: "11", blankPeriodUnit: "years" }, "blankPeriod");
+  for (const v of ["0", "-1", "1.5", "abc", "6ヶ月", "１２", "721", "01"]) await bad({ careerPhase: "blank", blankPeriodValue: v, blankPeriodUnit: "months" }, "blankPeriod");
+  await bad({ careerPhase: "blank", blankPeriodValue: "61", blankPeriodUnit: "years" }, "blankPeriod");
+  for (const [v, u] of [["11", "years"], ["121", "months"], ["25", "years"]]) { const r = await run(form({ careerPhase: "blank", blankPeriodValue: v, blankPeriodUnit: u })); assert.equal(r.success, "プロフィールを保存しました。", `${v}${u} は10年超でも保存できる`); assert.deepEqual([env.calls[0].args.p_blank_period_value, env.calls[0].args.p_blank_period_unit], [Number(v), u]); }
   await bad({ careerPhase: "blank", blankPeriodValue: "6", blankPeriodUnit: "weeks" }, "blankPeriod");
   await bad({ careerPhase: "blank", blankPeriodValue: "6", blankPeriodUnit: "" }, "blankPeriod");
 });
