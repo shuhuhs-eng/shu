@@ -53,7 +53,9 @@ const SP = process.argv[2]; let fail = 0; const ok = (n, c, i = "") => { console
       const chk = await page.locator("input[name=careerPhase]:checked").getAttribute("value");
       const restored = val === "new_graduate" ? (await page.locator("#cp-year").inputValue()) === s.graduationYear[0] && (await page.locator("#cp-month").inputValue()) === s.graduationMonth[0]
         : val === "blank" ? (await page.locator("#cp-blank-value").inputValue()) === (s.blankPeriodValue?.[0] ?? "") : true;
-      ok(t(`${val}（${text}）: 再読み込み後も同じ内容が復元され、カードの表示とも一致`), chk === val && restored && (await page.locator("#card").innerText()).includes(text.replace("ブランク期間: ", "").replace("卒業（予定）: ", "")), [chk, restored]);
+      { const card = await page.locator("#card").innerText(); const detail = text.replace("ブランク期間: ", "").replace("卒業（予定）: ", "");
+      const label = { new_graduate: "新卒", experienced: "現役の美容師", blank: "ブランクあり" }[val];
+      ok(t(`${val}（${text}）: 再読み込み後も同じ内容が復元され、マイページのカードは立場名のみ（詳細は出ない）`), chk === val && restored && card.includes(label) && (text === label || text.startsWith(label) || !card.includes(detail)), [chk, restored, card]); }
       await ctx.close();
     }
     ({ ctx, page } = await open()); await page.evaluate(() => (window.__mode = "fail"));
