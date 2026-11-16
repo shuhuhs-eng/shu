@@ -8,6 +8,13 @@ import { LegalLinks } from "@/components/legal/legal-links";
 import { HeroCharacter } from "@/components/home/hero-character";
 import { HomeNotificationLink } from "@/components/notifications/home-notification-link";
 import { getUnreadNotificationCount } from "@/lib/notifications/get-notifications";
+import { publicPageMetadata } from "@/lib/seo/metadata";
+
+export const metadata = publicPageMetadata({
+  title: "Beauty Reach — 才能を、多彩に評価する。",
+  description: "美容師の才能を診断し、相性の合うサロンと出会う。Beauty Reachは、美容師とサロンの相性を診断でつなぐサービスです。",
+  path: "/",
+});
 
 /**
  * 「/」は常にBeauty Reachの一般TOPページを表示する（ログイン状態に関係なく）。

@@ -1,5 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { AdminNav } from "@/components/admin/admin-nav";
+import { NOINDEX_METADATA } from "@/lib/seo/metadata";
+
+// 検索対象外（noindex）。巡回は robots.txt で禁止せず、noindex を読み取らせる。
+export const metadata = NOINDEX_METADATA;
 
 /**
  * 運営画面の共通レイアウト。ナビは運営者(is_platform_admin)にだけ表示する。

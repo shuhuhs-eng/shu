@@ -1,3 +1,5 @@
+import { NOINDEX_PATH_PREFIXES } from "./lib/seo/noindex-paths.mjs";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -18,6 +20,12 @@ const nextConfig = {
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
         ],
       },
+      // 検索対象外ページ（マイページ・管理画面・個人の診断結果・登録/認証など）は noindex。
+      // robots.txt では禁止せず、巡回を許したうえで noindex を読み取らせる（lib/seo/noindex-paths.mjs）。
+      ...NOINDEX_PATH_PREFIXES.map((p) => ({
+        source: `${p}/:path*`,
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      })),
     ];
   },
   outputFileTracingIncludes: {

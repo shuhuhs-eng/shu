@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { getSeoBaseUrl, OG_IMAGE, SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE } from "@/lib/seo/site";
 
 // ★next/font/google（Shippori_Mincho / Zen_Kaku_Gothic_New / Archivo）は
 // 削除した。next/font/googleはビルド時に実際にGoogle Fonts（fonts.googleapis.com /
@@ -14,11 +15,28 @@ import "./globals.css";
 // ならないが、明朝体×ゴシック体×データ用フォントという役割分担そのものは
 // 維持しているため、大きく崩れない。
 
+// 全ページ共通の既定値。canonical はここに置かない（置くと全ページがトップURLを指してしまう）。各公開ページが自分のパスで指定する。
+// openGraph は後勝ちで丸ごと置き換わるため、公開ページは lib/seo/metadata.ts の publicPageMetadata で完全な形を作る。
 export const metadata: Metadata = {
-  title: "Beauty Reach — 才能を、多彩に評価する。",
-  description: "美容師の才能を診断し、相性の合うサロンと出会う。",
+  metadataBase: new URL(getSeoBaseUrl()),
+  title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+  description: SITE_DESCRIPTION,
   icons: {
     icon: "/favicon.svg",
+  },
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    locale: "ja_JP",
+    title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
+    images: [OG_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${SITE_NAME} — ${SITE_TAGLINE}`,
+    description: SITE_DESCRIPTION,
+    images: [OG_IMAGE.url],
   },
 };
 

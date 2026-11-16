@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal/legal-page";
 import { getLegalView } from "@/lib/legal/view";
+import { publicPageMetadata } from "@/lib/seo/metadata";
 
-export const metadata: Metadata = { title: "プライバシーポリシー | Beauty Reach" };
+export const metadata: Metadata = publicPageMetadata({ title: "プライバシーポリシー | Beauty Reach", description: "Beauty Reachのプライバシーポリシー（個人情報の取り扱いについて）。", path: "/privacy" });
 export const dynamic = "force-dynamic";
 
 /** プライバシーポリシー（公開ページ。ログイン不要）。公開済みの版はDBに保存した本文を表示する。 */

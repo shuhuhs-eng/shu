@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal/legal-page";
 import { getLegalView } from "@/lib/legal/view";
+import { publicPageMetadata } from "@/lib/seo/metadata";
 
-export const metadata: Metadata = { title: "利用規約 | Beauty Reach" };
+export const metadata: Metadata = publicPageMetadata({ title: "利用規約 | Beauty Reach", description: "Beauty Reachの利用規約。", path: "/terms" });
 export const dynamic = "force-dynamic";
 
 /** 利用規約（公開ページ。ログイン不要）。公開済みの版はDBに保存した本文を表示する。 */

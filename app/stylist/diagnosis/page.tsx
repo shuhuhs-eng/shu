@@ -6,6 +6,13 @@ import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { getDiagnosisChangeStatus } from "@/lib/diagnosis-limit/status";
 import { formatJstDateTime } from "@/lib/diagnosis-limit/messages";
 import Link from "next/link";
+import { publicPageMetadata } from "@/lib/seo/metadata";
+
+export const metadata = publicPageMetadata({
+  title: "美容師のタイプ診断 | Beauty Reach",
+  description: "質問に答えて、あなたの美容師としてのタイプを診断。相性の合うサロンと出会うための最初のステップです。",
+  path: "/stylist/diagnosis",
+});
 
 // ログイン状態をサーバー側で確認し、DiagnosisQuizへ渡す。ログイン済みの
 // 場合は診断完了時に /api/diagnosis/guest ではなくログイン済み専用の

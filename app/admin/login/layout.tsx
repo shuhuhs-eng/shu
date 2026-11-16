@@ -1,4 +1,8 @@
 import { LegalLinks } from "@/components/legal/legal-links";
+import { NOINDEX_METADATA } from "@/lib/seo/metadata";
+
+// 検索対象外（noindex）。巡回は robots.txt で禁止せず、noindex を読み取らせる。
+export const metadata = NOINDEX_METADATA;
 
 // 管理者専用ログイン入口。見た目は他のログイン入口（(auth)/サロン/美容師）と同じ。
 export default function AdminLoginLayout({ children }: { children: React.ReactNode }) {
