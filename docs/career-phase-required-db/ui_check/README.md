@@ -8,7 +8,7 @@ cp $D/build.mjs ./.wizbuild.mjs && node .wizbuild.mjs $D; rm .wizbuild.mjs
 node $D/run.cjs $D
 ```
 ※ entry.tsx は `/home/claude/shu` の絶対パスを使っています。別の場所で実行する場合は置き換えてください。
-確認項目: 未選択では次へ進めない／新卒で卒業年月なしは進めない／3択それぞれで保存できる／失敗時に入力が残る／再送で送信値が入力と一致。PC幅・スマホ幅。
+確認項目（0076/0077の仕様）: 未選択では次へ進めない／新卒は年（西暦選択）と月（3月・10月）が必須で、日・自由入力・区分・就業開始・免許の欄がない／ブランクありはブランク期間（数値＋ヶ月/年・任意・0や不正値は不可）／3択それぞれで保存できる（旧項目は送られない）／失敗時に入力が残る／再送で送信値が入力と一致。PC幅・スマホ幅。保存先はモック（実Supabaseではない）。
 
 ## プロフィール編集の確認（run_profile.cjs）
 `node build.mjs $D entry_profile profile` で `profile.js` を作り、`index.html` と同じ内容の `profile.html`（script を profile.js に）を置いて `node run_profile.cjs $D`。

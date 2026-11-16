@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  describeCareerPhase, parseCareerPhaseInput, readOwnCareerPhase, EMPTY_CAREER_PHASE, currentYmJst,
+  describeCareerPhase, formatBlankPeriod, parseCareerPhaseInput, readOwnCareerPhase, EMPTY_CAREER_PHASE, currentYmJst,
   CAREER_PHASES, CAREER_PHASE_LABEL, CAREER_PHASE_REQUIRED_HEADING,
 } from "@/lib/student-diagnosis/career-phase";
 import { commitStudentDiagnosis, isMissingStudentFunction } from "@/lib/student-diagnosis/commit";
@@ -27,35 +27,50 @@ test("立場: 必須。未選択・旧値(student)・不明な値は受け付け
   assert.equal(CAREER_PHASE_REQUIRED_HEADING, "いまの立場（必須）");
 });
 
-test("立場: 現役・ブランクありは卒業・就業開始・免許を受け付けない", () => {
-  for (const ph of ["experienced", "blank"] as const) {
-    assert.deepEqual(parseCareerPhaseInput({ phase: ph }, NOW), { ok: true, value: { ...EMPTY_CAREER_PHASE, phase: ph } });
-    for (const extra of [{ graduationYm: ym(1) }, { graduationKind: "planned" }, { desiredStartYm: ym(2) }, { licenseStatus: "obtained" }]) {
-      assert.equal(parseCareerPhaseInput({ phase: ph, ...extra }, NOW).ok, false, `${ph} ${JSON.stringify(extra)}`);
-    }
-  }
+test("立場: 現役は卒業年月・ブランク期間を受け付けない。ブランクありは卒業年月を受け付けない", () => {
+  assert.deepEqual(parseCareerPhaseInput({ phase: "experienced" }, NOW), { ok: true, value: { ...EMPTY_CAREER_PHASE, phase: "experienced" } });
+  assert.deepEqual(parseCareerPhaseInput({ phase: "blank" }, NOW), { ok: true, value: { ...EMPTY_CAREER_PHASE, phase: "blank" } });
+  for (const extra of [{ graduationYear: "2027" }, { graduationMonth: "3" }, { blankPeriodValue: "6" }]) assert.equal(parseCareerPhaseInput({ phase: "experienced", ...extra }, NOW).ok, false, JSON.stringify(extra));
+  for (const extra of [{ graduationYear: "2027" }, { graduationMonth: "3" }]) assert.equal(parseCareerPhaseInput({ phase: "blank", ...extra }, NOW).ok, false, JSON.stringify(extra));
 });
 
-test("立場: 新卒は卒業年月と卒業区分が必須（予定・済みの両方可）・免許は別項目", () => {
-  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(6), graduationKind: "planned" }, NOW).ok, true);
-  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(6), graduationKind: "planned", licenseStatus: "studying" }, NOW).ok, true);
-  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(-2), graduationKind: "completed", licenseStatus: "obtained" }, NOW).ok, true);
-  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(6) }, NOW).ok, false, "卒業区分なしは不可");
-  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationKind: "planned" }, NOW).ok, false, "卒業年月なしは不可");
-  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(2), graduationKind: "completed" }, NOW).ok, false, "未来の卒業済は不可");
-  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(70), graduationKind: "planned" }, NOW).ok, false, "範囲外");
-  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(6), graduationKind: "planned", desiredStartYm: ym(3) }, NOW).ok, false, "就業開始が卒業より前は不可");
-  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: "2027-13", graduationKind: "planned" }, NOW).ok, false);
-  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYm: ym(6), graduationKind: "planned", licenseStatus: "x" }, NOW).ok, false);
+test("立場: 新卒は卒業（予定）の年と月（3月/10月）が必須。それ以外の項目（区分・就業開始・免許）は不要で、送られても使わない", () => {
+  const ok = parseCareerPhaseInput({ phase: "new_graduate", graduationYear: "2027", graduationMonth: "3" }, NOW);
+  assert.deepEqual(ok, { ok: true, value: { phase: "new_graduate", legacyStudent: false, graduationYm: "2027-03", blankPeriod: null } });
+  assert.deepEqual(parseCareerPhaseInput({ phase: "new_graduate", graduationYear: "2027", graduationMonth: "10" }, NOW), { ok: true, value: { phase: "new_graduate", legacyStudent: false, graduationYm: "2027-10", blankPeriod: null } });
+  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYear: "2027", graduationMonth: "03" }, NOW).ok, true, "03 も3月");
+  for (const m of [1, 2, 4, 5, 6, 7, 8, 9, 11, 12, 0, 13]) assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYear: "2027", graduationMonth: String(m) }, NOW).ok, false, `${m}月`);
+  for (const bad of [{}, { graduationYear: "2027" }, { graduationMonth: "3" }, { graduationYear: "", graduationMonth: "" }, { graduationYear: "abc", graduationMonth: "3" }, { graduationYear: "2027", graduationMonth: "x" }]) assert.equal(parseCareerPhaseInput({ phase: "new_graduate", ...bad }, NOW).ok, false, JSON.stringify(bad));
+  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYear: "2023", graduationMonth: "10" }, NOW).ok, false, "範囲外（3年より前）");
+  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYear: "2032", graduationMonth: "3" }, NOW).ok, false, "範囲外（5年より後）");
+  assert.equal(parseCareerPhaseInput({ phase: "new_graduate", graduationYear: "2027", graduationMonth: "3", blankPeriodValue: "6" }, NOW).ok, false, "ブランク期間は付けられない");
+  // 旧入力名（卒業の区分・就業開始・免許）は結果に現れない
+  const withOld = parseCareerPhaseInput({ phase: "new_graduate", graduationYear: "2027", graduationMonth: "3", graduationKind: "planned", desiredStartYm: "2027-04", licenseStatus: "obtained" } as never, NOW);
+  assert.deepEqual(withOld, ok);
 });
 
-test("立場の表示: 未選択は何も出さない（旧データ含む）。3択は共通関数の文言。旧データは未選択と案内", () => {
-  assert.equal(describeCareerPhase(EMPTY_CAREER_PHASE), null);
+test("立場: ブランク期間は任意。数値（正の整数）＋単位（ヶ月/年）。0・負数・小数・不正値・上限超えは不可。未入力を0ヶ月にしない", () => {
+  const r = (v: unknown, u?: unknown) => parseCareerPhaseInput({ phase: "blank", blankPeriodValue: v, blankPeriodUnit: u }, NOW);
+  assert.deepEqual(r("6", "months"), { ok: true, value: { ...EMPTY_CAREER_PHASE, phase: "blank", blankPeriod: { value: 6, unit: "months" } } });
+  assert.deepEqual(r("2", "years"), { ok: true, value: { ...EMPTY_CAREER_PHASE, phase: "blank", blankPeriod: { value: 2, unit: "years" } } });
+  assert.deepEqual(r("120", "months").ok && (r("120", "months") as { value: { blankPeriod: unknown } }).value.blankPeriod, { value: 120, unit: "months" });
+  assert.equal(r("10", "years").ok, true);
+  for (const e of [undefined, "", "  ", null]) assert.deepEqual(r(e, "months"), { ok: true, value: { ...EMPTY_CAREER_PHASE, phase: "blank" } }, "空欄は未入力（blankPeriod=null。0ヶ月ではない）");
+  for (const bad of ["0", "-1", "1.5", "1,5", "abc", "6ヶ月", "６", "01", "+3", "1e2", " "]) if (bad.trim()) assert.equal(r(bad, "months").ok, false, `値 ${bad}`);
+  assert.equal(r("121", "months").ok, false); assert.equal(r("11", "years").ok, false);
+  assert.equal(r("6", "weeks").ok, false); assert.equal(r("6", "").ok, false); assert.equal(r("6", undefined).ok, false);
+});
+
+test("卒業年・ブランク期間の表示: 「2027年3月」「6ヶ月」「2年」。未入力は何も出さない", () => {
+  assert.deepEqual(formatBlankPeriod({ value: 6, unit: "months" }), "6ヶ月"); assert.equal(formatBlankPeriod({ value: 2, unit: "years" }), "2年");
+  assert.deepEqual(describeCareerPhase({ ...EMPTY_CAREER_PHASE, phase: "blank", blankPeriod: { value: 6, unit: "months" } }), ["ブランクあり", "ブランク期間: 6ヶ月"]);
+  assert.deepEqual(describeCareerPhase({ ...EMPTY_CAREER_PHASE, phase: "blank", blankPeriod: { value: 2, unit: "years" } }), ["ブランクあり", "ブランク期間: 2年"]);
+  assert.deepEqual(describeCareerPhase({ ...EMPTY_CAREER_PHASE, phase: "new_graduate", graduationYm: "2027-03" }), ["新卒", "卒業（予定）: 2027年3月"]);
+  assert.deepEqual(describeCareerPhase({ ...EMPTY_CAREER_PHASE, phase: "new_graduate", graduationYm: "2027-10" }), ["新卒", "卒業（予定）: 2027年10月"]);
   assert.deepEqual(describeCareerPhase({ ...EMPTY_CAREER_PHASE, phase: "experienced" }), ["現役の美容師"]);
-  assert.deepEqual(describeCareerPhase({ ...EMPTY_CAREER_PHASE, phase: "blank" }), ["ブランクあり"]);
-  const l = describeCareerPhase({ ...EMPTY_CAREER_PHASE, phase: "new_graduate", graduationYm: "2027-03", graduationKind: "planned", desiredStartYm: "2027-04", licenseStatus: "studying" })!;
-  assert.deepEqual(l, ["新卒", "2027年03月 卒業予定", "就業開始の希望: 2027年04月", "免許: 取得に向けて在学中"]);
-  assert.equal(describeCareerPhase({ ...EMPTY_CAREER_PHASE, legacyStudent: true, graduationYm: "2027-03", graduationKind: "planned" }), null, "美容学生（旧）は新卒等へ変換せず未選択のまま");
+  assert.deepEqual(describeCareerPhase({ ...EMPTY_CAREER_PHASE, phase: "blank" }), ["ブランクあり"], "未入力は何も出さない");
+  assert.equal(describeCareerPhase(EMPTY_CAREER_PHASE), null);
+  assert.equal(describeCareerPhase({ ...EMPTY_CAREER_PHASE, legacyStudent: true, graduationYm: "2027-03" }), null, "美容学生（旧）は新卒等へ変換せず未選択のまま");
   const sum = (v: typeof EMPTY_CAREER_PHASE) => renderToStaticMarkup(createElement(CareerPhaseSummary, { load: { status: "ok", value: v } })).replace(/<[^>]+>/g, " ");
   const unset = sum(EMPTY_CAREER_PHASE);
   assert.ok(unset.includes("未選択") && !unset.includes("経験者") && !unset.includes("美容学生") && !unset.includes("未設定"));
@@ -67,11 +82,21 @@ test("区分の読み取り: 列なし(42703)はunsupported、その他の失敗
   assert.deepEqual(await readOwnCareerPhase(mk({ data: null, error: { code: "42703", message: "column stylist_profiles.career_phase does not exist" } }), "u"), { status: "unsupported" });
   assert.deepEqual(await readOwnCareerPhase(mk({ data: null, error: { code: "PGRST301", message: "JWT expired" } }), "u"), { status: "error" });
   assert.deepEqual(await readOwnCareerPhase(mk({ data: null, error: null }), "u"), { status: "ok", value: EMPTY_CAREER_PHASE });
-  // 旧データの美容学生は、新卒等へ勝手に変換しない（未選択として返し、旧データだったことだけ保持する）
-  const ok = await readOwnCareerPhase(mk({ data: { career_phase: "student", graduation_ym: "2027-03-01", graduation_kind: "planned", desired_start_ym: null, license_status: "studying" }, error: null }), "u");
-  assert.deepEqual(ok, { status: "ok", value: { phase: null, legacyStudent: true, graduationYm: "2027-03", graduationKind: "planned", desiredStartYm: null, licenseStatus: "studying" } });
-  const blank = await readOwnCareerPhase(mk({ data: { career_phase: "blank", graduation_ym: null, graduation_kind: null, desired_start_ym: null, license_status: null }, error: null }), "u");
-  assert.deepEqual(blank, { status: "ok", value: { ...EMPTY_CAREER_PHASE, phase: "blank" } });
+  // 旧データの美容学生は、新卒等へ勝手に変換しない（未選択として返し、旧データだったことだけ保持する）。旧3項目は読まない
+  const ok = await readOwnCareerPhase(mk({ data: { career_phase: "student", graduation_ym: "2027-03-01", blank_period_value: null, blank_period_unit: null, graduation_kind: "planned", license_status: "studying" }, error: null }), "u");
+  assert.deepEqual(ok, { status: "ok", value: { phase: null, legacyStudent: true, graduationYm: "2027-03", blankPeriod: null } });
+  const blank = await readOwnCareerPhase(mk({ data: { career_phase: "blank", graduation_ym: null, blank_period_value: 6, blank_period_unit: "months" }, error: null }), "u");
+  assert.deepEqual(blank, { status: "ok", value: { ...EMPTY_CAREER_PHASE, phase: "blank", blankPeriod: { value: 6, unit: "months" } } });
+  // 片方だけ・範囲外のブランク期間は未入力として扱う（補わない）
+  for (const row of [{ blank_period_value: 6, blank_period_unit: null }, { blank_period_value: null, blank_period_unit: "years" }, { blank_period_value: 0, blank_period_unit: "months" }]) {
+    const r = await readOwnCareerPhase(mk({ data: { career_phase: "blank", graduation_ym: null, ...row }, error: null }), "u");
+    assert.deepEqual(r, { status: "ok", value: { ...EMPTY_CAREER_PHASE, phase: "blank" } }, JSON.stringify(row));
+  }
+  // 卒業月が3月/10月以外の既存データは、丸めずそのまま返す（画面で選び直しを案内）
+  const may = await readOwnCareerPhase(mk({ data: { career_phase: "new_graduate", graduation_ym: "2027-05-01", blank_period_value: null, blank_period_unit: null }, error: null }), "u");
+  assert.deepEqual(may, { status: "ok", value: { phase: "new_graduate", legacyStudent: false, graduationYm: "2027-05", blankPeriod: null } });
+  // ブランク期間の列が無い（0076未適用）は「未対応」ではなくエラー（旧い保存経路へ切り替えない）
+  assert.deepEqual(await readOwnCareerPhase(mk({ data: null, error: { code: "42703", message: "column stylist_profiles.blank_period_value does not exist" } }), "u"), { status: "error" });
 });
 
 // ---- 学生診断の確定保存 ----

@@ -10,11 +10,11 @@ import { CareerPhaseSummary, StudentPastResultLink } from "../components/student
 
 const ok = (v: Partial<typeof EMPTY_CAREER_PHASE>): CareerPhaseRead => ({ status: "ok", value: { ...EMPTY_CAREER_PHASE, ...v } });
 const CASES: [string, CareerPhaseRead | null, boolean][] = [
-  ["新卒", ok({ phase: "new_graduate", graduationYm: "2027-03", graduationKind: "planned" }), true],
+  ["新卒", ok({ phase: "new_graduate", graduationYm: "2027-03" }), true],
   ["現役の美容師", ok({ phase: "experienced" }), false],
   ["ブランクあり", ok({ phase: "blank" }), false],
   ["未選択（未設定）", ok({}), false],
-  ["未選択（旧・美容学生）", ok({ legacyStudent: true, graduationYm: "2027-03", graduationKind: "planned" }), false],
+  ["未選択（旧・美容学生）", ok({ legacyStudent: true, graduationYm: "2027-03" }), false],
   ["読み込み失敗", { status: "error" }, false],
   ["0071未適用", { status: "unsupported" }, false],
   ["未取得", null, false],
@@ -46,7 +46,7 @@ test("マイページの立場カード: 表示だけ。リンク・ボタン・
     assert.ok(!t.includes("変更する") && !t.includes("診断を受ける") && !t.includes("選ぶ") && !t.includes("設定する"), `${name}: 操作の文言なし`);
   }
   const shown = (v: Partial<typeof EMPTY_CAREER_PHASE>) => text(createElement(CareerPhaseSummary, { load: { status: "ok", value: { ...EMPTY_CAREER_PHASE, ...v } } }));
-  assert.ok(shown({ phase: "new_graduate", graduationYm: "2027-03", graduationKind: "planned" }).includes("新卒"));
+  assert.ok(shown({ phase: "new_graduate", graduationYm: "2027-03" }).includes("新卒"));
   assert.ok(shown({ phase: "experienced" }).includes("現役の美容師"));
   assert.ok(shown({ phase: "blank" }).includes("ブランクあり"));
   assert.ok(shown({}).includes("未選択") && shown({ legacyStudent: true }).includes("未選択"));

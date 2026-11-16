@@ -116,8 +116,11 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
         const cp = get("careerPhase");
         if (!cp) return CAREER_PHASE_REQUIRED_MESSAGE;
         if (cp === "new_graduate") {
-          if (!get("graduationYm")) return "卒業（予定）の年月を選んでください。";
-          if (!get("graduationKind")) return "卒業予定か卒業済みかを選んでください。";
+          if (!get("graduationYear") || !get("graduationMonth")) return "卒業（予定）の年と月を選んでください。";
+        }
+        if (cp === "blank") {
+          const bv = get("blankPeriodValue");
+          if (bv && !/^[1-9]\d*$/.test(bv)) return "ブランク期間は、1以上の整数で入力してください。";
         }
       }
       if (fd.getAll("specialties").length === 0) return "得意技術を1つ以上選択してください";

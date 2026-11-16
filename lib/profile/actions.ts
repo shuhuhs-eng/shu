@@ -121,29 +121,31 @@ export async function saveProfileAction(
   }
 
   // 「いまの立場」は必須（3択）。DBが対応している（0071適用済み）ときは、未選択・不正な値は何も保存せずエラーにする。
-  //   ・保存は save_stylist_profile_v3 の1回（プロフィールと立場を同じトランザクションで保存。別々には保存できない）。
-  //   ・v3 が無い・読み取りに失敗したときは、旧い保存経路へ切り替えない（必須の回避になるため）。エラーにする。
+  //   ・保存は save_stylist_profile_v4 の1回（プロフィールと立場を同じトランザクションで保存。別々には保存できない）。
+  //     新卒は卒業（予定）の年・月(3月/10月)、ブランクありは任意のブランク期間だけを送る（卒業の区分・就業開始・免許は送らない・補わない）。
+  //   ・v4 が無い（0076未適用）・読み取りに失敗したときは、旧い保存経路へ切り替えない（必須の回避になるため）。エラーにする。
   //   ・0071未適用のDBだけは、従来どおり立場なしで保存する。
   const careerSupport = await readOwnCareerPhase(supabase, user.id);
   if (careerSupport.status === "error") {
     return { error: "保存に失敗しました。しばらくしてから再度お試しください。" };
   }
-  let careerArgs: { p_career_phase: string; p_graduation_ym: string | null; p_graduation_kind: string | null; p_desired_start_ym: string | null; p_license_status: string | null } | null = null;
+  let careerArgs: { p_career_phase: string; p_graduation_ym: string | null; p_blank_period_value: number | null; p_blank_period_unit: string | null } | null = null;
   if (careerSupport.status === "ok") {
     const cp = parseCareerPhaseInput({
-      phase: formData.get("careerPhase"), graduationYm: formData.get("graduationYm"), graduationKind: formData.get("graduationKind"),
-      desiredStartYm: formData.get("desiredStartYm"), licenseStatus: formData.get("licenseStatus"),
+      phase: formData.get("careerPhase"), graduationYear: formData.get("graduationYear"), graduationMonth: formData.get("graduationMonth"),
+      blankPeriodValue: formData.get("blankPeriodValue"), blankPeriodUnit: formData.get("blankPeriodUnit"),
     });
     if (!cp.ok) {
       const fe: Record<string, string[]> = {};
       if (cp.errors.phase) fe.careerPhase = [cp.errors.phase];
-      for (const k of ["graduationYm", "graduationKind", "desiredStartYm", "licenseStatus"] as const) if (cp.errors[k]) fe[k] = [cp.errors[k]!];
+      if (cp.errors.graduationYm) fe.graduationYm = [cp.errors.graduationYm];
+      if (cp.errors.blankPeriod) fe.blankPeriod = [cp.errors.blankPeriod];
       return { error: "入力内容をご確認ください。", fieldErrors: fe };
     }
     const c = cp.value;
     careerArgs = {
-      p_career_phase: c.phase, p_graduation_ym: ymToDate(c.graduationYm), p_graduation_kind: c.graduationKind,
-      p_desired_start_ym: ymToDate(c.desiredStartYm), p_license_status: c.licenseStatus,
+      p_career_phase: c.phase, p_graduation_ym: ymToDate(c.graduationYm),
+      p_blank_period_value: c.blankPeriod?.value ?? null, p_blank_period_unit: c.blankPeriod?.unit ?? null,
     };
   }
 
@@ -177,7 +179,7 @@ export async function saveProfileAction(
       return { error: "入力内容をご確認ください。", fieldErrors };
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ({ error } = await (supabase as any).rpc("save_stylist_profile_v3", {
+    ({ error } = await (supabase as any).rpc("save_stylist_profile_v4", {
       ...common, p_birth_date: v.birthDate, p_age_display_mode: v.ageDisplayMode, ...careerArgs,
     }));
   } else if (support.status === "unsupported") {
