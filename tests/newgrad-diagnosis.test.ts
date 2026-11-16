@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { Q, QS } from "../lib/diagnosis/questions";
 import { Q_NEWGRAD } from "../lib/diagnosis/newgrad-questions";
 import { NEWGRAD_TYPE_CONTENT, NEWGRAD_COMMON_NOTE } from "../lib/diagnosis/newgrad-content";
-import { NEWGRAD_VERSION, NEWGRAD_ENTRY_INDEX, ENTRY_QUESTION, isNewgradEntryEnabled, entryQuestionFor, bankForVersion, questionIdsOf, quizBankFor, setFromFirstAnswer, versionOfSet } from "../lib/diagnosis/newgrad";
+import { NEWGRAD_VERSION, NEWGRAD_ENTRY_INDEX, ENTRY_QUESTION, isNewgradEntryEnabled, entryQuestionFor, bankForVersion, questionIdsOf, quizBankFor, setFromFirstAnswer, versionOfSet, submissionErrorNotice, NEWGRAD_CLOSED_MESSAGE } from "../lib/diagnosis/newgrad";
 import { resolveDiagnosis, verifySubmission } from "../lib/diagnosis/versioned";
 import { computeDiagnosis } from "../lib/diagnosis/index";
 import { scoreTraits } from "../lib/diagnosis/scoring";
@@ -200,4 +200,18 @@ test("旧15問: サーバー側で新しい保存を停止している（認証�
   const src = readFileSync("lib/student-diagnosis/actions.ts", "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
   assert.ok(!/supabase|commitStudentDiagnosis|createClient|createServiceClient/.test(src), "保存・認証の処理を呼ばない");
   assert.ok(readFileSync("app/stylist/diagnosis/student/result/page.tsx", "utf8").length > 100, "保存済み結果の表示ページは残す");
+});
+
+test("入口を閉じた後に開いたままの画面から新卒が送られたとき: 専用の案内を出し、再送は促さない。画面がその案内を使っている", () => {
+  const n = submissionErrorNotice("newgrad_disabled");
+  assert.ok(n && n.retryable === false && n.message === NEWGRAD_CLOSED_MESSAGE);
+  assert.match(NEWGRAD_CLOSED_MESSAGE, /受け付けていません/);
+  assert.match(NEWGRAD_CLOSED_MESSAGE, /1問目/);
+  for (const other of ["invalid_answers", "set_mismatch", "save_failed", undefined, null, 5]) assert.equal(submissionErrorNotice(other), null);
+  // サーバーが実際にその拒否を返す（ログイン済み・ゲストの両経路）
+  const v = verifySubmission("stylist", [4, ...Array(29).fill(0)], undefined, { newgradEnabled: false });
+  assert.deepEqual(v.ok ? null : v.error, "newgrad_disabled");
+  const src = readFileSync(new URL("../components/diagnosis/diagnosis-quiz.tsx", import.meta.url), "utf8");
+  assert.equal((src.match(/submissionErrorNotice\(/g) ?? []).length, 2, "ログイン済み・ゲストの両方の送信で使う");
+  assert.match(src, /errorCode !== "closed"/, "この案内では再送ボタンを出さない");
 });

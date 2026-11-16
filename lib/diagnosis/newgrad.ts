@@ -67,3 +67,13 @@ export function isNewgradEntryEnabled(env: Record<string, string | undefined> = 
 export function entryQuestionFor(enabled: boolean): Question {
   return enabled ? ENTRY_QUESTION : { ...ENTRY_QUESTION, opts: ENTRY_QUESTION.opts.slice(0, NEWGRAD_ENTRY_INDEX) };
 }
+
+/** 新卒入口が閉じられた（NEWGRAD_ENTRY_ENABLED が無効）後に、開いたままの画面から新卒の回答が送られたときの案内。再送しても同じ結果になるため、再送は促さない。 */
+export const NEWGRAD_CLOSED_MESSAGE =
+  "現在、新卒向けの診断は受け付けていません。1問目で「美容師として経験がある」を選び直すと、続きから診断を受けられます。";
+
+/** 送信エラーのうち、画面側で専用の案内にするもの。該当しなければ null（従来どおりの表示）。 */
+export function submissionErrorNotice(error: unknown): { message: string; retryable: boolean } | null {
+  if (error === "newgrad_disabled") return { message: NEWGRAD_CLOSED_MESSAGE, retryable: false };
+  return null;
+}

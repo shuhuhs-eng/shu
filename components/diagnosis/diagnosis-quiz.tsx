@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { answersAfterSwitch, planFirstAnswerChange } from "@/lib/diagnosis/quiz-switch";
-import { DIAGNOSIS_VERSION, QS, entryQuestionFor, quizBankFor, setFromFirstAnswer, verifySubmission, versionOfSet, type DiagnosisMode, type DiagnosisSetId } from "@/lib/diagnosis";
+import { DIAGNOSIS_VERSION, QS, entryQuestionFor, quizBankFor, setFromFirstAnswer, submissionErrorNotice, verifySubmission, versionOfSet, type DiagnosisMode, type DiagnosisSetId } from "@/lib/diagnosis";
 import { DIAGNOSIS_NEXT_CHANGE_STORAGE_KEY, DIAGNOSIS_RESULT_STORAGE_KEY, DIAGNOSIS_SAVED_STORAGE_KEY } from "@/lib/diagnosis-handoff/constants";
 import { confirmNotice, UNCERTAIN_ERROR, UNKNOWN_STATUS, type LimitErrorCode, type LimitStatus } from "@/lib/diagnosis-limit/messages";
 import { submitDiagnosisForLoggedInUser } from "@/lib/diagnosis-handoff/submit-logged-in";
@@ -62,7 +62,7 @@ export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS, 
   const [index, setIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [errorCode, setErrorCode] = useState<LimitErrorCode | null>(null);
+  const [errorCode, setErrorCode] = useState<LimitErrorCode | "closed" | null>(null);
   // ログイン済みは、最後の質問のあと確認画面を挟み、そこで「確定する」を押したときだけ保存する。
   const [reviewing, setReviewing] = useState(false);
   // 確認画面から回答を直しに行ったあとは、次の質問へ進まず確認画面へ戻る。
@@ -152,8 +152,9 @@ export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS, 
         }
         const result = await submitDiagnosisForLoggedInUser(mode, finalAnswers, requestRef.current.id, declared);
         if (!result.success) {
-          setError(result.message ?? UNCERTAIN_ERROR.message);
-          setErrorCode(result.code ?? "uncertain");
+          const notice = submissionErrorNotice(result.error);
+          setError(notice?.message ?? result.message ?? UNCERTAIN_ERROR.message);
+          setErrorCode(notice ? "closed" : result.code ?? "uncertain");
           inFlight.current = false;
           setSubmitting(false);
           return;
@@ -188,6 +189,13 @@ export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS, 
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
+        const notice = submissionErrorNotice(data?.error);
+        if (notice) {
+          setError(notice.message);
+          inFlight.current = false;
+          setSubmitting(false);
+          return;
+        }
         throw new Error("save_failed");
       }
       sessionStorage.setItem(DIAGNOSIS_RESULT_STORAGE_KEY, JSON.stringify(data.preview));
@@ -222,7 +230,7 @@ export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS, 
 
   if (reviewing) {
     const notice = confirmNotice(limitStatus);
-    const canRetry = errorCode !== null && errorCode !== "locked" && errorCode !== "not_authenticated";
+    const canRetry = errorCode !== null && errorCode !== "locked" && errorCode !== "not_authenticated" && errorCode !== "closed";
     return (
       <main className="mx-auto max-w-[520px] px-5 py-10">
         <div className="mb-7 flex items-center gap-2.5">
