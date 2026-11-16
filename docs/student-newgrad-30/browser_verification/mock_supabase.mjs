@@ -17,6 +17,7 @@ http.createServer(async (req, res) => {
     const name = p.split("/").pop(); state.rpcs[name] = (state.rpcs[name] ?? 0) + 1;
     if (name === "check_rate_limit") return json(res, 200, [{ allowed: true, retry_after_seconds: 0 }]);
     if (name === "get_my_legal_acceptance_status") return json(res, 200, { accepted: true });
+    if (name === "get_my_hiring_processes") return json(res, 200, []);
     if (name === "get_diagnosis_change_status") return json(res, 200, { state: "none" });
     if (name === "commit_diagnosis_result") {
       if (state.failCommit > 0) { state.failCommit--; state.commits.push({ requestId: b.p_request_id, ok: false }); return json(res, 500, { code: "XX000", message: "mock storage failure" }); }
@@ -29,6 +30,10 @@ http.createServer(async (req, res) => {
     }
     return json(res, 200, {});
   }
+  if (req.method === "GET" && p === "/rest/v1/user_roles") { const rq = url.searchParams.get("role"); if (rq && rq !== "eq.stylist") return json(res, 200, (req.headers.accept ?? "").includes("vnd.pgrst.object") ? null : []); const row = { user_id: USER.id, role: "stylist", created_at: "2026-01-01T00:00:00Z" }; return json(res, 200, (req.headers.accept ?? "").includes("vnd.pgrst.object") ? row : [row]); }
+  if (req.method === "GET" && p === "/rest/v1/stylist_diagnosis_current") return json(res, 200, { bank: "experienced", result_id: "22222222-2222-4222-8222-222222222222", seq: 1 });
+  if (req.method === "GET" && p === "/rest/v1/diagnosis_results") { const ans = [4, ...Array.from({ length: 29 }, (_, i) => ((i + 2) * 7 + 1) % 4)]; return json(res, 200, { id: "22222222-2222-4222-8222-222222222222", user_id: USER.id, mode: "stylist", answers: ans, diagnosis_version: "stylist_newgrad_30_v1", craft_score: 55, sense_score: 70, hospitality_score: 80, brand_score: 40, drive_score: 60, mentor_score: 65, market_value_score: null, salary_band: null, created_at: "2026-11-16T04:00:00Z" }); }
+  if (req.method === "GET" && p === "/rest/v1/stylist_core_type_history") return json(res, 200, { top_type_code: "iyashi_charisma" });
   if (p === "/rest/v1/pending_diagnoses" && req.method === "POST") {
     if (state.failPending > 0) { state.failPending--; return json(res, 500, { code: "XX000", message: "mock pending failure" }); }
     const row = { id: randomUUID(), claim_token: randomUUID(), mode: b.mode, answers: b.answers, diagnosis_version: b.diagnosis_version, created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 30 * 864e5).toISOString(), claim_status: "PENDING", claimed_by: null };

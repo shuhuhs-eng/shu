@@ -466,7 +466,7 @@ export default async function StylistMyPage() {
       </Link>
 
       {/* 再診断は、働きたいサロン・職場の設定より下、ページ最下部の控えめなリンクにする。 */}
-      {sections.showExperienced && showNewStylistDesign && <RetakeLink limit={retakeLimit} />}
+      {sections.showExperienced && showNewStylistDesign && <RetakeLink limit={retakeLimit} hideBaseText={isNewgradResult} />}
       {/* 新卒向け診断を受け直す入口は、立場が「新卒」のときだけ。現役・ブランクあり・未選択では出さない（現在の結果の表示は変えない）。 */}
       {sections.showStudent && (
         <RetakeLink limit={retakeLimit} href="/stylist/diagnosis/student" hideBaseText hidePrimary={!canStartStudentDiagnosis(careerPhase)} secondary={{ href: "/stylist/diagnosis", label: "現役の美容師向けの診断を受ける" }} />

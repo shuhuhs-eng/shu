@@ -47,3 +47,11 @@
 - `start_pending_diagnosis_claim` は `claimed_by` / `claimed_at` / `claim_status` だけを更新し、**`expires_at` は延長しない**（コード読み取り・疑似環境でも期限不変を確認）。
 - 期限切れの行は、既存の掃除（`cleanup_expired_pending_diagnoses`、Cron）が削除する。期限切れ等がRPCのメッセージ（pending diagnosis not found, claimed by someone else, already completed, or expired）で明確なときだけCookieを消す。一時的な失敗ではCookieを保ち、障害解消後に同じ回答が重複なく取り込まれることをテストで確認。
 - 既存の挙動の注記: 同一ユーザーによる PROCESSING の再開は、期限（`expires_at`）を見ない（既存SQLのまま。今回は変更していない）。
+
+## 6. 実Supabase・実メールの確認は、アクセスを制限できる検証環境で行う（本番の入口は無効のまま）
+`NEWGRAD_ENTRY_ENABLED=true` は**全利用者に入口を出す**設定で、テストアカウントだけに限る機能ではない。そのため、本番では有効にしない。
+1. アクセスを制限できる検証環境（Vercelの保護付きプレビュー、または認証で閉じた別環境。実Supabase・実メール送信に接続）を用意し、その環境だけ `NEWGRAD_ENTRY_ENABLED=true` にする。本番の環境変数は未設定（無効）のまま。
+2. 検証環境で、ゲスト診断（新卒）→ `pending_diagnoses` の版・1問目=4の確認 → 新規登録 → 実メールの確認リンク → 引き継ぎ → マイページ（新卒の見出し「あなたのタイプ」・タイプ名が**正常に表示**され、エラー画面でないこと）→ `diagnosis_results` に版 `stylist_newgrad_30_v1` が1件・市場価値と年収がnull → 保存失敗後の再試行で1件のまま、を確認する。経験者の回帰も確認する。
+3. 検証環境が使うDBが本番と同じ場合は、検証用に作ったデータが本番に残る。検証用アカウントを識別できる名前にし、確認後の扱い（削除は別途承認）を決めてから行う（未確認）。
+4. 全項目の確認後に、一般公開の可否を別途判断する。それまで本番の入口は無効。
+5. 本番に既に新卒の保存結果・保留データがあるかは、**確認していない**（未確認）。入口は既定で無効だったため無い可能性が高いが、断定しない。公開前に `diagnosis_results` / `pending_diagnoses` の `diagnosis_version = 'stylist_newgrad_30_v1'` の件数を読み取り専用で確認する。

@@ -1,0 +1,98 @@
+[
+  {
+    "env": "PC",
+    "name": "入口無効: 1問目は4択",
+    "pass": true,
+    "extra": "4"
+  },
+  {
+    "env": "PC",
+    "name": "入口無効: 新卒の選択肢が出ない",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "env": "PC",
+    "name": "入口無効: 新卒回答のAPI送信は拒否(4xx)",
+    "pass": true,
+    "extra": "400 {\"error\":\"newgrad_disabled\"}"
+  },
+  {
+    "env": "PC",
+    "name": "マイページ: エラー画面ではない（正常表示が必須）",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "env": "PC",
+    "name": "マイページ: 新卒の見出し「あなたのタイプ」が表示される",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "env": "PC",
+    "name": "マイページ: 新卒ヘッダ表示",
+    "pass": true,
+    "extra": "http://localhost:3100/stylist/mypage"
+  },
+  {
+    "env": "PC",
+    "name": "マイページ: 経験年数・年収・市場価値・才能グラフが出ない",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "env": "PC",
+    "name": "マイページ: タイプ名(癒しのカリスマ)が出る",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "env": "iPhone 13",
+    "name": "入口無効: 1問目は4択",
+    "pass": true,
+    "extra": "4"
+  },
+  {
+    "env": "iPhone 13",
+    "name": "入口無効: 新卒の選択肢が出ない",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "env": "iPhone 13",
+    "name": "入口無効: 新卒回答のAPI送信は拒否(4xx)",
+    "pass": true,
+    "extra": "400 {\"error\":\"newgrad_disabled\"}"
+  },
+  {
+    "env": "iPhone 13",
+    "name": "マイページ: エラー画面ではない（正常表示が必須）",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "env": "iPhone 13",
+    "name": "マイページ: 新卒の見出し「あなたのタイプ」が表示される",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "env": "iPhone 13",
+    "name": "マイページ: 新卒ヘッダ表示",
+    "pass": true,
+    "extra": "http://localhost:3100/stylist/mypage"
+  },
+  {
+    "env": "iPhone 13",
+    "name": "マイページ: 経験年数・年収・市場価値・才能グラフが出ない",
+    "pass": true,
+    "extra": ""
+  },
+  {
+    "env": "iPhone 13",
+    "name": "マイページ: タイプ名(癒しのカリスマ)が出る",
+    "pass": true,
+    "extra": ""
+  }
+]
