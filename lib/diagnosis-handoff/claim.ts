@@ -3,7 +3,8 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createTokenClient } from "@/lib/supabase/token-client";
-import { computeDiagnosis, isValidAnswers, type ComputedDiagnosis } from "@/lib/diagnosis";
+import { resolveDiagnosis, type ComputedDiagnosis } from "@/lib/diagnosis";
+import { isUnrecoverableStartError } from "@/lib/diagnosis-handoff/claim-errors";
 import { generateDiagnosisNarrative } from "@/lib/ai/generate-diagnosis-narrative";
 import { CLAIM_BINDING_COOKIE, CLAIM_TOKEN_COOKIE } from "@/lib/diagnosis-handoff/constants";
 import { verifySignUpBinding, type AuthUserForClaim } from "@/lib/diagnosis-handoff/new-account";
@@ -93,15 +94,28 @@ export async function claimPendingDiagnosisForNewAccount(
   });
 
   if (startError || !pending) {
-    // このclaim_tokenでは今後も状況が変わらない（無効・期限切れ・他ユーザーが処理中・
-    // 既にCOMPLETED等）。ログイン処理自体は継続してよいので、Cookieを削除して終了する。
-    dropClaimCookies(cookieStore);
+    // Cookieを消すのは、このトークンが今後も再利用できないと明確に確認できたとき（期限切れ・他のユーザーが処理中・完了済み・存在しない）だけ。
+    // それ以外（関数が未反映・権限不足・通信失敗・タイムアウト・認証の一時的な不整合・不明なエラー）は、障害の解消後の再試行のために残す
+    // （期限は延ばさない。再試行は冪等で、同じ回答が二重に保存されることはない）。
+    if (startError && isUnrecoverableStartError(startError)) {
+      dropClaimCookies(cookieStore);
+    } else {
+      logError("claimDiagnosis.startRecoverable", { code: startError.code });
+    }
     return { claimed: false, diagnosisResultId: null };
   }
 
-  if (!isValidAnswers(pending.mode, pending.answers)) {
+  // 保存されている診断バージョンの質問・検証・計算で扱う（今のコードの既定の版では決めない）。
+  const resolved = resolveDiagnosis(pending.mode, pending.answers, pending.diagnosis_version);
+  if (resolved.kind === "unknown_version") {
+    // このコードが知らない版（新しい版で保存された等）。回答が壊れているとは限らないので、Cookieも保留データも消さない。
+    // 保留データはDB側の期限（延長しない）までそのまま残り、版に対応したコードで再試行できる。
+    logError("claimDiagnosis.unknownVersion", { version: String(pending.diagnosis_version) });
+    return { claimed: false, diagnosisResultId: null };
+  }
+  if (resolved.kind === "corrupt") {
     console.error("claimPendingDiagnosisIfPresent: invalid answers in pending diagnosis", pending.id);
-    // 回答データ自体が壊れている場合は再試行しても回復しないため、ここでは削除する。
+    // 版は分かるのに回答がその版の質問に合わない＝壊れている。再試行しても回復しないため、ここでは削除する。
     dropClaimCookies(cookieStore);
     return { claimed: false, diagnosisResultId: null };
   }
@@ -128,7 +142,7 @@ export async function claimPendingDiagnosisForNewAccount(
     return { claimed: false, diagnosisResultId: null };
   }
 
-  const computed = computeDiagnosis(pending.mode, pending.answers);
+  const computed = resolved.computed;
 
   let diagnosisResultId: string | null = null;
 
@@ -268,6 +282,7 @@ export async function runAiGenerationJob(
     scores: computed.scores,
     marketValueScore: computed.marketValueScore,
     salaryBand: computed.salaryBand,
+    diagnosisVersion: computed.diagnosisVersion,
   });
 
   if (!result) {

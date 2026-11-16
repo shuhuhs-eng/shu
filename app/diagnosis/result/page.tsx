@@ -6,6 +6,8 @@ import Link, { useLinkStatus } from "next/link";
 import type { ComputedDiagnosis } from "@/lib/diagnosis";
 import { calculateCoreType } from "@/lib/diagnosis/core-types";
 import { CORE_TYPE_CONTENT } from "@/lib/diagnosis/core-type-content";
+import { NEWGRAD_COMMON_NOTE, NEWGRAD_RESULT_HEADING, NEWGRAD_TYPE_CONTENT } from "@/lib/diagnosis/newgrad-content";
+import { NEWGRAD_VERSION } from "@/lib/diagnosis/newgrad";
 import { formatJstDateTime } from "@/lib/diagnosis-limit/messages";
 import { DIAGNOSIS_NEXT_CHANGE_STORAGE_KEY, DIAGNOSIS_RESULT_STORAGE_KEY, DIAGNOSIS_SAVED_STORAGE_KEY } from "@/lib/diagnosis-handoff/constants";
 import { createClient } from "@/lib/supabase/client";
@@ -236,9 +238,16 @@ export default function DiagnosisResultPage() {
   // 調整のみ。
   const classification = calculateCoreType(result.scores);
   const content = CORE_TYPE_CONTENT[classification.topType];
+  // 新卒版（これから美容師として働く人向け）の結果。能力・経験・年収・市場価値の言い方はしない（設計メモの表示条件）。
+  const isNewgrad = result.diagnosisVersion === NEWGRAD_VERSION;
+  const ng = NEWGRAD_TYPE_CONTENT[classification.topType];
 
   // ⑤ロック項目をコンパクトに（7項目→6項目、市場価値と想定年収を1項目に統合）。
-  const lockedItems = [
+  const lockedItems = isNewgrad ? [
+    "あなたのタイプの詳しい解説",
+    "AIによるあなた専用のガイド",
+    "相性の良いサロン",
+  ] : [
     "6つの才能バランス",
     "経験・実績の特徴と伸ばせる点",
     "あなたの強み",
@@ -258,7 +267,7 @@ export default function DiagnosisResultPage() {
       <div className="text-center">
         <h1 className="font-serif text-[20px] font-bold text-ink">30問の診断が完了しました</h1>
         <p className="mt-1.5 text-[13px] text-charcoal">
-          あなたの美容師としての才能が見えてきました。
+          {isNewgrad ? "回答から見える、あなたの傾向がわかりました。" : "あなたの美容師としての才能が見えてきました。"}
         </p>
       </div>
 
@@ -269,7 +278,7 @@ export default function DiagnosisResultPage() {
           スマホでキャラクターがCTAを押し下げすぎないよう、円のサイズは
           控えめ(h-32)にとどめている。 */}
       <div className="mt-6 flex flex-col items-center text-center">
-        <p className="eyebrow text-sub">あなたの才能タイプは</p>
+        <p className="eyebrow text-sub">{isNewgrad ? NEWGRAD_RESULT_HEADING : "あなたの才能タイプは"}</p>
         <h2
           className="mt-2 flex items-center justify-center gap-2 font-serif text-[26px] font-bold leading-tight"
           style={{ color: content.primaryColor }}
@@ -288,16 +297,26 @@ export default function DiagnosisResultPage() {
           />
         </div>
 
-        <p className="mt-4 max-w-[280px] text-[15px] font-semibold leading-relaxed text-ink">
-          {content.heroHeadline.split("\n").map((line, i) => (
-            <span key={i} className="block">
-              {line}
-            </span>
-          ))}
-        </p>
-        <p className="mt-2.5 max-w-[280px] text-[13px] leading-relaxed text-charcoal">
-          {content.hiddenTalent}
-        </p>
+        {isNewgrad ? (
+          <>
+            <p className="mt-4 max-w-[280px] text-[15px] font-semibold leading-relaxed text-ink">{ng.headline}</p>
+            <p className="mt-2.5 max-w-[300px] text-[13px] leading-relaxed text-charcoal">{ng.body}</p>
+            <p className="mt-2 max-w-[300px] text-[12px] leading-relaxed text-sub">{NEWGRAD_COMMON_NOTE}</p>
+          </>
+        ) : (
+          <>
+            <p className="mt-4 max-w-[280px] text-[15px] font-semibold leading-relaxed text-ink">
+              {content.heroHeadline.split("\n").map((line, i) => (
+                <span key={i} className="block">
+                  {line}
+                </span>
+              ))}
+            </p>
+            <p className="mt-2.5 max-w-[280px] text-[13px] leading-relaxed text-charcoal">
+              {content.hiddenTalent}
+            </p>
+          </>
+        )}
       </div>
 
       {isMember ? (
@@ -311,17 +330,19 @@ export default function DiagnosisResultPage() {
           でも、これはあなたの診断結果のほんの一部。
         </p>
         <ul className="mt-4 space-y-2.5">
+          {!isNewgrad && (
+            <li className="flex items-start justify-center gap-1.5 text-[14px] font-semibold leading-snug text-ink">
+              <span aria-hidden="true" style={{ color: "var(--gold)" }}>→</span>
+              あなたの経験・実績の強みは？
+            </li>
+          )}
           <li className="flex items-start justify-center gap-1.5 text-[14px] font-semibold leading-snug text-ink">
             <span aria-hidden="true" style={{ color: "var(--gold)" }}>→</span>
-            あなたの経験・実績の強みは？
+            {isNewgrad ? "どんなサロンなら、あなたらしく学べる？" : "どんなサロンなら、もっと才能を活かせる？"}
           </li>
           <li className="flex items-start justify-center gap-1.5 text-[14px] font-semibold leading-snug text-ink">
             <span aria-hidden="true" style={{ color: "var(--gold)" }}>→</span>
-            どんなサロンなら、もっと才能を活かせる？
-          </li>
-          <li className="flex items-start justify-center gap-1.5 text-[14px] font-semibold leading-snug text-ink">
-            <span aria-hidden="true" style={{ color: "var(--gold)" }}>→</span>
-            あなたの可能性をAIはどう分析する？
+            {isNewgrad ? "あなたの傾向を、AIはどう読み解く？" : "あなたの可能性をAIはどう分析する？"}
           </li>
         </ul>
       </div>

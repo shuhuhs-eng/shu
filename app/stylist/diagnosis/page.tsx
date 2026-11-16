@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 import { DiagnosisQuiz } from "@/components/diagnosis/diagnosis-quiz";
+import { isNewgradEntryEnabled } from "@/lib/diagnosis/newgrad";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { getDiagnosisChangeStatus } from "@/lib/diagnosis-limit/status";
 import { formatJstDateTime } from "@/lib/diagnosis-limit/messages";
 import Link from "next/link";
-import { readOwnCareerPhase } from "@/lib/student-diagnosis/career-phase";
 
 // ログイン状態をサーバー側で確認し、DiagnosisQuizへ渡す。ログイン済みの
 // 場合は診断完了時に /api/diagnosis/guest ではなくログイン済み専用の
@@ -47,21 +47,10 @@ export default async function StylistDiagnosisPage() {
     );
   }
 
-  // 新卒向け診断の入口は、0071適用済みで、本人が立場を「新卒」にしているときだけ出す（立場は本人の選択のみ・推測しない）。
-  const phaseRead = user ? await readOwnCareerPhase(supabase, user.id) : null;
-  const studentSupported = phaseRead?.status === "ok" && phaseRead.value.phase === "new_graduate";
-
+  // 入口は共通の30問だけ。1問目で「新卒・これから美容師として働く」を選ぶと新卒向けの質問になる。立場（プロフィール）は診断では変えない。
   return (
     <>
-      {studentSupported && (
-        <div className="mx-auto max-w-[520px] px-5 pt-6">
-          <p className="rounded-2xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-charcoal">
-            新卒の方は、実績を聞かない専用の診断があります。
-            <Link href="/stylist/diagnosis/student" className="ml-1 font-semibold text-ink underline">新卒向けの診断へ</Link>
-          </p>
-        </div>
-      )}
-      <DiagnosisQuiz mode="stylist" isLoggedIn={!!user} limitStatus={limitStatus} />
+      <DiagnosisQuiz mode="stylist" isLoggedIn={!!user} limitStatus={limitStatus} newgradEnabled={isNewgradEntryEnabled()} />
     </>
   );
 }

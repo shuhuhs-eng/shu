@@ -13,6 +13,9 @@ import { fetchExperiencedForMypage, fetchStudentById } from "@/lib/student-diagn
 import { computeStudentResult } from "@/lib/student-diagnosis/result";
 import { STUDENT_DIAGNOSIS_VERSION, isValidStudentAnswers } from "@/lib/student-diagnosis/questions";
 import { CoreTypeHeader } from "@/components/mypage/core-type-header";
+import { NewgradResult, PhaseMismatchNotice } from "@/components/mypage/newgrad-result";
+import { NEWGRAD_VERSION } from "@/lib/diagnosis/newgrad";
+import { CAREER_PHASE_LABEL } from "@/lib/student-diagnosis/career-phase";
 import { CoreTypeDetails } from "@/components/mypage/core-type-details";
 import { MarketValueCard } from "@/components/mypage/market-value-card";
 import { AiNarrativeBlocks } from "@/components/mypage/ai-narrative-blocks";
@@ -214,7 +217,15 @@ export default async function StylistMyPage() {
     : null;
 
   // 保存済みの回答と6才能から、経験・実績の特徴と伸ばせる点を読み出す（読めない旧データは出さない）。
-  const experienceProfile = latest && traitScores ? buildExperienceProfile(latest.answers, traitScores) : null;
+  // 新卒版（stylist_newgrad_30_v1）の結果は、経験・実績の分析・市場価値・年収・才能グラフ・経験者向けの説明を出さない。
+  const isNewgradResult = !!latest && latest.diagnosis_version === NEWGRAD_VERSION;
+  const experienceProfile = latest && traitScores && !isNewgradResult ? buildExperienceProfile(latest.answers, traitScores) : null;
+  // プロフィールの立場と、診断の1問目の選択が違うときの案内（診断から立場は自動で変えない）。立場を読めない・未対応のときは出さない。
+  const profilePhase = careerPhase.status === "ok" ? careerPhase.value.phase : undefined;
+  const phaseMismatch: "newgrad_diagnosis" | "experienced_diagnosis" | null =
+    !latest || profilePhase === undefined ? null
+    : isNewgradResult ? (profilePhase !== "new_graduate" ? "newgrad_diagnosis" : null)
+    : profilePhase === "new_graduate" ? "experienced_diagnosis" : null;
 
   return (
     <main className="mx-auto max-w-[560px] px-5 py-12">
@@ -266,7 +277,18 @@ export default async function StylistMyPage() {
         </div>
       )}
 
-      {sections.showExperienced && (showNewStylistDesign && coreTypeCode && traitScores && latest ? (
+      {sections.showExperienced && phaseMismatch && (
+        <PhaseMismatchNotice kind={phaseMismatch} profileLabel={profilePhase ? CAREER_PHASE_LABEL[profilePhase] : null} />
+      )}
+
+      {sections.showExperienced && isNewgradResult && coreTypeCode && latest ? (
+        <>
+          <NewgradResult coreTypeCode={coreTypeCode} />
+          <div className="mt-4 space-y-4">
+            <AiNarrativeBlocks aiByType={aiByType} isGenerating={latest.ai_status === "PENDING" || latest.ai_status === "GENERATING"} />
+          </div>
+        </>
+      ) : sections.showExperienced && (showNewStylistDesign && coreTypeCode && traitScores && latest ? (
         <>
           <CoreTypeHeader coreTypeCode={coreTypeCode} />
 

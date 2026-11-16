@@ -3,6 +3,8 @@ export * from "./types";
 export * from "./questions";
 export * from "./scoring";
 export { DIAGNOSIS_VERSION, GOLDEN_TEST_VERSION } from "./version";
+export * from "./newgrad";
+export * from "./versioned";
 
 import type { TraitKey } from "./traits";
 import type { DiagnosisMode } from "./questions";

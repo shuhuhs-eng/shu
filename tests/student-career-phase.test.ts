@@ -154,8 +154,8 @@ test("学生診断のアプリ: 既存診断・採点・旧INSERTを使わず、
   const files = ["lib/student-diagnosis/commit.ts", "lib/student-diagnosis/actions.ts", "app/stylist/diagnosis/student/page.tsx"].map((f) => readFileSync(f, "utf8")).join("\n");
   assert.ok(!/scoreTraits|marketValue|commit_diagnosis_result|from\("diagnosis_results"\)|\.insert\(/.test(files.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")));
   const entry = readFileSync("app/stylist/diagnosis/page.tsx", "utf8");
-  // 新卒向け診断の入口は、0071適用済みで、立場が「新卒」のときだけ。美容学生の入口は無い
-  assert.ok(entry.includes('phaseRead?.status === "ok" && phaseRead.value.phase === "new_graduate"'));
+  // 入口は共通の30問に統一（方針変更）。15問の新卒向け診断へ誘導するバナー・リンクは出さない。立場は診断で変えない。美容学生の入口も無い
+  assert.ok(!entry.includes("/stylist/diagnosis/student") && !entry.includes("新卒向けの診断へ"));
   assert.ok(!entry.includes("美容学生") && !entry.includes("在学中"));
   // 立場は、プロフィール保存と別に保存する画面・関数を持たない（プロフィール編集の入力欄から v3 で一緒に保存）
   const profile = readFileSync("app/stylist/profile/page.tsx", "utf8");

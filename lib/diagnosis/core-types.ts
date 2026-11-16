@@ -52,8 +52,25 @@ export type CoreTypeClassification = {
 const TRAIT_KEYS: TraitKey[] = ["T", "S", "H", "B", "A", "M"];
 
 /**
- * 6才能スコアから8タイプの matchScore を算出し、1位・2位・差・全件を返す。
+ * 重みを「100分の1」の整数にしたもの（0.35 → 35）。浮動小数点の誤差を避けるため、計算は整数で行う。
+ * ★SQL（save_core_type_result）は numeric（10進数の厳密計算）で `round(重み×スコアの合計, 1)` を求める。
+ *   TSで `Math.round(浮動小数点の合計 × 10) / 10` と書くと、0.05刻みの境界（例: 29.95）で、TSは29.9・SQLは30.0
+ *   のように0.1ずれることがある（ローカルDBでの実測: 4,000通り×8タイプのうち約3%）。ずれるとプレビューと保存結果で
+ *   1位・2位が食い違い得るため、整数で計算して SQL の「四捨五入（0.05は切り上げ）」と一致させる。
+ */
+const WEIGHT_HUNDREDTHS: Record<CoreTypeCode, Record<TraitKey, number>> = Object.fromEntries(
+  CORE_TYPE_CODES.map((code) => [
+    code,
+    Object.fromEntries(TRAIT_KEYS.map((k) => [k, Math.round(CORE_TYPE_WEIGHTS[code][k] * 100)])),
+  ]),
+) as Record<CoreTypeCode, Record<TraitKey, number>>;
+
+/**
+ * 6才能スコア（0〜100の整数）から8タイプの matchScore を算出し、1位・2位・差・全件を返す。
  * 単純な最大値1項目ではなく、6スコアの加重和（複数スコアの組み合わせ）で決まる。
+ *
+ * 並べ替え: 得点の降順。**同点のときは CORE_TYPE_CODES の定義順**（1位・2位とも同じ規則）。
+ * DB側（0078 の save_core_type_result）も同じ規則。乱数や微小な加点で同点を隠さない。
  *
  * ★このTS関数はDBへ何も書き込まない（読み取り専用の計算）。実際にDBへ
  * 保存する際の真のトラスト境界は save_core_type_result() RPC（SQL側で
@@ -61,22 +78,25 @@ const TRAIT_KEYS: TraitKey[] = ["T", "S", "H", "B", "A", "M"];
  * この関数の戻り値をそのままRPCへ渡しても、RPCはその値を信用しない。
  */
 export function calculateCoreType(scores: TraitScores): CoreTypeClassification {
+  const tenths = {} as Record<CoreTypeCode, number>;
   const matchScores = {} as Record<CoreTypeCode, number>;
 
   for (const code of CORE_TYPE_CODES) {
-    const w = CORE_TYPE_WEIGHTS[code];
-    const raw = TRAIT_KEYS.reduce((sum, k) => sum + w[k] * scores[k], 0);
-    matchScores[code] = Math.round(raw * 10) / 10;
+    const w = WEIGHT_HUNDREDTHS[code];
+    // 合計は「100分の1」単位の整数。0.1単位への四捨五入（5は切り上げ）＝ floor((合計 + 5) / 10)。スコアは0以上。
+    const hundredths = TRAIT_KEYS.reduce((sum, k) => sum + w[k] * scores[k], 0);
+    tenths[code] = Math.floor((hundredths + 5) / 10);
+    matchScores[code] = tenths[code] / 10;
   }
 
-  const ranked = (Object.entries(matchScores) as [CoreTypeCode, number][]).sort(
-    (a, b) => b[1] - a[1],
+  const ranked = CORE_TYPE_CODES.map((code, order) => ({ code, tenths: tenths[code], order })).sort(
+    (a, b) => b.tenths - a.tenths || a.order - b.order,
   );
 
   return {
-    topType: ranked[0][0],
-    secondType: ranked[1][0],
-    scoreGap: Math.round((ranked[0][1] - ranked[1][1]) * 10) / 10,
+    topType: ranked[0].code,
+    secondType: ranked[1].code,
+    scoreGap: (ranked[0].tenths - ranked[1].tenths) / 10,
     matchScores,
   };
 }

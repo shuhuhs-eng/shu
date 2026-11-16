@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { bankFor, computeDiagnosis, type DiagnosisMode } from "@/lib/diagnosis";
+import { answersAfterSwitch, planFirstAnswerChange } from "@/lib/diagnosis/quiz-switch";
+import { DIAGNOSIS_VERSION, QS, entryQuestionFor, quizBankFor, setFromFirstAnswer, verifySubmission, versionOfSet, type DiagnosisMode, type DiagnosisSetId } from "@/lib/diagnosis";
 import { DIAGNOSIS_NEXT_CHANGE_STORAGE_KEY, DIAGNOSIS_RESULT_STORAGE_KEY, DIAGNOSIS_SAVED_STORAGE_KEY } from "@/lib/diagnosis-handoff/constants";
 import { confirmNotice, UNCERTAIN_ERROR, UNKNOWN_STATUS, type LimitErrorCode, type LimitStatus } from "@/lib/diagnosis-limit/messages";
 import { submitDiagnosisForLoggedInUser } from "@/lib/diagnosis-handoff/submit-logged-in";
@@ -24,6 +25,8 @@ type Props = {
   isLoggedIn: boolean;
   /** ログイン済みの本人の、結果の変更状態（案内用。保存の可否は保存時にDBが判断する）。 */
   limitStatus?: LimitStatus;
+  /** 新卒の入口（1問目の5つ目の選択肢）を出すか。サーバー（page.tsx）が環境変数で決めて渡す。既定は出さない（明示的に有効化したときだけ出す）。 */
+  newgradEnabled?: boolean;
 };
 
 /**
@@ -44,11 +47,18 @@ type Props = {
  * save_core_type_result() も実行される）。未ログイン時の経路・挙動は
  * この分岐の影響を一切受けない。
  */
-export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS }: Props) {
+export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS, newgradEnabled = false }: Props) {
   const router = useRouter();
-  const bank = bankFor(mode);
-
-  const [answers, setAnswers] = useState<Array<number | null>>(() => Array(bank.length).fill(null));
+  // 美容師診断は共通の30問。1問目の回答で、2問目以降のセット（経験者版／新卒版）が決まる。サロン診断は従来どおり14問。
+  const [answers, setAnswers] = useState<Array<number | null>>(() => Array(mode === "salon" ? QS.length : 30).fill(null));
+  const set: DiagnosisSetId = mode === "salon" ? "experienced" : (setFromFirstAnswer(answers[0]) ?? "experienced");
+  const fullBank = mode === "salon" ? QS : quizBankFor(set);
+  // 入口を止めている間は、1問目の5つ目の選択肢を出さない（途中で止まった画面の回答も、サーバーが拒否する）。
+  const bank = mode === "salon" || newgradEnabled ? fullBank : [entryQuestionFor(false), ...fullBank.slice(1)];
+  // 送信に添える「どの版・どの質問の並びで答えたか」。サーバーは1問目の回答から公式の版を決め、この申告と照合する。
+  const declared = { setVersion: mode === "salon" ? DIAGNOSIS_VERSION : versionOfSet(set), questionIds: bank.map((q) => q.id) };
+  // 1問目を変えて別のセットになる操作の確認待ち（2問目以降に回答があるときだけ）。値は選ぼうとした選択肢の添字。
+  const [switchPrompt, setSwitchPrompt] = useState<number | null>(null);
   const [index, setIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,8 +78,31 @@ export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS }
   const totalSections = Math.ceil(bank.length / SECTION_SIZE);
   const progressPct = Math.round((index / bank.length) * 100);
 
+  /** 別のセットへ切り替える: 2問目以降の回答・確認画面への戻り・保存の識別子をすべて作り直し、2問目から始める。 */
+  function applySwitch(optionIndex: number) {
+    setAnswers(answersAfterSwitch(answers.length, optionIndex));
+    requestRef.current = null;
+    setSwitchPrompt(null);
+    setReturnToReview(false);
+    setReviewing(false);
+    setError(null);
+    setErrorCode(null);
+    setIndex(1);
+  }
+
   async function handleSelect(optionIndex: number) {
     if (submitting) return;
+
+    const plan = planFirstAnswerChange(mode, index, answers, optionIndex);
+    if (plan === "confirm") {
+      // 別のセットになり、2問目以降に回答がある。消してよいか確認する。
+      setSwitchPrompt(optionIndex);
+      return;
+    }
+    if (plan === "switch") {
+      applySwitch(optionIndex);
+      return;
+    }
 
     const next = [...answers];
     next[index] = optionIndex;
@@ -113,11 +146,11 @@ export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS }
     // 経路をそのまま通る（挙動は一切変更していない）。
     if (isLoggedIn) {
       try {
-        const key = JSON.stringify(finalAnswers);
+        const key = JSON.stringify({ d: declared, a: finalAnswers });
         if (!requestRef.current || requestRef.current.key !== key) {
           requestRef.current = { id: crypto.randomUUID(), key };
         }
-        const result = await submitDiagnosisForLoggedInUser(mode, finalAnswers, requestRef.current.id);
+        const result = await submitDiagnosisForLoggedInUser(mode, finalAnswers, requestRef.current.id, declared);
         if (!result.success) {
           setError(result.message ?? UNCERTAIN_ERROR.message);
           setErrorCode(result.code ?? "uncertain");
@@ -129,7 +162,9 @@ export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS }
         // 呼んで作る（ゲスト経路のpreviewと同じ考え方：表示専用であり、
         // 保存済みの真値はサーバー側（Server Action内）で既に再計算・
         // 確定保存済み）。
-        const preview = computeDiagnosis(mode, finalAnswers);
+        const verified = verifySubmission(mode, finalAnswers, declared);
+        if (!verified.ok) throw new Error("preview_failed");
+        const preview = verified.computed;
         sessionStorage.setItem(DIAGNOSIS_RESULT_STORAGE_KEY, JSON.stringify(preview));
         // 保存に成功した場合だけ「保存済み」を結果画面へ伝える（失敗時は書かない）。
         sessionStorage.setItem(DIAGNOSIS_SAVED_STORAGE_KEY, result.diagnosisResultId);
@@ -149,7 +184,7 @@ export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS }
       const res = await fetch("/api/diagnosis/guest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, answers: finalAnswers }),
+        body: JSON.stringify({ mode, answers: finalAnswers, ...declared }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -283,12 +318,28 @@ export function DiagnosisQuiz({ mode, isLoggedIn, limitStatus = UNKNOWN_STATUS }
       </p>
       <h1 className="font-serif text-2xl font-bold leading-snug text-ink">{question.q}</h1>
 
+      {switchPrompt !== null && (
+        <div role="alertdialog" aria-live="polite" className="mt-5 rounded-2xl border border-line bg-surface2 px-4 py-3 text-[13.5px] leading-relaxed text-charcoal">
+          <p>
+            1問目の回答を変えると、{setFromFirstAnswer(switchPrompt) === "newgrad" ? "新卒・これから美容師として働く人向け" : "現役の美容師向け"}の質問に切り替わります。2問目以降の回答は消えて、2問目からやり直しになります。
+          </p>
+          <div className="mt-2 flex flex-wrap gap-x-4">
+            <button type="button" onClick={() => applySwitch(switchPrompt)} className="inline-flex min-h-[44px] items-center font-semibold underline">
+              回答を消して切り替える
+            </button>
+            <button type="button" onClick={() => setSwitchPrompt(null)} className="inline-flex min-h-[44px] items-center font-semibold text-sub underline">
+              今の回答のままにする
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-7 space-y-3">
         {question.opts.map((opt, i) => (
           <button
             key={i}
             type="button"
-            disabled={submitting}
+            disabled={submitting || switchPrompt !== null}
             onClick={() => handleSelect(i)}
             aria-pressed={answers[index] === i}
             className={`w-full rounded-2xl border px-5 py-4 text-left text-[14.5px] leading-relaxed transition-colors disabled:opacity-60 ${

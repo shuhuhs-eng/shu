@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/service";
-import {
-  DIAGNOSIS_VERSION,
-  isValidAnswers,
-  computeDiagnosis,
-  type DiagnosisMode,
-} from "@/lib/diagnosis";
+import { isNewgradEntryEnabled, verifySubmission, type DiagnosisMode } from "@/lib/diagnosis";
 import { getClientIp } from "@/lib/rate-limit/memory-rate-limiter";
 import { checkSharedRateLimit } from "@/lib/rate-limit/shared-rate-limiter";
 import { CLAIM_TOKEN_COOKIE, CLAIM_TOKEN_MAX_AGE_SECONDS } from "@/lib/diagnosis-handoff/constants";
@@ -56,15 +51,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
 
-  const { mode, answers } = body as { mode?: unknown; answers?: unknown };
+  const { mode, answers, setVersion, questionIds } = body as { mode?: unknown; answers?: unknown; setVersion?: unknown; questionIds?: unknown };
 
   if (mode !== "stylist" && mode !== "salon") {
     return NextResponse.json({ error: "invalid_mode" }, { status: 400 });
   }
   const validatedMode = mode as DiagnosisMode;
 
-  if (!isValidAnswers(validatedMode, answers)) {
-    return NextResponse.json({ error: "invalid_answers" }, { status: 400 });
+  // 保存する診断バージョンは、サーバーが1問目の回答から決める（クライアントの申告は「質問の並びの照合」にだけ使う）。
+  // 申告された版・質問IDがその版の並びと違う送信（2つのセットの回答が混ざった送信など）は保存しない。
+  const verified = verifySubmission(validatedMode, answers, { setVersion, questionIds }, { newgradEnabled: isNewgradEntryEnabled() });
+  if (!verified.ok) {
+    return NextResponse.json({ error: verified.error }, { status: 400 });
   }
 
   const supabase = createServiceClient();
@@ -73,8 +71,8 @@ export async function POST(request: Request) {
     .from("pending_diagnoses")
     .insert({
       mode: validatedMode,
-      answers,
-      diagnosis_version: DIAGNOSIS_VERSION,
+      answers: answers as number[],
+      diagnosis_version: verified.version,
     })
     .select("*")
     .single();
@@ -93,7 +91,7 @@ export async function POST(request: Request) {
   });
 
   // 表示専用の即時計算結果（真値ではない。登録後にサーバーで再計算される）。
-  const preview = computeDiagnosis(validatedMode, answers);
+  const preview = verified.computed;
 
   return NextResponse.json({ success: true, preview });
 }

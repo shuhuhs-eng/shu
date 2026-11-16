@@ -3,7 +3,7 @@
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { computeDiagnosis, isValidAnswers, type DiagnosisMode } from "@/lib/diagnosis";
+import { isNewgradEntryEnabled, verifySubmission, type Declared, type DiagnosisMode } from "@/lib/diagnosis";
 import { runAiGenerationJob } from "@/lib/diagnosis-handoff/claim";
 import { logError } from "@/lib/security/log";
 import { commitDiagnosisResult, type CommitClient } from "@/lib/diagnosis-limit/commit";
@@ -61,9 +61,12 @@ export async function submitDiagnosisForLoggedInUser(
   mode: DiagnosisMode,
   answers: unknown,
   requestId: string,
+  declared?: Declared,
 ): Promise<SubmitLoggedInResult> {
-  if (!isValidAnswers(mode, answers)) {
-    return { success: false, error: "invalid_answers" };
+  // 保存する診断バージョンはサーバーが1問目の回答から決める。申告（版・質問ID）は並びの照合にだけ使う。
+  const verified = verifySubmission(mode, answers, declared, { newgradEnabled: isNewgradEntryEnabled() });
+  if (!verified.ok) {
+    return { success: false, error: verified.error };
   }
   // 確認画面で1回だけ作られ、再送でも同じ値が送られる保存の識別子。これが無い・形が違う送信は受け付けない。
   if (typeof requestId !== "string" || !UUID_RE.test(requestId)) {
@@ -84,7 +87,7 @@ export async function submitDiagnosisForLoggedInUser(
 
   // サーバー側で回答から再計算する（クライアントの計算結果は信用しない）。
   // lib/diagnosis-handoff/claim.ts と全く同じ関数・同じ手順。
-  const computed = computeDiagnosis(mode, answers);
+  const computed = verified.computed;
 
   // ★0058: 回数制限つきの確定保存（commit_diagnosis_result。service_role専用）。認証済みの本人（上のgetUser）の
   // user_idと、サーバーが回答から再計算した値だけを渡す。判定・消費・排他・重複検知はDB側。

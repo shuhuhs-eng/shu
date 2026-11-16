@@ -40,6 +40,7 @@ type Pending = {
   claim_token: string;
   mode: "stylist" | "salon";
   answers: number[];
+  diagnosis_version: string;
   created_at: string;
   expires_at: string;
   claim_status: "PENDING" | "PROCESSING" | "COMPLETED";
@@ -248,6 +249,7 @@ function fakeService() {
                 claim_token: randomUUID(),
                 mode: row.mode,
                 answers: row.answers,
+                diagnosis_version: row.diagnosis_version, // 実DBの列（NOT NULL）と同じく、保存された版を持つ
                 created_at: tick(),
                 expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
                 claim_status: "PENDING",

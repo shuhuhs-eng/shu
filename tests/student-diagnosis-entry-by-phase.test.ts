@@ -81,5 +81,6 @@ test("画面の構造: マイページ最下部と結果ページの『診断を
   assert.ok(rs.includes('load.kind === "none" && canStartStudentDiagnosis(careerPhase)'));
   assert.ok(!/load\.kind === "none" && \(/.test(rs), "判定なしの『診断を始める』は残っていない");
   const dg = readFileSync("app/stylist/diagnosis/page.tsx", "utf8");
-  assert.ok(dg.includes('phaseRead.value.phase === "new_graduate"'));
+  // 方針変更: 入口は共通の30問に統一。診断ページに、15問の新卒向け診断へ誘導する立場別の案内は出さない
+  assert.ok(!dg.includes('phaseRead.value.phase === "new_graduate"') && !dg.includes("/stylist/diagnosis/student"));
 });
