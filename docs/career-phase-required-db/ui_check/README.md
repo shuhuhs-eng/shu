@@ -14,3 +14,7 @@ node $D/run.cjs $D
 `node build.mjs $D entry_profile profile` で `profile.js` を作り、`index.html` と同じ内容の `profile.html`（script を profile.js に）を置いて `node run_profile.cjs $D`。
 保存ボタンが1つ／旧フォームの文言なし／未選択ではエラー／3択それぞれの保存と再読み込み後の復元／失敗時に入力が残る／立場カードは表示のみ、をPC幅・スマホ幅で確認。
 ※ このディレクトリは tsconfig と eslint の対象外（Vercel のビルドを壊さないため。entry*.tsx は作業環境の絶対パスを使う）。
+
+## 診断結果の「プロフィールへの反映」ボタンの確認（run_apply.cjs）
+`node build.mjs $D entry_apply apply` で `apply.js` を作り、`apply.html`（script を apply.js に）を置いて `node run_apply.cjs $D`。保存先はモック（実Supabaseではない）。
+押せる／自動では保存されない／1回・3項目だけ送る／反映後は現在の設定が変わり再度は押せない／失敗は成功と出さず設定も変えない／診断が3つ未満は補わず押せない、をPC幅・スマホ幅で確認。

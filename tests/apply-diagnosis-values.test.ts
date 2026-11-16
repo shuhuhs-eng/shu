@@ -1,11 +1,21 @@
 // 診断結果の「大切にしたい働き方」。変更案の表示のみ（保存は一時停止中）。推測で変換しない。
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { proposeValuePriorities, validateValuePriorities } from "../lib/profile/apply-diagnosis-values";
-import { ApplyValuesToProfile } from "../components/student-diagnosis/apply-values-to-profile";
+import Module from "node:module";
+// ボタン（クライアント部品）が使う next/navigation と、サーバーアクションの依存は、描画確認のためスタブにする
+const origLoad = (Module as unknown as { _load: (...a: unknown[]) => unknown })._load;
+(Module as unknown as { _load: unknown })._load = function (request: string, ...rest: unknown[]) {
+  if (request === "next/navigation") return { useRouter: () => ({ refresh: () => undefined }) };
+  if (request === "@/lib/profile/apply-values-actions") return { applyValuePrioritiesAction: async () => ({ ok: true }) };
+  return origLoad.call(this, request, ...rest);
+};
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { ApplyValuesToProfile } = require("../components/student-diagnosis/apply-values-to-profile");
+after(() => { (Module as unknown as { _load: unknown })._load = origLoad; });
 
 test("変更案: 診断の選択（選んだ順）と同じ一覧のコードだけ。一覧に無いコードは変換せず除く。3つに足りなければ不足数を返す（補わない）", () => {
   assert.deepEqual(proposeValuePriorities(["teamwork", "independence", "culture_fit"]), { proposed: ["teamwork", "independence", "culture_fit"], missing: 0, dropped: 0 });
@@ -23,26 +33,33 @@ test("検証: プロフィールの既存ルール（ちょうど3つ・一覧�
 });
 
 const text = (props: Record<string, unknown>) => renderToStaticMarkup(createElement(ApplyValuesToProfile as never, props as never));
-test("画面: 保存は一時停止。変更案とプロフィール編集へのリンクだけを出し、押せる保存ボタン・入力欄・フォームは無い", () => {
+const flat = (h: string) => h.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+test("画面: 変更案と現在の設定を比べ、3つそろっていて内容が違うときだけ「プロフィールに反映する」を押せる。反映されるのは1項目だけと明示", () => {
   const h = text({ diagnosisValues: ["teamwork", "independence", "culture_fit"], current: ["work_life_balance", "skill_growth", "income_stability"], hasProfile: true });
-  const t = h.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const t = flat(h);
   assert.ok(t.includes("現在の設定（プロフィール）") && t.includes("ワークライフバランス重視") && t.includes("診断からの変更案") && t.includes("チームワーク"));
-  assert.ok(t.includes("この画面からの保存は、現在お休みしています") && t.includes("何も保存されません"));
-  assert.ok(h.includes('href="/stylist/profile"') && h.includes("プロフィール編集へ"));
-  assert.ok(/<button[^>]*disabled[^>]*data-testid="apply-paused-button"|<button[^>]*data-testid="apply-paused-button"[^>]*disabled/.test(h), "唯一のボタンは無効");
-  assert.ok((h.match(/<button/g) ?? []).length === 1 && !h.includes("<form") && !h.includes("<input"));
+  assert.ok(t.includes("自動では保存されません") && t.includes("反映されるのは「サロン選びで大切にしたいこと」だけです。ほかのプロフィール項目は変わりません"));
+  assert.ok(!t.includes("お休みしています") && !t.includes("準備中") && !h.includes("apply-paused"));
+  const btn = h.match(/<button[^>]*data-testid="apply-button"[^>]*>/)?.[0] ?? "";
+  assert.ok(btn && !/\sdisabled=""/.test(btn), "押せる");
+  assert.ok(!h.includes("apply-disabled-reason") && h.includes('href="/stylist/profile"'));
 });
-test("画面: 診断が3つに満たない場合は補完せず案内。プロフィール未保存は変更案を出さず、先に保存するリンク", () => {
-  const h = text({ diagnosisValues: ["teamwork", "independence"], current: null, hasProfile: true }).replace(/<[^>]+>/g, " ");
-  assert.ok(h.includes("あと1つはプロフィール編集で選んでください") && h.includes("未設定"));
-  const np = text({ diagnosisValues: ["teamwork"], current: null, hasProfile: false }).replace(/<[^>]+>/g, " ");
-  assert.ok(np.includes("先にプロフィールを保存する") && !np.includes("診断からの変更案"));
+test("画面: 押せない場合（診断が3つ未満・すでに同じ・プロフィール未保存）。補完しない", () => {
+  const miss = text({ diagnosisValues: ["teamwork", "independence"], current: null, hasProfile: true });
+  assert.ok(/<button[^>]*data-testid="apply-button"[^>]*disabled|<button[^>]*disabled[^>]*data-testid="apply-button"/.test(miss));
+  assert.ok(flat(miss).includes("あと1つはプロフィール編集で選んでください") && flat(miss).includes("未設定") && flat(miss).includes("ここでは反映できません"));
+  const same = text({ diagnosisValues: ["teamwork", "independence", "culture_fit"], current: ["teamwork", "independence", "culture_fit"], hasProfile: true });
+  assert.ok(/\sdisabled=""/.test(same.match(/<button[^>]*data-testid="apply-button"[^>]*>/)?.[0] ?? "") && flat(same).includes("すでにこの内容です"));
+  const np = text({ diagnosisValues: ["teamwork"], current: null, hasProfile: false });
+  assert.ok(flat(np).includes("先にプロフィールを保存する") && !flat(np).includes("診断からの変更案") && !np.includes("apply-button"));
 });
-test("構造: プロフィール全項目を保存する経路（旧: 反映の保存処理）はアプリに残っていない。結果ページは現在の結果のときだけ表示", () => {
+test("構造: 反映は専用関数 set_stylist_value_priorities だけ。プロフィール全項目の保存関数は使わず、他の列を更新しない", () => {
   assert.equal(existsSync("lib/profile/apply-diagnosis-actions.ts"), false);
+  const act = readFileSync("lib/profile/apply-values-actions.ts", "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.ok(act.includes('"set_stylist_value_priorities"') && (act.match(/\.rpc\(/g) ?? []).length === 1);
+  assert.ok(!/save_stylist_profile|\.from\(|\.update\(|\.insert\(|\.upsert\(/.test(act));
   for (const f of ["lib/profile/apply-diagnosis-values.ts", "components/student-diagnosis/apply-values-to-profile.tsx", "app/stylist/diagnosis/student/result/page.tsx"]) {
-    const src = readFileSync(f, "utf8");
-    assert.ok(!/save_stylist_profile|\.rpc\(|applyValuePrioritiesAction|"use server"/.test(src.replace(/\/\*[\s\S]*?\*\//g, "")), f + " は保存を行わない");
+    assert.ok(!/save_stylist_profile|\.rpc\(|"use server"/.test(readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, "")), f);
   }
   const res = readFileSync("app/stylist/diagnosis/student/result/page.tsx", "utf8");
   assert.ok(res.includes('status === "current" && profileRead') && res.includes("<ApplyValuesToProfile"));

@@ -1,4 +1,10 @@
-export const useRouter = () => ({ push: (u: string) => { (window as any).__pushed = u; } });
+export const useRouter = () => ({ push: (u: string) => { (window as any).__pushed = u; }, refresh: () => { (window as any).__refresh?.(); } });
+// 反映ボタンの確認用（モック。実Supabaseではない）: 呼び出しを記録し、保存済みの値（__values）だけを更新する
+export const applyValuePrioritiesAction = async (values: string[]) => {
+  const w = window as any; (w.__apply ||= []).push(values); await new Promise((r) => setTimeout(r, 120));
+  if (w.__mode === "fail") return { ok: false, message: "反映に失敗しました。通信状況を確認して、もう一度お試しください。" };
+  w.__values = values; return { ok: true };
+};
 export const saveProfileAction = async (_p: any, fd: FormData) => {
   const w = window as any; const obj: Record<string, string[]> = {};
   for (const [k, v] of fd.entries()) (obj[k] ||= []).push(String(v));

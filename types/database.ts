@@ -987,6 +987,11 @@ export type Database = {
           status: AgeRequestDecision; requested_at: string; decided_at: string | null;
         }>;
       };
+      set_stylist_value_priorities: {
+        // 0072（適用済み）。本人の value_priorities だけを更新する専用関数（ちょうど3件・重複なし・許可12項目）。
+        Args: { p_value_priorities: string[] };
+        Returns: undefined;
+      };
       get_store_stylist_age_infos: {
         // 0070（確定方針・草案）。店舗にアクセスできるサロンへ、興味あり済み／候補の美容師の年齢情報（一覧と同じ規則）を返す。
         Args: { p_store_id: string; p_stylist_user_ids: string[] };
