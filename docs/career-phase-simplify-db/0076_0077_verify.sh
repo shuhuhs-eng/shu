@@ -66,9 +66,9 @@ reject "旧値student" $S3 career_phase_required student
 # ---- ブランク期間
 vfy_chk "ブランク: 6ヶ月が保存される" "$(v4 $DB $S3 新S3 blank null 6 months >/dev/null; ph $DB $S3)" "blank|-|6/months"
 vfy_chk "ブランク: 2年が保存される" "$(v4 $DB $S3 新S3 blank null 2 years >/dev/null; ph $DB $S3)" "blank|-|2/years"
-vfy_chk "ブランク: 上限（120ヶ月・10年）が保存される" "$(v4 $DB $S3 新S3 blank null 120 months >/dev/null; ph $DB $S3)|$(v4 $DB $S3 新S3 blank null 10 years >/dev/null; ph $DB $S3)" "blank|-|120/months|blank|-|10/years"
+vfy_chk "ブランク: 10年超も保存できる（121ヶ月・11年・25年）と、上限（720ヶ月・60年）" "$(for c in "121 months" "11 years" "25 years" "720 months" "60 years"; do set -- $c; v4 $DB $S3 新S3 blank null $1 $2 >/dev/null; ph $DB $S3; done | tr '\n' ',')" "blank|-|121/months,blank|-|11/years,blank|-|25/years,blank|-|720/months,blank|-|60/years,"
 vfy_chk "ブランク: 未入力でも保存でき、0ヶ月にはならない（NULLのまま）" "$(v4 $DB $S3 新S3 blank >/dev/null; ph $DB $S3)" "blank|-|-/-"
-for c in "0 months" "-1 months" "121 months" "11 years" "0 years" "6 weeks" "6 null" "null months"; do set -- $c; reject "ブランク期間の不正値（$1 $2）" $S3 "blank period" blank null $1 $2; done
+for c in "0 months" "-1 months" "721 months" "61 years" "9999 months" "0 years" "6 weeks" "6 null" "null months"; do set -- $c; reject "ブランク期間の不正値（$1 $2）" $S3 "blank period" blank null $1 $2; done
 # ---- 立場の切り替え
 v4 $DB $S3 切替S3 blank null 6 months >/dev/null
 vfy_chk "切替: ブランク→現役でブランク期間が消える（ほかの旧3項目・プロフィールは不変）" "$(v4 $DB $S3 切替S3 experienced >/dev/null; ph $DB $S3)" "experienced|-|-/-"
@@ -87,6 +87,7 @@ vfy_chk "全体が取り消される: 失敗後、プロフィールも立場も
 vfy_has "DB: 卒業月5月を直接書くと拒否（トリガー）" "$(qn $DB "update public.stylist_profiles set graduation_ym='${NY}-05-01' where user_id='$S4'")" "graduation_month_invalid\|violates"
 vfy_has "DB: 立場を新卒にする更新で月が5月なら拒否" "$(qn $DB "update public.stylist_profiles set career_phase='experienced', graduation_ym=null where user_id='$S4'; update public.stylist_profiles set career_phase='new_graduate', graduation_ym='${NY}-05-01' where user_id='$S4'")" "graduation_month_invalid"
 vfy_has "DB: ブランク期間が不正（0ヶ月・単位だけ）は拒否（制約）" "$(qn $DB "update public.stylist_profiles set career_phase='blank', blank_period_value=0, blank_period_unit='months' where user_id='$S4'; update public.stylist_profiles set blank_period_unit='years' where user_id='$S4'")" "violates check constraint"
+vfy_has "DB: ブランク期間の上限超え（721ヶ月・61年）は拒否。11年は通る" "$(qn $DB "update public.stylist_profiles set career_phase='blank', blank_period_value=721, blank_period_unit='months' where user_id='$S4'")|$(qn $DB "update public.stylist_profiles set career_phase='blank', blank_period_value=61, blank_period_unit='years' where user_id='$S4'")|$(qn $DB "update public.stylist_profiles set career_phase='blank', blank_period_value=11, blank_period_unit='years' where user_id='$S4'; select 'OK11'")" "violates check constraint"
 vfy_has "DB: 現役にブランク期間が残る更新は、トリガーで消えて通る" "$(qn $DB "update public.stylist_profiles set career_phase='blank', blank_period_value=6, blank_period_unit='months' where user_id='$S4'; update public.stylist_profiles set career_phase='experienced' where user_id='$S4'; select coalesce(blank_period_value::text,'cleared') from public.stylist_profiles where user_id='$S4'")" "cleared"
 # 旧データ（卒業月5月）の行が、他の項目の更新で拒否されない
 DBb=${PFX}b; build $DBb; ap $DBb "$F72"; ap $DBb "$F73"; v3 $DBb $S1 旧S1 new_graduate $PAST5 completed $START obtained >/dev/null; ap $DBb "$F74"; ap $DBb "$F76"
@@ -109,6 +110,14 @@ vfy_chk "0077 巻き戻し: v3が再び実行できる（データ不変）" "$(
 # ---- 0076 の巻き戻し: 新データが失われるなら中止。データは削除しない
 echo "== 0076 巻き戻し"
 DBc=${PFX}c; build $DBc; ap $DBc "$F72"; ap $DBc "$F73"; ap $DBc "$F74"; ap $DBc "$F76"
+# 実行順のガード: 0077（v3を閉じる）適用済みなら、0076の巻き戻しは何も変更せず拒否される（先に0077を巻き戻す）
+ap $DBc "$F77"; GB=$(qn $DBc "select md5(string_agg(to_jsonb(sp)::text, ',' order by user_id)) from public.stylist_profiles sp")
+GOUT=$(psql -X -Atq -d $DBc -f "$R76" 2>&1)
+vfy_has "0077適用済みなら、0076の巻き戻しは拒否され、先に0077を巻き戻すよう案内する" "$GOUT" "Roll back 0077 first"
+vfy_chk "拒否後: v4は残り、v3は閉じたまま、v4で保存でき、データは不変（保存できなくなる事態にならない）" "$(qn $DBc "select (to_regprocedure('public.save_stylist_profile_v4(text,text,public.age_band,public.gender_type,text,text,integer,text,text[],public.employment_type,public.job_change_intent,public.salary_band,jsonb,text,public.profile_visibility,boolean,text,text[],date,text,text,date,integer,text)') is not null)::text||(select count(*) from information_schema.columns where table_name='stylist_profiles' and column_name like 'blank_period%')::text||(select md5(string_agg(to_jsonb(sp)::text, ',' order by user_id)) from public.stylist_profiles sp)")|$(okid "$(v4 $DBc $S4 保存可 experienced)")" "true2$GB|1"
+GB2=$(qn $DBc "select md5(string_agg(to_jsonb(sp)::text, ',' order by user_id)) from public.stylist_profiles sp")
+vfy_has "ブランク期間などほかの中止条件があっても、先に実行順のガードで拒否される（0077を先に戻す案内）" "$(v4 $DBc $S3 先S3 blank null 6 months >/dev/null; psql -X -Atq -d $DBc -f "$R76" 2>&1)" "Roll back 0077 first"
+ap $DBc "$R77"   # 先に0077を巻き戻す（v3の実行権が戻る）。以降は0076の巻き戻しの通常の判定を確認する
 v4 $DBc $S3 戻しS3 blank null 6 months >/dev/null; SB=$(qn $DBc "select md5(string_agg(to_jsonb(sp)::text, ',' order by user_id)) from public.stylist_profiles sp")
 vfy_has "ブランク期間が保存されていると、巻き戻しは中止される" "$(psql -X -Atq -d $DBc -f "$R76" 2>&1)" "rollback aborted"
 vfy_chk "中止後、データは何も削除・変更されない" "$(qn $DBc "select md5(string_agg(to_jsonb(sp)::text, ',' order by user_id)) from public.stylist_profiles sp")" "$SB"

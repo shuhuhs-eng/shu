@@ -4,8 +4,18 @@
 --   ・新卒で「卒業の区分」が空の行がある（0073の制約に戻すと違反する。区分を補うことはしない）
 --   ・卒業月が3月／10月の新卒の行は問題ないが、現役/ブランクの行に旧3項目が残っている行がある（0073の制約に戻すと違反する）
 --  事前に、運営者がそれらの行をどう扱うかを決めてから実行する（このSQLは決めない）。
+-- ★実行順のガード: 0077（v3を閉じる）が適用済みなら、何も変更する前に拒否する。先に 0077 を巻き戻してから、この巻き戻しを行うこと。
+--   （0077適用済みのままv4を削除すると、v3もv4も使えず、プロフィールを保存できなくなるため）
 begin;
 set local lock_timeout = '15s';
+-- 実行順のガード（何も変更する前・ロックを取る前に判定）
+do $$
+begin
+  if to_regprocedure('public.save_stylist_profile_v3(text,text,public.age_band,public.gender_type,text,text,integer,text,text[],public.employment_type,public.job_change_intent,public.salary_band,jsonb,text,public.profile_visibility,boolean,text,text[],date,text,text,date,text,date,text)') is null
+     or not has_function_privilege('authenticated', to_regprocedure('public.save_stylist_profile_v3(text,text,public.age_band,public.gender_type,text,text,integer,text,text[],public.employment_type,public.job_change_intent,public.salary_band,jsonb,text,public.profile_visibility,boolean,text,text[],date,text,text,date,text,date,text)'), 'execute') then
+    raise exception 'rollback aborted: 0077 is applied (save_stylist_profile_v3 is closed). Roll back 0077 first (0077_rollback.draft.sql), then roll back 0076.';
+  end if;
+end $$;
 lock table public.stylist_profiles in share row exclusive mode;
 do $$
 declare n int;

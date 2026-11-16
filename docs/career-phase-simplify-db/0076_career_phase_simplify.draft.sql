@@ -7,7 +7,8 @@
 --       固定値（例: 卒業予定）を裏で補って通すことはしない。
 --   ・ブランクありに「ブランク期間」（数値＋単位 ヶ月/年）を追加。任意。未入力を0ヶ月とは扱わない。数値と単位はセットで保存する。
 --       保存形式: blank_period_value(smallint, 1以上) + blank_period_unit('months'|'years')。「6ヶ月」「2年」をそのまま保存・表示する（月に換算して失わない）。
---       上限: ヶ月は 1〜120、年は 1〜10（どちらも最長10年。理由: 現場復帰を想定した期間として十分で、入力ミス（例: 600ヶ月）を弾くため）。
+--       上限（入力ミス対策だけの安全弁。長いブランクの人を登録できなくしないよう、広めにとる）: ヶ月は 1〜720、年は 1〜60（どちらも60年＝既存の経験年数の上限 60 と同じ）。
+--       理由: 現実のブランクは必ずこの範囲に収まり、桁の打ち間違い（例: 9999）だけを弾く。10年超（11年以上）も入力できる。
 -- 既存データの保護（この移行ではデータを一切更新しない）:
 --   ・卒業の区分・就業開始・免許の保存済みの値は、削除も変換もしない。新しい保存関数（v4）は、この3列を読み書きしない（触らない）。
 --   ・卒業月が 3月／10月 以外の既存データは、丸めない・変更しない。本人が次に保存するとき（新卒のまま）に選び直す。
@@ -47,10 +48,10 @@ alter table public.stylist_profiles add constraint stylist_profiles_blank_period
 alter table public.stylist_profiles add constraint stylist_profiles_blank_period_pair check (
   (blank_period_value is null and blank_period_unit is null)
   or (blank_period_value is not null and blank_period_unit is not null and blank_period_value >= 1
-      and ((blank_period_unit = 'months' and blank_period_value <= 120) or (blank_period_unit = 'years' and blank_period_value <= 10)))
+      and ((blank_period_unit = 'months' and blank_period_value <= 720) or (blank_period_unit = 'years' and blank_period_value <= 60)))
 );
 comment on column public.stylist_profiles.blank_period_value is 'ブランクありの期間の数値（任意。1以上の整数。blank_period_unit とセット）。未入力はNULL（0ヶ月ではない）。';
-comment on column public.stylist_profiles.blank_period_unit is 'ブランク期間の単位: months=ヶ月（1〜120） / years=年（1〜10）。NULLは未入力。';
+comment on column public.stylist_profiles.blank_period_unit is 'ブランク期間の単位: months=ヶ月（1〜720） / years=年（1〜60）。NULLは未入力。';
 
 -- 2. 整合制約を置き換える（旧データを壊さない緩和＋ブランク期間の整合）
 alter table public.stylist_profiles drop constraint if exists stylist_profiles_career_phase_consistent;
@@ -135,7 +136,7 @@ begin
     if (p_blank_period_value is null) <> (p_blank_period_unit is null) then raise exception 'blank period value and unit must be set together'; end if;
     if p_blank_period_value is not null then
       if p_blank_period_unit not in ('months','years') then raise exception 'invalid blank period unit'; end if;
-      v_max := (case when p_blank_period_unit = 'months' then 120 else 10 end);
+      v_max := (case when p_blank_period_unit = 'months' then 720 else 60 end);
       if p_blank_period_value < 1 or p_blank_period_value > v_max then raise exception 'blank period out of range'; end if;
     end if;
   end if;
