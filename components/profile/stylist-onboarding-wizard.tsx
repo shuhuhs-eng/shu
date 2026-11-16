@@ -7,7 +7,6 @@ import { initialAuthActionState } from "@/lib/auth/types";
 import { FormErrorBanner } from "@/components/auth/form-messages";
 import { TextField } from "@/components/auth/text-field";
 import { SelectField } from "@/components/profile/select-field";
-import { CheckboxGroupField } from "@/components/profile/checkbox-group-field";
 import { TextareaField } from "@/components/profile/textarea-field";
 import { AvatarUploader } from "@/components/profile/avatar-uploader";
 import { SnsLinksField } from "@/components/profile/sns-links-field";
@@ -25,6 +24,8 @@ import {
 import { BirthDateField } from "@/components/profile/birth-date-field";
 import { AgeDisplayModeField } from "@/components/profile/age-display-mode-field";
 import { CareerPhaseField } from "@/components/profile/career-phase-field";
+import { specialtiesError } from "@/lib/profile/specialties-rule";
+import { SpecialtiesField } from "@/components/profile/specialties-field";
 import { CAREER_PHASE_REQUIRED_MESSAGE } from "@/lib/student-diagnosis/career-phase";
 import type { ProfileFormInitialValues } from "@/components/profile/profile-form";
 
@@ -78,6 +79,7 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
   const [state, formAction, isPending] = useActionState(saveProfileAction, initialAuthActionState);
   const submittingRef = useRef(false);
   useEffect(() => { if (!isPending) submittingRef.current = false; }, [isPending, state]);
+  const [careerPhase, setCareerPhase] = useState<string>(initialValues.careerPhaseSupported ? (initialValues.careerPhase.phase ?? "") : "");
   const [step, setStep] = useState(1);
   const [stepError, setStepError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -123,7 +125,9 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
           if (bv && !/^[1-9]\d*$/.test(bv)) return "ブランク期間は、1以上の整数で入力してください。";
         }
       }
-      if (fd.getAll("specialties").length === 0) return "得意技術を1つ以上選択してください";
+      // 得意技術は、いまの立場が「新卒」のときだけ任意（0件で進める）。それ以外は1つ以上が必須。
+      const spErr = specialtiesError(get("careerPhase"), fd.getAll("specialties").length);
+      if (spErr) return spErr;
       if (!get("employmentType")) return "現在の雇用形態を選択してください";
       return null;
     }
@@ -281,7 +285,7 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
             )}
             {initialValues.careerPhaseSupported && (
               <>
-                <CareerPhaseField defaultValue={initialValues.careerPhase} errors={state.fieldErrors} />
+                <CareerPhaseField defaultValue={initialValues.careerPhase} errors={state.fieldErrors} onPhaseChange={setCareerPhase} />
                 <p className="text-[12px] leading-relaxed text-sub">この情報は現在サロン側には表示されません。</p>
               </>
             )}
@@ -303,12 +307,11 @@ export function StylistOnboardingWizard({ userId, initialValues }: Props) {
               defaultValue={initialValues.currentPosition}
               errors={state.fieldErrors?.currentPosition}
             />
-            <CheckboxGroupField
-              name="specialties"
-              label="得意技術"
+            <SpecialtiesField
               options={SPECIALTY_OPTIONS}
               defaultValues={initialValues.specialties}
               errors={state.fieldErrors?.specialties}
+              phase={careerPhase}
             />
             <SelectField
               id="employmentType"

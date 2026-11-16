@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { profileFormSchema } from "@/lib/validation/profile";
+import { profileFormSchema, profileFormSchemaSpecialtiesOptional } from "@/lib/validation/profile";
+import { isSpecialtiesOptional, specialtiesError } from "@/lib/profile/specialties-rule";
 import { readOwnAgeDisplayMode } from "@/lib/profile/birth-date";
 import { parseCareerPhaseInput, readOwnCareerPhase, ymToDate } from "@/lib/student-diagnosis/career-phase";
 import { SNS_PLATFORMS } from "@/lib/validation/profile-options";
@@ -70,7 +71,9 @@ export async function saveProfileAction(
     visibility: formData.get("visibility"),
   };
 
-  const parsed = profileFormSchema.safeParse(raw);
+  // 得意技術は「いまの立場＝新卒」のときだけ任意。それ以外は従来どおり1つ以上が必須（下の保存直前の確認でも再確認する）。
+  const schema = isSpecialtiesOptional(formData.get("careerPhase")) ? profileFormSchemaSpecialtiesOptional : profileFormSchema;
+  const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     return {
       error: "入力内容をご確認ください。",
@@ -147,6 +150,12 @@ export async function saveProfileAction(
       p_career_phase: c.phase, p_graduation_ym: ymToDate(c.graduationYm),
       p_blank_period_value: c.blankPeriod?.value ?? null, p_blank_period_unit: c.blankPeriod?.unit ?? null,
     };
+  }
+
+  // 得意技術0件を許すのは、保存される立場が「新卒」のときだけ。立場を保存できない（0071未適用）場合も必須のまま。
+  const specialtiesMsg = specialtiesError(careerArgs?.p_career_phase, v.specialties.length);
+  if (specialtiesMsg) {
+    return { error: "入力内容をご確認ください。", fieldErrors: { specialties: [specialtiesMsg] } };
   }
 
   const common = {

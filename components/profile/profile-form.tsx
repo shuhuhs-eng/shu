@@ -7,7 +7,6 @@ import { initialAuthActionState } from "@/lib/auth/types";
 import { SaveFeedback } from "@/components/profile/save-feedback";
 import { TextField } from "@/components/auth/text-field";
 import { SelectField } from "@/components/profile/select-field";
-import { CheckboxGroupField } from "@/components/profile/checkbox-group-field";
 import { TextareaField } from "@/components/profile/textarea-field";
 import { AvatarUploader } from "@/components/profile/avatar-uploader";
 import { SnsLinksField } from "@/components/profile/sns-links-field";
@@ -16,6 +15,7 @@ import { BirthDateField } from "@/components/profile/birth-date-field";
 import { AgeDisplayModeField } from "@/components/profile/age-display-mode-field";
 import { VisibilityField } from "@/components/profile/visibility-field";
 import { CareerPhaseField } from "@/components/profile/career-phase-field";
+import { SpecialtiesField } from "@/components/profile/specialties-field";
 import type { CareerPhaseValue } from "@/lib/student-diagnosis/career-phase";
 import { profileFieldsKey } from "@/lib/profile/fields-key";
 import {
@@ -86,6 +86,7 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(saveProfileAction, initialAuthActionState);
   // 成功メッセージを消した（再編集を始めた）時点の state。同じ state の成功メッセージは再表示しない。
+  const [careerPhase, setCareerPhase] = useState<string>(initialValues.careerPhaseSupported ? (initialValues.careerPhase.phase ?? "") : "");
   const [dismissedFor, setDismissedFor] = useState<unknown>(null);
   const submittingRef = useRef(false);
 
@@ -175,12 +176,11 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
               defaultValue={initialValues.currentPosition}
               errors={state.fieldErrors?.currentPosition}
             />
-            <CheckboxGroupField
-              name="specialties"
-              label="得意技術"
+            <SpecialtiesField
               options={SPECIALTY_OPTIONS}
               defaultValues={initialValues.specialties}
               errors={state.fieldErrors?.specialties}
+              phase={careerPhase}
             />
             <SelectField
               id="employmentType"
@@ -259,7 +259,7 @@ export function ProfileForm({ mode, userId, initialValues }: Props) {
           {initialValues.careerPhaseSupported && (
             <section className="space-y-4">
               <h2 className="eyebrow">いまの立場</h2>
-              <CareerPhaseField defaultValue={initialValues.careerPhase} errors={state.fieldErrors} />
+              <CareerPhaseField defaultValue={initialValues.careerPhase} errors={state.fieldErrors} onPhaseChange={setCareerPhase} />
               <p className="text-[12px] leading-relaxed text-sub">この情報は現在サロン側には表示されません。診断の採点・変更回数・マッチングの計算には影響しません。</p>
             </section>
           )}

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { parseExperienceYears } from "@/lib/profile/experience-years";
 import { validateBirthDate } from "@/lib/profile/birth-date";
 import { SPECIALTY_OPTIONS, VALUE_PRIORITY_OPTIONS, SNS_PLATFORMS } from "./profile-options";
+import { SPECIALTIES_REQUIRED_MESSAGE } from "@/lib/profile/specialties-rule";
 
 const ageBandEnum = z.enum([
   "under_20", "20_24", "25_29", "30_34", "35_39", "40_44", "45_plus", "prefer_not_to_say",
@@ -36,7 +37,13 @@ const snsLinkSchema = z.object({
  * 個人情報(氏名・年代・性別) / 公開プロフィール(公開名・職務情報等) / 設定(公開範囲・スカウト受信)
  * を1フォームで検証するが、保存先テーブルは saveProfileAction 側で分離する。
  */
-export const profileFormSchema = z.object({
+function specialtiesSchema(required: boolean) {
+  const base = z.array(z.enum(SPECIALTY_OPTIONS));
+  return required ? base.min(1, SPECIALTIES_REQUIRED_MESSAGE) : base;
+}
+
+function buildProfileFormSchema(specialties: ReturnType<typeof specialtiesSchema>) {
+  return z.object({
   // --- 公開プロフィール（stylist_profiles） ---
   publicName: z.string().trim().min(1, "公開名を入力してください").max(40, "公開名は40文字以内で入力してください"),
   prefecture: z.string().trim().min(1, "都道府県を選択してください"),
@@ -51,9 +58,7 @@ export const profileFormSchema = z.object({
     return r.value;
   }),
   currentPosition: z.string().trim().max(60, "60文字以内で入力してください").optional().or(z.literal("")),
-  specialties: z
-    .array(z.enum(SPECIALTY_OPTIONS))
-    .min(1, "得意技術を1つ以上選択してください"),
+  specialties,
   employmentType: employmentTypeEnum,
   jobChangeIntent: jobChangeIntentEnum,
   // SNSリンク（現在はInstagramのみUIに表示。0件=未入力も許可する）。
@@ -108,6 +113,11 @@ export const profileFormSchema = z.object({
 
   // --- 設定（user_settings / stylist_profiles.visibility） ---
   visibility: visibilityEnum,
-});
+  });
+}
+
+/** 得意技術: 既定は1つ以上が必須。「いまの立場＝新卒」のときだけ任意（0件＝空配列で保存できる。lib/profile/specialties-rule.ts）。 */
+export const profileFormSchema = buildProfileFormSchema(specialtiesSchema(true));
+export const profileFormSchemaSpecialtiesOptional = buildProfileFormSchema(specialtiesSchema(false));
 
 export type ProfileFormValues = z.infer<typeof profileFormSchema>;

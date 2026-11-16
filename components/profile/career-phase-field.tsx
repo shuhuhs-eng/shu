@@ -17,7 +17,7 @@ const input = "mt-1 min-h-[44px] w-full rounded-xl border border-line bg-surface
  * ・ブランクあり: ブランク期間（任意）。数値（正の整数）＋単位（ヶ月／年）。空欄は未入力（0ヶ月ではない）。
  * 送信名: careerPhase / graduationYear / graduationMonth / blankPeriodValue / blankPeriodUnit
  */
-export function CareerPhaseField({ defaultValue, errors }: { defaultValue: CareerPhaseValue; errors?: CareerPhaseErrors | Record<string, string[] | undefined> }) {
+export function CareerPhaseField({ defaultValue, errors, onPhaseChange }: { defaultValue: CareerPhaseValue; errors?: CareerPhaseErrors | Record<string, string[] | undefined>; onPhaseChange?: (phase: string) => void }) {
   const [phase, setPhase] = useState<string>(defaultValue.phase ?? "");
   const pick = (k: string): string | undefined => {
     const v = (errors as Record<string, unknown> | undefined)?.[k];
@@ -39,7 +39,7 @@ export function CareerPhaseField({ defaultValue, errors }: { defaultValue: Caree
       <div className="grid gap-2">
         {CAREER_PHASES.map((p) => (
           <label key={p} className="flex min-h-[44px] items-center gap-2 text-[14px] text-ink">
-            <input type="radio" name="careerPhase" value={p} checked={phase === p} onChange={() => setPhase(p)} /> {CAREER_PHASE_LABEL[p]}
+            <input type="radio" name="careerPhase" value={p} checked={phase === p} onChange={() => { setPhase(p); onPhaseChange?.(p); }} /> {CAREER_PHASE_LABEL[p]}
           </label>
         ))}
       </div>
