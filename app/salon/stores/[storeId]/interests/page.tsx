@@ -96,6 +96,7 @@ export default async function StoreInterestsPage({ params }: Props) {
               <StoreInterestCard
                 storeId={storeId}
                 recruitingPaused={recruitingPaused}
+                canManage={canManageHiring}
                 interest={interest}
                 ageInfo={ageInfos[interest.stylist_user_id] ?? null}
                 latestOffer={latestOfferByStylist.get(interest.stylist_user_id) ?? null}

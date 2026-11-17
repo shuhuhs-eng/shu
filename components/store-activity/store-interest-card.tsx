@@ -16,6 +16,8 @@ type Props = {
   latestOffer: StoreSalaryOffer | null;
   /** 新しい採用活動を受け付けていない店舗か（給与オファーの新規作成を止める）。 */
   recruitingPaused?: boolean;
+  /** 給与条件の提示・年齢開示依頼ができる権限か（閲覧のみの担当者は false。表示上のヒント。最終防衛はDBの can_manage_store_hiring）。 */
+  canManage?: boolean;
   /** 年齢情報（get_store_stylist_age_infos）。無い（未対応・取得失敗）ときは年齢を表示しない。 */
   ageInfo?: StoreAgeInfo | null;
 };
@@ -35,7 +37,7 @@ const VERIFICATION_LABELS: Record<string, string> = {
  * 給与オファーのフォームは、DB側(create_salary_offer_v2)の条件と同じ
  * 「実績に基づくオファーを希望」かつ「提出資料の確認済み」の美容師にだけ表示する。
  */
-export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPaused = false, ageInfo = null }: Props) {
+export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPaused = false, canManage = true, ageInfo = null }: Props) {
   const ageLabel = ageInfo && ageInfo.age_request_status !== "unavailable" ? formatAgeLabel(ageInfo) : null;
   const mp = interest.match_profile;
   const match = interest.match;
@@ -68,7 +70,7 @@ export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPa
         </div>
       </div>
 
-      {ageInfo && <AgeRequestControl storeId={storeId} stylistUserId={interest.stylist_user_id} status={ageInfo.age_request_status} recruitingPaused={recruitingPaused} />}
+      {ageInfo && <AgeRequestControl storeId={storeId} stylistUserId={interest.stylist_user_id} status={ageInfo.age_request_status} recruitingPaused={recruitingPaused} canManage={canManage} />}
 
       {interest.desired_work_location && (
         <p className="mt-3 text-[12.5px] text-charcoal">希望勤務地: {interest.desired_work_location}</p>
@@ -164,7 +166,11 @@ export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPa
 
       {interest.bio && <p className="mt-3 text-[12.5px] leading-relaxed text-charcoal">{interest.bio}</p>}
 
-      {canOffer ? (
+      {canOffer && !canManage ? (
+        <p className="mt-3 rounded-lg bg-surface2 px-3 py-2 text-[10.5px] leading-relaxed text-sub">
+          閲覧のみの権限のため、給与条件は提示できません。提示が必要な場合は、店長・採用担当・管理者にご依頼ください。
+        </p>
+      ) : canOffer ? (
         <SalonOfferForm stylistUserId={interest.stylist_user_id} existingOffer={latestOffer} storeId={storeId} recruitingPaused={recruitingPaused} salaryOfferPaused={isSalaryOfferPresentationPaused()} />
       ) : (
         <p className="mt-3 rounded-lg bg-surface2 px-3 py-2 text-[10.5px] leading-relaxed text-sub">

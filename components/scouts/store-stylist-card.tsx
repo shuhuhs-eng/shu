@@ -22,6 +22,8 @@ type Props = {
   latestScout: LatestScout | null;
   /** 新しい採用活動を受け付けていない店舗か（trueなら新規Scoutの送信を止める。最終防衛はDB）。 */
   recruitingPaused?: boolean;
+  /** スカウト送信・年齢開示依頼ができる権限か（閲覧のみの担当者は false。表示上のヒント。最終防衛はDBの can_manage_store_hiring）。 */
+  canManage?: boolean;
   /** プロフィール画像の署名付きURL（サロン側で発行。画像が無い／取得できないときはnull）。 */
   avatarUrl?: string | null;
 };
@@ -42,7 +44,7 @@ type Props = {
  *     送信自体はsend_scout_v2内部のquotaで保護され、枠超過時は専用の
  *     メッセージを表示する。
  */
-export function StoreStylistCard({ storeId, stylist, match, latestScout, recruitingPaused = false, avatarUrl = null }: Props) {
+export function StoreStylistCard({ storeId, stylist, match, latestScout, recruitingPaused = false, canManage = true, avatarUrl = null }: Props) {
   const [message, setMessage] = useState("");
   const [templateType, setTemplateType] = useState<ScoutTemplateType | null>(null);
   const [step, setStep] = useState<"compose" | "confirm-resend">("compose");
@@ -107,7 +109,7 @@ export function StoreStylistCard({ storeId, stylist, match, latestScout, recruit
         )}
       </div>
 
-      <AgeRequestControl storeId={storeId} stylistUserId={stylist.stylist_user_id} status={stylist.age_request_status} recruitingPaused={recruitingPaused} />
+      <AgeRequestControl storeId={storeId} stylistUserId={stylist.stylist_user_id} status={stylist.age_request_status} recruitingPaused={recruitingPaused} canManage={canManage} />
 
       {match?.available && (
         <details className="mt-4 border-t border-line pt-3">
@@ -146,6 +148,11 @@ export function StoreStylistCard({ storeId, stylist, match, latestScout, recruit
         </div>
       )}
 
+      {!canManage ? (
+        <p className="mt-4 rounded-lg bg-surface2 px-3 py-2 text-[11.5px] leading-relaxed text-sub">
+          閲覧のみの権限のため、スカウトは送れません。送信が必要な場合は、店長・採用担当・管理者にご依頼ください。
+        </p>
+      ) : (
       <div className="mt-4 border-t border-line pt-4">
         <p className="eyebrow mb-2">スカウトを送る</p>
 
@@ -199,6 +206,7 @@ export function StoreStylistCard({ storeId, stylist, match, latestScout, recruit
 
         {result && <p className="mt-2 text-[11.5px] text-charcoal">{result}</p>}
       </div>
+      )}
     </div>
   );
 }

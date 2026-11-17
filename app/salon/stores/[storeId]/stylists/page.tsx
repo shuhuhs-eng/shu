@@ -6,6 +6,7 @@ import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { calculateStoreStylistMatch } from "@/lib/matching/actions";
 import { getStoreScouts, getStoreScoutQuota } from "@/lib/store-activity/actions";
 import { getStoreRecruitingAccess } from "@/lib/contracts/recruiting-access-actions";
+import { canManageStoreHiringHint } from "@/lib/hiring/permissions";
 import { RECRUITING_PAUSED_MESSAGE } from "@/lib/contracts/recruiting-access";
 import { ScoutQuotaCard } from "@/components/store-activity/scout-quota-card";
 import { StoreStylistCard } from "@/components/scouts/store-stylist-card";
@@ -97,6 +98,8 @@ export default async function StoreStylistsPage({ params }: Props) {
 
   // 新しい採用活動を受け付けていない店舗では、新規Scoutの送信を事前に止める（最終防衛はDB）。
   const { paused: recruitingPaused } = await getStoreRecruitingAccess(storeId);
+  // 閲覧のみの担当者には、スカウト送信・年齢開示依頼の操作を出さない（表示上のヒント。最終防衛はDB）。
+  const canManage = await canManageStoreHiringHint(supabase, user.id, storeId, store.organization_id);
 
   const rankedStylists = stylists
     .map((stylist, index) => ({ stylist, match: matches[index], originalIndex: index }))
@@ -142,6 +145,7 @@ export default async function StoreStylistsPage({ params }: Props) {
               key={stylist.stylist_user_id}
               storeId={storeId}
               recruitingPaused={recruitingPaused}
+              canManage={canManage}
               stylist={stylist}
               avatarUrl={avatarUrlByStylist.get(stylist.stylist_user_id) ?? null}
               match={match}
