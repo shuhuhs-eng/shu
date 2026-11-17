@@ -5,6 +5,10 @@ import { getSalonStoreProfileFormInitialValues } from "@/lib/salon/store-get-ini
 import { SalonStoreProfileForm } from "@/components/salon-profile/salon-store-profile-form";
 import { SalonStoreAssets } from "@/components/salon-profile/salon-store-assets";
 import { getSalonStoreAssetsInitialValues } from "@/lib/salon/assets-initial-values";
+import { loadStoreAssets } from "@/lib/store-assets/load";
+import { StoreAssetsEditor } from "@/components/store-assets/store-assets-editor";
+import { StoreAssetsSection } from "@/components/store-assets/store-assets-section";
+import { canManageStoreHiringHint } from "@/lib/hiring/permissions";
 
 type Props = {
   params: Promise<{ storeId: string }>;
@@ -31,7 +35,7 @@ export default async function SalonStoreProfilePage({ params }: Props) {
 
   const { data: store, error: storeError } = await supabase
     .from("salon_stores")
-    .select("store_name")
+    .select("store_name, organization_id")
     .eq("id", storeId)
     .maybeSingle();
   if (storeError) logError("salonStoreProfilePage.store", storeError);
@@ -42,7 +46,15 @@ export default async function SalonStoreProfilePage({ params }: Props) {
   const initialValues = loaded.initialValues;
   // 取得に失敗したときは、空のフォームを出さない（保存すると既存の内容を上書きしてしまうため）。
   const blocked = loadError || storeError;
-  const assets = user && !blocked ? await getSalonStoreAssetsInitialValues(supabase, user.id) : null;
+  // 閲覧のみの担当者は、プロフィール・ロゴ・写真・リンクの保存・アップロード・削除ができない（表示上のヒント。最終防衛はDB）。
+  const canManage =
+    !!user && !!store && (await canManageStoreHiringHint(supabase, user.id, storeId, store.organization_id));
+  // ロゴ・写真・リンクは、店舗別（0081）が使えるときは店舗別を、未適用のときは従来のアカウント共通を使う。
+  const storeAssets = !blocked ? await loadStoreAssets(supabase, storeId, "staff") : null;
+  const legacyAssets =
+    user && !blocked && canManage && storeAssets?.status === "unavailable"
+      ? await getSalonStoreAssetsInitialValues(supabase, user.id)
+      : null;
 
   return (
     <main className="mx-auto max-w-[560px] px-5 py-12">
@@ -80,21 +92,46 @@ export default async function SalonStoreProfilePage({ params }: Props) {
             </p>
           )}
 
-          <div className="mt-6">
-            <SalonStoreProfileForm
-              key={storeId}
-              storeId={storeId}
-              initialValues={initialValues}
-              employeeSizeOptions={employeeSizeOptions}
-            />
-          </div>
+          {canManage ? (
+            <div className="mt-6">
+              <SalonStoreProfileForm
+                key={storeId}
+                storeId={storeId}
+                initialValues={initialValues}
+                employeeSizeOptions={employeeSizeOptions}
+              />
+            </div>
+          ) : (
+            <p className="mt-6 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-ink">
+              この店舗では閲覧のみの権限のため、店舗プロフィールの保存はできません。変更が必要な場合は、店長・採用担当・管理者にご依頼ください。現在の内容は「プレビュー」で確認できます。
+            </p>
+          )}
 
           <div className="mt-10 border-t border-line pt-8">
             <h2 className="font-serif text-xl font-bold text-ink">ロゴ・写真・リンク</h2>
-            {assets && !assets.loadError && user ? (
-              <div className="mt-5">
-                <SalonStoreAssets key={storeId} userId={user.id} initialValues={assets.initialValues} />
-              </div>
+            {storeAssets?.status === "ok" ? (
+              canManage ? (
+                <div className="mt-5">
+                  <StoreAssetsEditor key={storeId} storeId={storeId} storeName={store?.store_name ?? "この店舗"} initial={storeAssets.assets} />
+                </div>
+              ) : (
+                <div className="mt-2">
+                  <p className="text-[12.5px] leading-relaxed text-sub">閲覧のみの権限のため、ロゴ・写真・リンクの追加・差し替え・削除はできません。</p>
+                  <StoreAssetsSection assets={storeAssets.assets} />
+                </div>
+              )
+            ) : storeAssets?.status === "unavailable" ? (
+              canManage && legacyAssets && !legacyAssets.loadError && user ? (
+                <div className="mt-5">
+                  <SalonStoreAssets key={storeId} userId={user.id} initialValues={legacyAssets.initialValues} />
+                </div>
+              ) : canManage ? (
+                <p className="mt-4 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-ink">
+                  ロゴ・写真・リンクを読み込めませんでした。登録済みの内容を上書きしないよう、この欄は表示していません。画面を更新してもう一度お試しください。
+                </p>
+              ) : (
+                <p className="mt-4 text-[12.5px] leading-relaxed text-sub">閲覧のみの権限のため、ロゴ・写真・リンクの編集はできません。</p>
+              )
             ) : (
               <p className="mt-4 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-ink">
                 ロゴ・写真・リンクを読み込めませんでした。登録済みの内容を上書きしないよう、この欄は表示していません。画面を更新してもう一度お試しください。

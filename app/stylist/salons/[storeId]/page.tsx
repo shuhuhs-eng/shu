@@ -7,6 +7,7 @@ import { getPublicSalonStoreDetail } from "@/lib/store-activity/actions";
 import { MATCH_AXIS_LABELS } from "@/lib/matching/types";
 import { StoreDetailView } from "@/components/stylist-salons/store-detail-view";
 import { StoreInterestButton } from "@/components/stylist-salons/store-interest-button";
+import { loadStoreAssets } from "@/lib/store-assets/load";
 
 type Props = {
   params: Promise<{ storeId: string }>;
@@ -57,6 +58,8 @@ export default async function StylistStoreDetailPage({ params }: Props) {
     employeeSizeLabel = sizeRow?.label ?? null;
   }
 
+  // 店舗別のロゴ・写真・リンク（0081。未適用・取得失敗のときは表示しないだけで、画面は従来どおり）。
+  const assetsResult = await loadStoreAssets(supabase, store.store_id, "stylist");
   const match = await calculateStylistStoreMatch(store.store_id);
 
   // 「話を聞いてみたい」の送信済み判定。stylist_salon_interestsには美容師本人の
@@ -86,6 +89,7 @@ export default async function StylistStoreDetailPage({ params }: Props) {
       <StoreDetailView
         store={store}
         employeeSizeLabel={employeeSizeLabel}
+        assets={assetsResult.status === "ok" ? assetsResult.assets : null}
         matchSection={
         <section className="mt-5 rounded-2xl border border-line bg-surface p-6">
           <p className="eyebrow mb-3 text-center">あなたらしさ × サロンらしさ</p>

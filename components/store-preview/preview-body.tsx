@@ -1,17 +1,20 @@
 import Link from "next/link";
 import { StoreDetailView } from "@/components/stylist-salons/store-detail-view";
 import type { StorePreviewResult } from "@/lib/store-preview/load";
+import type { StoreAssetsData } from "@/lib/store-assets/parse";
 
 type Props = {
   storeId: string;
   result: Extract<StorePreviewResult, { status: "ok" } | { status: "no_profile" }>;
+  /** 店舗別のロゴ・写真・リンク（0081）。無い・未適用のときは null。 */
+  assets?: StoreAssetsData | null;
 };
 
 /**
  * 「美容師からの見え方（プレビュー）」の本体（表示のみ）。取得・認可は page 側で済んでいる。
  * 美容師向け店舗詳細と同じ表示部品（StoreDetailView）を使う。操作・副作用は持たない。
  */
-export function StorePreviewBody({ storeId, result }: Props) {
+export function StorePreviewBody({ storeId, result, assets = null }: Props) {
   const editHref = `/salon/stores/${storeId}/profile`;
   const storeName = result.status === "ok" ? result.store.store_name : result.storeName;
 
@@ -66,6 +69,7 @@ export function StorePreviewBody({ storeId, result }: Props) {
         <StoreDetailView
           store={result.store}
           employeeSizeLabel={result.employeeSizeLabel}
+          assets={assets}
           matchSection={
             <section className="mt-5 rounded-2xl border border-line bg-surface p-6">
               <p className="eyebrow mb-3 text-center">あなたらしさ × サロンらしさ</p>

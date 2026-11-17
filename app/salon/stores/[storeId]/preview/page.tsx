@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { loadStorePreview } from "@/lib/store-preview/load";
+import { loadStoreAssets } from "@/lib/store-assets/load";
 import { StorePreviewBody } from "@/components/store-preview/preview-body";
 import { CultureResultLoadError } from "@/components/salon-culture/culture-result-load-error";
 
@@ -31,5 +32,7 @@ export default async function StorePreviewPage({ params }: Props) {
     return <CultureResultLoadError retryHref={`/salon/stores/${storeId}/preview`} backHref="/salon/mypage" />;
   }
 
-  return <StorePreviewBody storeId={storeId} result={result} />;
+  // 店舗別のロゴ・写真・リンク（0081）。美容師向け画面と同じ表示部品で見せる（未適用・取得失敗は表示しないだけ）。
+  const assetsResult = await loadStoreAssets(supabase, storeId, "staff");
+  return <StorePreviewBody storeId={storeId} result={result} assets={assetsResult.status === "ok" ? assetsResult.assets : null} />;
 }

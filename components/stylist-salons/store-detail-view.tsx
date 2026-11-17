@@ -1,6 +1,8 @@
 import { deriveSalonTypes, SALON_TYPE_CONTENT } from "@/lib/salon-culture/salon-culture-types";
 import { SALON_VALUE_PRIORITY_OPTIONS } from "@/lib/validation/profile-options";
 import type { PublicSalonStoreDetail } from "@/lib/store-activity/types";
+import { StoreAssetsSection } from "@/components/store-assets/store-assets-section";
+import type { StoreAssetsData } from "@/lib/store-assets/parse";
 
 /**
  * 美容師向け店舗詳細の表示部品（/stylist/salons/[storeId] と、サロン側の
@@ -29,9 +31,11 @@ type Props = {
   store: StoreDetailViewData;
   employeeSizeLabel: string | null;
   matchSection: React.ReactNode;
+  /** 店舗別のロゴ・写真・リンク（0081）。無い・未適用のときは null / 省略（何も表示しない）。 */
+  assets?: StoreAssetsData | null;
 };
 
-export function StoreDetailView({ store, employeeSizeLabel, matchSection }: Props) {
+export function StoreDetailView({ store, employeeSizeLabel, matchSection, assets = null }: Props) {
   const culture = store.culture;
   const classification = culture?.culture_axes ? deriveSalonTypes(culture.culture_axes) : null;
   const location = [store.prefecture, store.city].filter(Boolean).join(" ");
@@ -63,6 +67,8 @@ export function StoreDetailView({ store, employeeSizeLabel, matchSection }: Prop
           <p className="mt-4 text-[13.5px] leading-relaxed text-charcoal">{store.culture_description}</p>
         )}
       </section>
+
+      <StoreAssetsSection assets={assets} />
 
       {culture?.comment && (
         <section className="mt-5 rounded-2xl border border-line bg-surface p-6">

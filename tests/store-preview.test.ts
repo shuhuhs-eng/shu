@@ -229,7 +229,7 @@ test("ロゴ・写真・リンクは店舗プロフィール編集画面に統�
   assert.match(page, /SalonStoreAssets/);
   assert.match(page, /key=\{storeId\}/);
   // 取得に失敗したときは、空の初期値でロゴを保存して消してしまわないよう、編集欄を出さない
-  assert.match(page, /assets && !assets\.loadError/);
+  assert.match(page, /legacyAssets && !legacyAssets\.loadError/);
   const old = readFileSync("app/salon/profile/page.tsx", "utf8");
   assert.match(old, /storeLinks\.length === 1/);
   assert.match(old, /redirect\(`\/salon\/stores\/\$\{storeLinks\[0\]\.id\}\/profile`\)/);
