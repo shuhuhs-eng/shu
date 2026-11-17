@@ -9,6 +9,8 @@ import { activeCount, countByStatus, getCompanyHiringScope, loadCompanyHiring } 
 import { canViewCompanyBilling } from "@/lib/billing/permissions";
 import { getCompanySuccessFees } from "@/lib/billing/actions";
 import { summarizeFees } from "@/lib/billing/summary";
+import { StoreDirectory, type StoreDirectoryItem } from "@/components/salon-company/store-directory";
+import { logError } from "@/lib/security/log";
 
 /**
  * 会社ダッシュボード（法人・複数店舗対応 Phase 1）。
@@ -104,6 +106,32 @@ export default async function SalonCompanyPage() {
     : { data: [] };
   const orgNameById = new Map((orgs ?? []).map((o) => [o.id, o.name]));
 
+  // 店舗ごとの所在地・プロフィールの状態（既存の店舗プロフィールから。RLSで見られる店舗の分だけ返る）。
+  // 取得に失敗したときは所在地・状態を出さない（「未作成」と誤表示しない）。
+  let profileByStore: Map<string, { prefecture: string | null; city: string | null; visibility: string }> | null = null;
+  if (storeList.length > 0) {
+    const { data: sps, error: spError } = await supabase
+      .from("salon_store_profiles")
+      .select("store_id, prefecture, city, visibility")
+      .in(
+        "store_id",
+        storeList.map((s) => s.id),
+      );
+    if (spError) logError("salonCompany.storeProfiles", spError);
+    else profileByStore = new Map((sps ?? []).map((sp) => [sp.store_id, sp]));
+  }
+  const directoryItems: StoreDirectoryItem[] = storeList.map((store) => {
+    const sp = profileByStore?.get(store.id) ?? null;
+    return {
+      id: store.id,
+      name: store.store_name,
+      organizationName: orgNameById.get(store.organization_id) ?? "会社情報なし",
+      location: sp ? [sp.prefecture, sp.city].filter(Boolean).join(" ") || null : null,
+      usageActive: store.usage_status === "active",
+      profileState: profileByStore === null ? null : !sp ? "none" : sp.visibility === "PUBLIC" ? "public" : "private",
+    };
+  });
+
   return (
     <main className="mx-auto max-w-[560px] px-5 py-12">
       <div className="mb-7 flex items-center gap-2.5">
@@ -115,8 +143,23 @@ export default async function SalonCompanyPage() {
       <p className="eyebrow mb-2">会社・店舗管理</p>
       <h1 className="font-serif text-2xl font-bold text-ink">会社ダッシュボード</h1>
       <p className="mt-3 text-[13px] leading-relaxed text-charcoal">
-        アクセスできる店舗の一覧です。店舗を選ぶとその店舗のワークスペースへ移動します。
+        所属している店舗の一覧です。店舗を選ぶと、その店舗専用のダッシュボードへ移動します。
       </p>
+
+      <section className="mt-6" aria-labelledby="store-list-heading">
+        <h2 id="store-list-heading" className="mb-3 font-serif text-[17px] font-bold text-ink">
+          店舗一覧
+        </h2>
+        {storeList.length === 0 ? (
+          <p className="py-6 text-center text-[13px] text-sub">アクセスできる店舗がありません。</p>
+        ) : (
+          <StoreDirectory stores={directoryItems} />
+        )}
+      </section>
+
+      {(showHiringDashboard || showBilling) && (
+        <h2 className="mt-10 font-serif text-[17px] font-bold text-ink">会社全体の管理</h2>
+      )}
 
       {showHiringDashboard && (
         <Link
@@ -189,32 +232,6 @@ export default async function SalonCompanyPage() {
             </section>
           )}
         </>
-      )}
-
-      {storeList.length === 0 ? (
-        <p className="mt-8 text-center text-[13px] text-sub">アクセスできる店舗がありません。</p>
-      ) : (
-        <div className="mt-8 space-y-3">
-          {storeList.map((store) => (
-            <Link
-              key={store.id}
-              href={`/salon/stores/${store.id}`}
-              className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-5"
-            >
-              <div className="min-w-0">
-                <p className="text-[11px] text-sub">{orgNameById.get(store.organization_id) ?? "会社情報なし"}</p>
-                <h2 className="mt-1 truncate font-serif text-[16px] font-bold text-ink">{store.store_name}</h2>
-              </div>
-              <span
-                className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold ${
-                  store.usage_status === "active" ? "bg-[#EAF3EC] text-[#2E8B7F]" : "bg-surface2 text-sub"
-                }`}
-              >
-                {store.usage_status === "active" ? "利用中" : "未利用"}
-              </span>
-            </Link>
-          ))}
-        </div>
       )}
 
       <Link href="/salon/mypage" className="mt-8 block text-center text-[13px] text-sub underline">

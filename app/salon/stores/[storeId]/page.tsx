@@ -61,7 +61,7 @@ export default async function StoreWorkspacePage({ params }: Props) {
         <hr className="h-px flex-1 border-0 bg-line" />
       </div>
 
-      <p className="eyebrow mb-2">店舗ワークスペース</p>
+      <p className="eyebrow mb-2">店舗ダッシュボード</p>
       <h1 className="font-serif text-2xl font-bold text-ink">{store.store_name}</h1>
       <p className="mt-2 text-[13px] text-sub">
         {store.usage_status === "active" ? "Beauty Reach利用中" : "未利用"}
@@ -87,6 +87,13 @@ export default async function StoreWorkspacePage({ params }: Props) {
 
       <div className="mt-6 space-y-3">
         <Link
+          href={`/salon/stores/${storeId}/preview`}
+          className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+        >
+          <span className="font-serif text-[15px] font-bold text-ink">プレビュー</span>
+          <span className="text-[12px] text-sub">美容師からの見え方 ›</span>
+        </Link>
+        <Link
           href={`/salon/stores/${storeId}/stylists`}
           className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
         >
@@ -97,7 +104,7 @@ export default async function StoreWorkspacePage({ params }: Props) {
           href={`/salon/stores/${storeId}/interests`}
           className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
         >
-          <span className="font-serif text-[15px] font-bold text-ink">話を聞きたい美容師</span>
+          <span className="font-serif text-[15px] font-bold text-ink">興味を持ってくれた美容師</span>
           <span className="text-[12px] text-sub">確認・条件を提示 ›</span>
         </Link>
         <Link
@@ -125,8 +132,8 @@ export default async function StoreWorkspacePage({ params }: Props) {
           href={`/salon/stores/${storeId}/profile`}
           className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
         >
-          <span className="font-serif text-[15px] font-bold text-ink">店舗プロフィール</span>
-          <span className="text-[12px] text-sub">編集する ›</span>
+          <span className="font-serif text-[15px] font-bold text-ink">店舗プロフィールを編集</span>
+          <span className="text-[12px] text-sub">基本情報・ロゴ・写真・リンク ›</span>
         </Link>
         <Link
           href={`/salon/stores/${storeId}/culture`}
@@ -138,14 +145,14 @@ export default async function StoreWorkspacePage({ params }: Props) {
       </div>
 
       <Link
-        href="/salon/mypage"
+        href="/salon/company"
         className="mt-6 flex w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface"
       >
-        既存のマイページへ戻る
+        会社ダッシュボードに戻る
       </Link>
 
-      <Link href="/salon/company" className="mt-4 block text-center text-[13px] text-sub underline">
-        会社ダッシュボードに戻る
+      <Link href="/salon/mypage" className="mt-4 block text-center text-[13px] text-sub underline">
+        マイページへ戻る
       </Link>
     </main>
   );

@@ -93,7 +93,7 @@ export default async function SalonMyPage() {
     .maybeSingle();
   if (salonError) logError("salonMypage.salonProfile", salonError);
 
-  // 「美容師からの見え方を確認」の対象店舗。既存RLS（is_store_accessible）で見える店舗だけが返る。
+  // 「プレビュー」の対象店舗。既存RLS（is_store_accessible）で見える店舗だけが返る。
   // 取得失敗は「店舗なし」とも「未作成」とも別に扱う（旧プロフィールへ黙って切り替えない）。
   const { data: previewStores, error: previewStoresError } = await supabase
     .from("salon_stores")
@@ -220,9 +220,11 @@ export default async function SalonMyPage() {
               </>
             )}
           </div>
-          <Link href="/salon/profile" className="text-[13px] font-semibold underline shrink-0">
-            {hasStores ? "ロゴ・写真・リンクを編集" : "サロンプロフィールを編集"}
-          </Link>
+          {!hasStores && (
+            <Link href="/salon/profile" className="text-[13px] font-semibold underline shrink-0">
+              サロンプロフィールを編集
+            </Link>
+          )}
         </div>
 
         {/* 美容師からの見え方（プレビュー）への入口。店舗ごとに別のページで、別店舗の内容は混ぜない。 */}
@@ -252,7 +254,7 @@ export default async function SalonMyPage() {
                           href={`/salon/stores/${st.id}/preview`}
                           className="flex w-full items-center justify-center rounded-full border border-line bg-surface2 px-5 py-3 text-[13.5px] font-semibold text-ink"
                         >
-                          美容師からの見え方を確認
+                          プレビュー
                         </Link>
                         <Link
                           href={`/salon/stores/${st.id}/profile`}
@@ -278,7 +280,7 @@ export default async function SalonMyPage() {
                 );
               })}
               <p className="text-[11.5px] leading-relaxed text-sub">
-                美容師に表示される店舗の基本情報は「店舗プロフィール」で編集します。保存後は「美容師からの見え方を確認」で同じ内容を確認できます。ロゴ・写真・リンクは「ロゴ・写真・リンクを編集」から編集します。
+                美容師に表示される店舗の基本情報・ロゴ・写真・リンクは「店舗プロフィールを編集」でまとめて編集します。保存後は「プレビュー」で美容師からの見え方を確認できます。
               </p>
             </div>
           )}
@@ -286,7 +288,7 @@ export default async function SalonMyPage() {
       </section>
 
       {/* ★スカウト機能Ver.1への導線。/stylist/salonsの「サロンを探す」導線に
-          対称する形で追加。既存セクション（サロン概要・興味を送ってくれた
+          対称する形で追加。既存セクション（サロン概要・興味を持ってくれた
           美容師）の間には一切変更を加えていない。 */}
       <Link
         href="/messages"
@@ -297,7 +299,7 @@ export default async function SalonMyPage() {
 
       <Link
         href="/salon/stylists"
-        className="mt-4 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-3.5 text-[14px] font-semibold text-ink"
+        className="mt-4 flex min-h-[64px] w-full items-center justify-center rounded-full bg-ink px-6 py-5 text-center text-[17px] font-bold leading-snug text-surface shadow-sm"
       >
         美容師を探す
       </Link>
@@ -306,7 +308,7 @@ export default async function SalonMyPage() {
           コンテンツ・DB取得・表示は一切移動・削除していない。 */}
       <Link
         href="/salon/company"
-        className="mt-3 flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-3.5 text-[14px] font-semibold text-ink"
+        className="mt-3 flex min-h-[56px] w-full items-center justify-center rounded-full border-2 border-ink bg-surface px-6 py-4 text-center text-[16px] font-bold leading-snug text-ink"
       >
         会社・店舗管理
       </Link>
@@ -315,7 +317,7 @@ export default async function SalonMyPage() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="eyebrow mb-1">話を聞いてみたい</p>
-            <h2 className="font-serif text-lg font-bold text-ink">興味を送ってくれた美容師</h2>
+            <h2 className="font-serif text-lg font-bold text-ink">興味を持ってくれた美容師</h2>
           </div>
           <span className="rounded-full bg-surface2 px-3 py-1.5 text-[13px] font-bold text-ink">
             {interests.length}名

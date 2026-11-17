@@ -185,7 +185,7 @@ export function SalonProfileForm({ mode, userId, initialValues, employeeSizeOpti
               // user_roles(salon)を必須とするため、保存前のアップロードは必ず失敗していた）。
               // 保存後にサロンマイページの「サロンプロフィールを編集」から追加できる。
               <p className="rounded-xl border border-line bg-surface2 px-4 py-3 text-[12.5px] leading-relaxed text-sub">
-                内装・スタッフの写真は、プロフィールを保存した後に、マイページの「ロゴ・写真・リンクを編集」から追加できます。
+                内装・スタッフの写真は、プロフィールを保存した後に、マイページのプロフィール編集から追加できます。
               </p>
             ) : (
               <>

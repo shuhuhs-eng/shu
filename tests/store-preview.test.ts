@@ -163,12 +163,12 @@ test("RLS・公開範囲は変更していない: 新しいmigrationを追加し
 
 test("サロンマイページ: プロフィール概要に入口を置き、店舗ごとの別URLへ（取得失敗は別表示）", () => {
   const c = strip("app/salon/mypage/page.tsx");
-  assert.match(c, /美容師からの見え方を確認/);
+  assert.match(c, /プレビュー/);
   assert.match(c, /\/salon\/stores\/\$\{st\.id\}\/preview/);
   assert.match(c, /previewStoresError/);
   const raw = readFileSync("app/salon/mypage/page.tsx", "utf8");
   const edit = raw.indexOf("サロンプロフィールを編集");
-  const preview = raw.indexOf("美容師からの見え方を確認", edit);
+  const preview = raw.indexOf("プレビュー", edit);
   assert.ok(edit > 0 && preview > edit && preview < raw.indexOf('id="interests"'));
 });
 
@@ -176,8 +176,9 @@ test("マイページ: 店舗ごとに『見え方を確認』『店舗プロフ
   const raw = readFileSync("app/salon/mypage/page.tsx", "utf8");
   assert.match(raw, /\/salon\/stores\/\$\{st\.id\}\/profile/);
   assert.match(raw, /店舗プロフィールを編集/);
-  assert.match(raw, /店舗プロフィール」で編集/);
-  assert.match(raw, /ロゴ・写真・リンクを編集/);
+  assert.match(raw, /「店舗プロフィールを編集」でまとめて編集/);
+  // 独立した「ロゴ・写真・リンクを編集」ボタンは撤去（店舗プロフィールの編集画面へ統合）
+  assert.ok(!/ロゴ・写真・リンクを編集</.test(raw));
   // 店舗が複数のときは店舗名を添える（別店舗と取り違えない）
   assert.match(raw, /many && \(\s*<p[^>]*>\s*\{st\.store_name\}/);
   // 既存の旧プロフィール編集（/salon/profile）は残している（店舗が無いときは従来名）
@@ -213,19 +214,49 @@ test("店舗プロフィール編集: 取得失敗では空フォームを出さ
   assert.match(g, /visibility: storeProfile\?\.visibility \?\? "PRIVATE"/);
 });
 
-test("旧プロフィール編集（店舗あり）: 公開用の項目は表示も送信もせず、ロゴだけを update_salon_logo で保存する", () => {
-  const f = readFileSync("components/salon-profile/salon-profile-form.tsx", "utf8");
-  assert.match(f, /storeManaged \? saveSalonLogoAction : saveSalonProfileAction/);
-  // 古い値を送り直す hidden input を持たない（storeManagedのときに送る項目はavatarPathのみ）
-  assert.ok(!/value=\{initialValues\.(salonName|prefecture|city|streetAddress|employeeSizeCode|cultureDescription|bio|visibility)\}\s*\/>\s*\n\s*\{?\/?\*?[^<]*店舗プロフィールで編集/.test(f));
-  assert.ok(!/storeManaged \? \(\s*<input type="hidden" name="visibility"/.test(f));
+test("ロゴ・写真・リンクは店舗プロフィール編集画面に統合: ロゴはupdate_salon_logoだけで保存、旧URLは店舗の編集画面へ案内", () => {
   const a = readFileSync("lib/salon/actions.ts", "utf8");
   const logo = a.slice(a.indexOf("export async function saveSalonLogoAction"));
   assert.match(logo, /rpc\("update_salon_logo"/);
   assert.ok(!/save_salon_profile/.test(logo.replace(/\/\*[\s\S]*?\*\//g, "")));
-  const p = readFileSync("app/salon/profile/page.tsx", "utf8");
-  assert.match(p, /storeManaged=\{storeLinks\.length > 0\}/);
-  assert.match(p, /storesError \?/);
+  const assets = readFileSync("components/salon-profile/salon-store-assets.tsx", "utf8");
+  assert.match(assets, /saveSalonLogoAction/);
+  assert.match(assets, /SalonPhotoUploader/);
+  assert.match(assets, /SalonLinksEditor/);
+  // 店舗名・公開範囲などの店舗プロフィール項目は、この部品から送らない
+  assert.ok(!/name="(salonName|visibility|bio|prefecture)"/.test(assets));
+  const page = readFileSync("app/salon/stores/[storeId]/profile/page.tsx", "utf8");
+  assert.match(page, /SalonStoreAssets/);
+  assert.match(page, /key=\{storeId\}/);
+  // 取得に失敗したときは、空の初期値でロゴを保存して消してしまわないよう、編集欄を出さない
+  assert.match(page, /assets && !assets\.loadError/);
+  const old = readFileSync("app/salon/profile/page.tsx", "utf8");
+  assert.match(old, /storeLinks\.length === 1/);
+  assert.match(old, /redirect\(`\/salon\/stores\/\$\{storeLinks\[0\]\.id\}\/profile`\)/);
+  assert.match(old, /storeLinks\.length > 1/);
+  assert.match(old, /storesError/);
+});
+
+test("会社ダッシュボード: 店舗一覧は既存の店舗データだけで表示し、検索できる。架空の数値は出さない", () => {
+  const page = readFileSync("app/salon/company/page.tsx", "utf8");
+  assert.match(page, /StoreDirectory/);
+  assert.match(page, /salon_store_profiles/);
+  const dir = readFileSync("components/salon-company/store-directory.tsx", "utf8");
+  assert.match(dir, /href=\{`\/salon\/stores\/\$\{s\.id\}`\}/);
+  assert.match(dir, /type="search"/);
+  assert.ok(!/Math\.random|dummy|sample/i.test(dir));
+});
+
+test("店舗ダッシュボード: 店舗名と会社ダッシュボードへの導線を店舗配下の全画面に出し、権限判定は既存のまま", () => {
+  const layout = readFileSync("app/salon/stores/[storeId]/layout.tsx", "utf8");
+  assert.match(layout, /store\.store_name/);
+  assert.match(layout, /\/salon\/company/);
+  assert.match(layout, /\.eq\("id", storeId\)/);
+  assert.match(layout, /redirect\("\/salon\/company"\)/);
+  const top = readFileSync("app/salon/stores/[storeId]/page.tsx", "utf8");
+  for (const seg of ["preview", "stylists", "interests", "profile", "culture"]) {
+    assert.match(top, new RegExp("/salon/stores/\\$\\{storeId\\}/" + seg));
+  }
 });
 
 test("ロゴ保存の入力検証: avatarPath以外は受け取らない", () => {

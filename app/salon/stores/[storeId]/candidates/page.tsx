@@ -53,7 +53,7 @@ export default async function StoreCandidatesPage({ params }: Props) {
       storeId={storeId}
       storeName={store.store_name}
       eyebrow="採用進捗"
-      description="この店舗で面談・選考を進めている美容師です。「話を聞きたい美容師」「スカウト履歴」「オファー履歴」の画面から追加できます。"
+      description="この店舗で面談・選考を進めている美容師です。「興味を持ってくれた美容師」「スカウト履歴」「オファー履歴」の画面から追加できます。"
     >
       {processes === null ? (
         <p className="mt-8 text-center text-[13px] text-sub">一覧を取得できませんでした。時間をおいて再度お試しください。</p>

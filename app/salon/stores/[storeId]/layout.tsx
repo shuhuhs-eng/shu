@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
@@ -47,7 +48,7 @@ export default async function StoreWorkspaceLayout({ children, params }: Props) 
   // 区別せず会社ダッシュボードへ差し戻す（情報漏洩防止）。
   const { data: store, error } = await supabase
     .from("salon_stores")
-    .select("id")
+    .select("id, store_name")
     .eq("id", storeId)
     .maybeSingle();
 
@@ -55,5 +56,27 @@ export default async function StoreWorkspaceLayout({ children, params }: Props) 
     redirect("/salon/company");
   }
 
-  return <>{children}</>;
+  // 対象店舗の名前と、会社ダッシュボードへ戻る導線を、店舗配下のすべての画面の上部に出す。
+  // 店舗名はURLのstoreIdで取得した（アクセス権のある）店舗のもの。別店舗の名前は混ざらない。
+  return (
+    <>
+      <nav
+        aria-label="店舗の切り替え"
+        className="border-b border-line bg-surface2 px-5 py-2.5 text-[12.5px]"
+      >
+        <div className="mx-auto flex max-w-[640px] items-center justify-between gap-3">
+          <p className="min-w-0 truncate text-ink">
+            <span className="text-sub">対象店舗：</span>
+            <Link href={`/salon/stores/${storeId}`} className="font-bold underline-offset-2 hover:underline">
+              {store.store_name}
+            </Link>
+          </p>
+          <Link href="/salon/company" className="shrink-0 font-semibold text-sub underline">
+            会社ダッシュボードへ
+          </Link>
+        </div>
+      </nav>
+      {children}
+    </>
+  );
 }

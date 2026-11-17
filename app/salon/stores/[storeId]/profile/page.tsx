@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/security/log";
 import { getSalonStoreProfileFormInitialValues } from "@/lib/salon/store-get-initial-values";
 import { SalonStoreProfileForm } from "@/components/salon-profile/salon-store-profile-form";
+import { SalonStoreAssets } from "@/components/salon-profile/salon-store-assets";
+import { getSalonStoreAssetsInitialValues } from "@/lib/salon/assets-initial-values";
 
 type Props = {
   params: Promise<{ storeId: string }>;
@@ -16,11 +18,16 @@ type Props = {
  * 自体では追加の権限チェックを行わない（layout.tsxを通過した時点で
  * このstoreIdへのアクセスは許可済み）。
  *
- * ★既存/salon/profileは一切変更していない（別ルート・別フォーム）。
+ * ★ロゴ・写真・外部リンクもこの画面で編集する（旧 /salon/profile の中身をそのまま移した。
+ *   保存先はこれまでと同じアカウント単位で、データの移行は無い）。旧 /salon/profile は
+ *   店舗がある場合、この画面へ案内する。
  */
 export default async function SalonStoreProfilePage({ params }: Props) {
   const { storeId } = await params;
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { data: store, error: storeError } = await supabase
     .from("salon_stores")
@@ -35,6 +42,7 @@ export default async function SalonStoreProfilePage({ params }: Props) {
   const initialValues = loaded.initialValues;
   // 取得に失敗したときは、空のフォームを出さない（保存すると既存の内容を上書きしてしまうため）。
   const blocked = loadError || storeError;
+  const assets = user && !blocked ? await getSalonStoreAssetsInitialValues(supabase, user.id) : null;
 
   return (
     <main className="mx-auto max-w-[560px] px-5 py-12">
@@ -74,10 +82,24 @@ export default async function SalonStoreProfilePage({ params }: Props) {
 
           <div className="mt-6">
             <SalonStoreProfileForm
+              key={storeId}
               storeId={storeId}
               initialValues={initialValues}
               employeeSizeOptions={employeeSizeOptions}
             />
+          </div>
+
+          <div className="mt-10 border-t border-line pt-8">
+            <h2 className="font-serif text-xl font-bold text-ink">ロゴ・写真・リンク</h2>
+            {assets && !assets.loadError && user ? (
+              <div className="mt-5">
+                <SalonStoreAssets key={storeId} userId={user.id} initialValues={assets.initialValues} />
+              </div>
+            ) : (
+              <p className="mt-4 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-ink">
+                ロゴ・写真・リンクを読み込めませんでした。登録済みの内容を上書きしないよう、この欄は表示していません。画面を更新してもう一度お試しください。
+              </p>
+            )}
           </div>
         </>
       )}
