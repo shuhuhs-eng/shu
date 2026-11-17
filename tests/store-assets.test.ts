@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { hasAnyStoreAsset, isStoreAssetsUnavailable, mapStoreAssetError, nextFreeSortOrder, parseStoreAssetsJson } from "../lib/store-assets/parse";
+import { addStorePhoto, isDefiniteRejection, setStoreLogo, deleteStorePhoto, type StoreAssetDeps, type RpcError } from "../lib/store-assets/service";
 import { loadStoreAssets } from "../lib/store-assets/load";
 import { StoreAssetsSection } from "../components/store-assets/store-assets-section";
 import { StoreDetailView } from "../components/stylist-salons/store-detail-view";
@@ -108,9 +109,11 @@ test("店舗詳細: assets を渡さなければ従来どおり（アカウン�
 test("静的確認: 画面は店舗別の取得・保存だけを使い、アカウント共通の取得処理を直接呼ばない／保存は店舗IDを渡す", () => {
   const view = strip("components/store-assets/store-assets-section.tsx");
   assert.doesNotMatch(view, /salon_photos|salon_links|avatar_path|salon-photos/);
-  const actions = strip("lib/store-assets/actions.ts");
+  const actions = strip("lib/store-assets/actions.ts") + strip("lib/store-assets/service.ts");
   assert.doesNotMatch(actions, /salon_photos|salon_links|"avatars"|"salon-photos"/);
   for (const fn of ["set_store_logo", "add_store_photo", "delete_store_photo", "add_store_link", "delete_store_link"]) assert.match(actions, new RegExp(fn));
+  // 失敗時に渡された画像を無条件に削除する処理が残っていない（削除は service の安全確認を通す）
+  assert.doesNotMatch(strip("lib/store-assets/actions.ts"), /removeObjects\(supabase|\.remove\(\[?storagePath/);
   const editor = strip("components/store-assets/store-assets-editor.tsx");
   assert.match(editor, /\$\{storeId\}\/\$\{category\}\//); // アップロード先は {storeId}/{category}/…
   assert.match(editor, /cacheControl: STORE_ASSET_CACHE_CONTROL/);
@@ -121,4 +124,136 @@ test("静的確認: 画面は店舗別の取得・保存だけを使い、アカ
   assert.match(stylist, /loadStoreAssets\(supabase, store\.store_id, "stylist"\)/);
   const preview = strip("app/salon/stores/[storeId]/preview/page.tsx");
   assert.match(preview, /loadStoreAssets\(supabase, storeId, "staff"\)/);
+});
+
+// ---- 保存処理（service）: 画像を消してよい場合・消さない場合 ----
+type Reply = { data?: unknown; error?: RpcError };
+function fakeDeps(handlers: Record<string, (args: Record<string, unknown>, n: number) => Reply>, removeFails = false) {
+  const calls: string[] = [];
+  const removed: string[] = [];
+  const counts: Record<string, number> = {};
+  const deps: StoreAssetDeps = {
+    rpc: async (fn, args) => {
+      calls.push(fn);
+      counts[fn] = (counts[fn] ?? 0) + 1;
+      const r = handlers[fn]?.(args, counts[fn]) ?? { data: null, error: null };
+      return { data: r.data ?? null, error: r.error ?? null };
+    },
+    removeObjects: async (paths) => { if (removeFails) return { error: { message: "x", code: "500" } }; removed.push(...paths); return { error: null }; },
+    sign: async (path) => `https://signed.test/${path}`,
+    log: () => {},
+  };
+  return { deps, calls, removed };
+}
+const NEW = `${S}/interior/new.webp`;
+const assetsJson = (photos: { id: string; category: string; storage_path: string; sort_order: number }[] = [], logo: string | null = null) =>
+  ({ store_id: S, logo_path: logo, photos, links: [] });
+const REJECT: RpcError = { message: "store write permission required", code: "P0001" };
+const NETWORK: RpcError = { message: "TypeError: fetch failed", code: "" };
+
+test("確定的な拒否の判定: エラーコードがあるときだけ（通信失敗・コード無しは結果不明）", () => {
+  assert.equal(isDefiniteRejection(REJECT), true);
+  assert.equal(isDefiniteRejection(NETWORK), false);
+  assert.equal(isDefiniteRejection({ message: "x" }), false);
+  assert.equal(isDefiniteRejection(null), false);
+});
+test("写真追加: DBが確定的に拒否し、未登録を確認できたときだけ、アップロード済みの画像を消す", async () => {
+  const f = fakeDeps({ get_store_assets: () => ({ data: assetsJson() }), add_store_photo: () => ({ error: REJECT }) });
+  const r = await addStorePhoto(f.deps, S, "interior", NEW);
+  assert.equal(r.success, false);
+  assert.deepEqual(f.removed, [NEW]);
+});
+test("写真追加: 保存後に通信が切れた（結果不明）ときは画像を消さない（保存済みの可能性がある）", async () => {
+  const f = fakeDeps({ get_store_assets: () => ({ data: assetsJson() }), add_store_photo: () => ({ error: NETWORK }) });
+  const r = await addStorePhoto(f.deps, S, "interior", NEW);
+  assert.equal(r.success, false);
+  assert.deepEqual(f.removed, []);
+  assert.deepEqual(f.calls, ["get_store_assets", "add_store_photo"]); // 確認のための再取得もしない（結果不明は触らない）
+});
+test("写真追加: 保存後に通信が切れて再送したら、二重登録せず登録済みの写真を成功として返す（画像は消さない）", async () => {
+  const f = fakeDeps({ get_store_assets: () => ({ data: assetsJson([{ id: "p9", category: "interior", storage_path: NEW, sort_order: 0 }]) }) });
+  const r = await addStorePhoto(f.deps, S, "interior", NEW);
+  assert.equal(r.success, true);
+  if (r.success) assert.equal(r.photo.id, "p9");
+  assert.deepEqual(f.removed, []);
+  assert.ok(!f.calls.includes("add_store_photo"));
+});
+test("写真追加: 重複送信で2回目がDB拒否（重複エラー）になっても、先に登録済みの画像は消さない", async () => {
+  // 2回目の呼び出し時点で読み取り→空、追加→一意制約違反、再取得→登録済み（同時に1回目が成功した状況）
+  let reads = 0;
+  const f = fakeDeps({
+    get_store_assets: () => ({ data: ++reads === 1 ? assetsJson() : assetsJson([{ id: "p1", category: "interior", storage_path: NEW, sort_order: 0 }]) }),
+    add_store_photo: () => ({ error: { message: "duplicate key value violates unique constraint", code: "23505" } }),
+  });
+  const r = await addStorePhoto(f.deps, S, "interior", NEW);
+  assert.equal(r.success, false);
+  assert.deepEqual(f.removed, []);
+});
+test("写真追加: 登録内容を取り直せないときは画像を消さない（使用中か確認できない）", async () => {
+  let reads = 0;
+  const f = fakeDeps({
+    get_store_assets: () => (++reads === 1 ? { data: assetsJson() } : { error: { message: "timeout", code: "" } }),
+    add_store_photo: () => ({ error: REJECT }),
+  });
+  await addStorePhoto(f.deps, S, "interior", NEW);
+  assert.deepEqual(f.removed, []);
+});
+test("写真追加: 最初に登録内容を取れなければ何も消さず、DBも呼ばない", async () => {
+  const f = fakeDeps({ get_store_assets: () => ({ error: { message: "x", code: "" } }) });
+  const r = await addStorePhoto(f.deps, S, "interior", NEW);
+  assert.equal(r.success, false);
+  assert.deepEqual(f.removed, []);
+  assert.deepEqual(f.calls, ["get_store_assets"]);
+});
+test("写真追加: 他の用途（ロゴ・別の写真）で使用中のパスなら、登録も削除もしない", async () => {
+  const f = fakeDeps({ get_store_assets: () => ({ data: assetsJson([], NEW) }) });
+  const r = await addStorePhoto(f.deps, S, "interior", NEW);
+  assert.equal(r.success, false);
+  assert.deepEqual(f.removed, []);
+  assert.ok(!f.calls.includes("add_store_photo"));
+});
+test("写真追加: カテゴリが上限（3枚）なら、今回アップロードした画像だけ片付け、登録済みの画像は消さない", async () => {
+  const ph = [0, 1, 2].map((i) => ({ id: `p${i}`, category: "interior", storage_path: `${S}/interior/${i}.webp`, sort_order: i }));
+  const f = fakeDeps({ get_store_assets: () => ({ data: assetsJson(ph) }) });
+  const r = await addStorePhoto(f.deps, S, "interior", NEW);
+  assert.equal(r.success, false);
+  assert.deepEqual(f.removed, [NEW]);
+});
+test("ロゴ設定: DB拒否＋未登録 → 新しい画像だけ消す／通信失敗 → 消さない／使用中 → 消さない", async () => {
+  const path = `${S}/logo/new.webp`;
+  const a = fakeDeps({ get_store_assets: () => ({ data: assetsJson() }), set_store_logo: () => ({ error: REJECT }) });
+  assert.equal((await setStoreLogo(a.deps, S, path)).success, false);
+  assert.deepEqual(a.removed, [path]);
+  const b = fakeDeps({ get_store_assets: () => ({ data: assetsJson() }), set_store_logo: () => ({ error: NETWORK }) });
+  assert.equal((await setStoreLogo(b.deps, S, path)).success, false);
+  assert.deepEqual(b.removed, []);
+  const c = fakeDeps({ get_store_assets: () => ({ data: assetsJson([], path) }), set_store_logo: () => ({ error: REJECT }) });
+  await setStoreLogo(c.deps, S, path);
+  assert.deepEqual(c.removed, []);
+});
+test("ロゴ設定: 重複送信（同じパスの再送）は成功し、登録済みの画像を消さない／差し替え時は古い画像だけ消す", async () => {
+  const path = `${S}/logo/new.webp`;
+  const dup = fakeDeps({ set_store_logo: () => ({ data: path }) }); // DB が返す「前のパス」が今回と同じ
+  const r = await setStoreLogo(dup.deps, S, path);
+  assert.equal(r.success, true);
+  assert.deepEqual(dup.removed, []);
+  const old = `${S}/logo/old.webp`;
+  const rep = fakeDeps({ set_store_logo: () => ({ data: old }) });
+  assert.equal((await setStoreLogo(rep.deps, S, path)).success, true);
+  assert.deepEqual(rep.removed, [old]);
+});
+test("ロゴ設定: 保存は成功したがStorageの削除に失敗しても、保存成功として返す（新しい画像は残る）", async () => {
+  const path = `${S}/logo/new.webp`;
+  const f = fakeDeps({ set_store_logo: () => ({ data: `${S}/logo/old.webp` }) }, true);
+  const r = await setStoreLogo(f.deps, S, path);
+  assert.equal(r.success, true);
+  if (r.success) assert.equal(r.logoPath, path);
+});
+test("写真削除: DBが拒否したらStorageは触らない／成功したときだけDBが返したパスを消す", async () => {
+  const a = fakeDeps({ delete_store_photo: () => ({ error: REJECT }) });
+  assert.equal((await deleteStorePhoto(a.deps, "p1")).success, false);
+  assert.deepEqual(a.removed, []);
+  const b = fakeDeps({ delete_store_photo: () => ({ data: NEW }) });
+  assert.equal((await deleteStorePhoto(b.deps, "p1")).success, true);
+  assert.deepEqual(b.removed, [NEW]);
 });
