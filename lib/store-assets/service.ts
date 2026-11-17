@@ -4,12 +4,12 @@ import { STORE_PHOTO_MAX } from "@/lib/store-assets/constants";
 /**
  * 店舗別ロゴ・写真の保存処理（DB 呼び出しと Storage 削除を注入できる形）。server action から使い、テストでは偽の依存を渡す。
  *
- * 画像を消してよいのは次の3つが「すべて」成り立つ場合だけ（それ以外は残す。孤児ファイルは残っても安全側）:
- *  1. DB が確定的に拒否した（エラーコードがある＝DB が応答して処理を取り消した）。通信失敗・タイムアウトなど
- *     「保存されたかどうか分からない」場合は消さない（保存済みで応答だけ失われた可能性がある）。
- *  2. 登録内容を取り直せた（取れない＝確認できない場合は消さない）。
- *  3. その画像のパスが、この店舗の現在のロゴ・写真のどれにも登録されていない
- *     （同じパスの重複送信で、先に成功した登録の画像を消さない）。
+ * 画像の削除方針（同時操作によるデータ消失を避けるため）:
+ *  ・保存に失敗した・上限を超えた・結果が不明、のいずれの場合も、今回アップロードした画像は **削除しない**（孤児として残す）。
+ *    「未登録を確認してから削除」では、確認と削除の間に別のリクエストが同じ画像を登録すると、使用中の画像を消せてしまうため。
+ *  ・削除するのは、DB が成功を返した後に DB 自身が「登録から外した」と返した画像だけ
+ *    （ロゴ差し替えの前の画像／写真削除で返されたパス）。
+ *  ・孤児画像はバケットに残る。掃除が必要なら、登録済みパスと突き合わせる運用（別手順）で行う。
  */
 export type RpcError = { message: string; code?: string | null } | null;
 export type StoreAssetDeps = {
@@ -20,24 +20,6 @@ export type StoreAssetDeps = {
 };
 export type Fail = { success: false; error: string };
 
-/** DB（PostgREST）が応答したエラーか。code が空・無い（通信失敗など）なら結果不明として扱う。 */
-export function isDefiniteRejection(error: RpcError): boolean {
-  return !!error && typeof error.code === "string" && error.code.length > 0;
-}
-
-/** 条件を満たすときだけ画像を削除する。消したら true。 */
-export async function removeUploadedIfSafe(deps: StoreAssetDeps, storeId: string, path: string, error: RpcError, where: string): Promise<boolean> {
-  if (!isDefiniteRejection(error)) return false; // 保存結果が不明: 消さない
-  const { data, error: readError } = await deps.rpc("get_store_assets", { p_store_id: storeId });
-  if (readError) return false; // 登録内容を確認できない: 消さない
-  const parsed = parseStoreAssetsJson(data, storeId);
-  if (!parsed) return false;
-  if (parsed.logoPath === path || parsed.photos.some((p) => p.storagePath === path)) return false; // 使用中: 消さない
-  const { error: removeError } = await deps.removeObjects([path]);
-  if (removeError) deps.log(`${where}.remove`, removeError);
-  return !removeError;
-}
-
 export async function setStoreLogo(
   deps: StoreAssetDeps,
   storeId: string,
@@ -46,7 +28,6 @@ export async function setStoreLogo(
   const { data: prev, error } = await deps.rpc("set_store_logo", { p_store_id: storeId, p_storage_path: storagePath });
   if (error) {
     deps.log("setStoreLogo", error);
-    if (storagePath) await removeUploadedIfSafe(deps, storeId, storagePath, error, "setStoreLogo.cleanup");
     return { success: false, error: mapStoreAssetError(error.message) };
   }
   // 置き換えた古い画像（DB が返した値）だけを消す。同じパスの再送（prev が今回と同じ）は消さない。
@@ -74,16 +55,14 @@ export async function addStorePhoto(
   }
   const sortOrder = nextFreeSortOrder(parsed.photos.filter((p) => p.category === category).map((p) => p.sortOrder), STORE_PHOTO_MAX);
   if (sortOrder === null) {
-    // 上限超過（DB は呼んでいない＝未登録が確定）。未登録なので今回アップロードした画像だけ片付ける
-    await deps.removeObjects([storagePath]).then(({ error }) => error && deps.log("addStorePhoto.cleanup", error));
+    // 上限超過: 画像は削除しない（確認後の削除は、同時の別登録と競合し得るため。孤児として残す）
     return { success: false, error: "このカテゴリの画像は既に3枚登録されています。" };
   }
   const { data: row, error } = await deps.rpc("add_store_photo", { p_store_id: storeId, p_category: category, p_storage_path: storagePath, p_sort_order: sortOrder });
   const r = row as { id?: string; sort_order?: number } | null;
   if (error || !r?.id) {
     deps.log("addStorePhoto", error ?? new Error("no row"));
-    // error が無いのに行が無い、または通信失敗: 結果不明なので消さない。DB の確定拒否のときだけ、未登録を確認して消す
-    if (error) await removeUploadedIfSafe(deps, storeId, storagePath, error, "addStorePhoto.cleanup");
+    // 拒否・通信失敗・結果不明のいずれでも、アップロード済みの画像は消さない
     return { success: false, error: mapStoreAssetError(error?.message) };
   }
   return { success: true, photo: { id: r.id, category, storagePath, sortOrder: r.sort_order ?? sortOrder, url: await deps.sign(storagePath) } };

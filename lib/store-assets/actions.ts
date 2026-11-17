@@ -15,10 +15,9 @@ import { addStorePhoto, deleteStorePhoto, setStoreLogo, type StoreAssetDeps } fr
  * ここでは storeId を必ず画面（URL）から渡された値だけで使い、ユーザーIDなどから店舗を推測しない。
  *
  * 順序の方針:
- *  ・アップロード済みの画像は、DBが確定的に拒否し、かつ未登録と確認できた場合だけ削除する。
- *    通信失敗など保存結果が不明な場合・使用中（登録済み）の場合・確認できない場合は削除しない（service.ts）。
+ *  ・保存失敗・上限超過・結果不明のとき、アップロード済みの画像は削除しない（同時の別登録と競合して使用中の画像を消さないため。孤児として残る。service.ts）。
  *  ・差し替え・削除は「DB（権限判定を含む）→ Storage」の順。DBが拒否したら Storage は触らない。
- *  ・置き換えた古い画像は Storage から削除する（発行済みの署名付きURLが残る時間を短くするため）。
+ *  ・置き換えた古い画像（DB が返した前のパス）は Storage から削除する（発行済みの署名付きURLが残る時間を短くするため）。
  */
 const uuid = z.string().uuid();
 const logoPath = (storeId: string) => new RegExp(`^${storeId}/logo/[^/]+$`);
