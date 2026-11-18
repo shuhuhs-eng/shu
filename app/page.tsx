@@ -196,6 +196,7 @@ export default async function Home() {
                   ★正直な注記: スマホ3行目「相性の良いサロンが分かります。」
                   は、PCで表示している文言「あなたに合うサロンが分かります。」
                   とは異なる言い回しです。ご指示を文字どおり実装しています。 */}
+              {view !== "salon" && (<>
               <p className="hidden text-[14px] leading-[1.8] text-charcoal lg:mt-1.5 lg:block lg:text-[13.5px] lg:leading-[1.4]">
                 30の質問に答えるだけで、
                 <br />
@@ -206,6 +207,7 @@ export default async function Home() {
                 <span className="block">あなたの美容師タイプ・市場価値・</span>
                 <span className="block">相性の良いサロンが分かります。</span>
               </p>
+              </>)}
 
               {/* Heroキャラクター。
                   ・PC: components/home/hero-character.tsx 内の absolute 配置
@@ -220,7 +222,7 @@ export default async function Home() {
 
               {/* ★最重要CTA。横幅を活かし、高さは抑える。 */}
               {/* 美容師でログイン中は出さない（再診断はマイページの「診断を受け直す」から）。未ログイン等は従来どおり。 */}
-              {view !== "stylist" && (
+              {view !== "stylist" && view !== "salon" && (
                 <Link
                   href="/stylist/diagnosis"
                   className="mt-6 flex w-full items-center justify-center gap-2 rounded-full px-6 text-center font-bold text-surface shadow-md py-4 text-[16px] lg:mt-2.5 lg:w-[78%] lg:h-[54px] lg:py-0 lg:text-[15px]"
@@ -232,6 +234,7 @@ export default async function Home() {
                 </Link>
               )}
 
+              {view !== "salon" && (
               <div className="mt-5 grid w-full grid-cols-3 gap-2 lg:mt-2.5 lg:w-[78%] lg:gap-3">
                 <div className="flex flex-col items-center gap-1.5 text-center lg:gap-1">
                   <ListChecks size={19} style={{ color: "#8A6D3B" }} />
@@ -258,6 +261,7 @@ export default async function Home() {
                   </p>
                 </div>
               </div>
+              )}
             </div>
           </div>
         </div>

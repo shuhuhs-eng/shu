@@ -17,7 +17,9 @@ import { SalonPhotoUploader } from "@/components/salon-profile/salon-photo-uploa
 import { SalonLinksEditor } from "@/components/salon-profile/salon-links-editor";
 import type { SalonPhotoWithUrl } from "@/lib/salon-photos/actions";
 import type { SalonLinkRow } from "@/lib/salon-links/actions";
-import { PREFECTURES, SPECIALTY_OPTIONS, VISIBILITY_LABELS } from "@/lib/validation/profile-options";
+import { PREFECTURES, SPECIALTY_OPTIONS } from "@/lib/validation/profile-options";
+import { SalonVisibilityField } from "@/components/salon-profile/salon-visibility-field";
+import { SALON_VISIBILITY_NEW_DEFAULT } from "@/lib/salon/store-visibility";
 import type { ProfileVisibility } from "@/types/database";
 
 export type SalonProfileFormInitialValues = {
@@ -51,9 +53,6 @@ type Props = {
    */
   storeManaged?: boolean;
 };
-
-const toOptions = (labels: Record<string, string>) =>
-  Object.entries(labels).map(([value, label]) => ({ value, label }));
 
 /**
  * サロンプロフィールフォーム。components/profile/profile-form.tsx（stylist側）と対称構造。
@@ -221,19 +220,11 @@ export function SalonProfileForm({ mode, userId, initialValues, employeeSizeOpti
           {storeManaged ? null : (
           <section className="space-y-4">
             <h2 className="eyebrow">公開範囲</h2>
-            <SelectField
-              id="visibility"
-              name="visibility"
-              label="プロフィールの公開範囲"
-              defaultValue={initialValues.visibility}
-              options={toOptions(VISIBILITY_LABELS)}
+            {/* 公開／非公開の2択。新規入力は「公開」から。保存済みの値はそのまま（既存の「一部公開」は非公開として表示）。 */}
+            <SalonVisibilityField
+              defaultValue={mode === "create" ? SALON_VISIBILITY_NEW_DEFAULT : initialValues.visibility}
               errors={state.fieldErrors?.visibility}
             />
-            {mode === "create" && (
-              <p className="text-[12px] leading-relaxed text-sub">
-                初期値は「非公開」です。「公開」を選んで保存すると、保存後すぐに、美容師に店舗の情報が表示されます。
-              </p>
-            )}
           </section>
           )}
         </div>

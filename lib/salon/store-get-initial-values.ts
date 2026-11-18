@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import type { SalonStoreProfileFormInitialValues } from "@/components/salon-profile/salon-store-profile-form";
+import { SALON_VISIBILITY_NEW_DEFAULT, toSalonVisibilityChoice } from "@/lib/salon/store-visibility";
 
 /**
  * 店舗単位プロフィールフォームの初期値（法人・複数店舗対応 Phase 3B）。
@@ -41,7 +42,9 @@ export async function getSalonStoreProfileFormInitialValues(
     targetSpecialties: storeProfile?.target_specialties ?? [],
     bio: storeProfile?.bio ?? "",
     hotpepperUrl: storeProfile?.hotpepper_url ?? "",
-    visibility: storeProfile?.visibility ?? "PRIVATE",
+    // 保存済みの値をそのまま2択に写す。行がまだ無い（新規入力）ときだけ「公開」から始める。
+    // 取得に失敗したときは loadError で呼び出し側がフォームを出さないので、既定値が保存されることはない。
+    visibility: storeProfile ? toSalonVisibilityChoice(storeProfile.visibility) : SALON_VISIBILITY_NEW_DEFAULT,
   };
 
   return {

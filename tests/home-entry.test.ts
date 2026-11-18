@@ -105,7 +105,7 @@ test("トップの表示出し分け: 美容師/サロン/管理者/未ログイ
   assert.match(h, /\{\(showStylistCard \|\| showSalonEntry\) && \(/);
   assert.match(h, /\{showStylistCard && \(\s*<section/); assert.match(h, /\{showSalonEntry && \(\s*<aside/);
   // 美容師: 診断ボタンを出さず、マイページ導線は残す。初回案内は未ログインのみ
-  assert.match(h, /\{view !== "stylist" && \(\s*<Link\s+href="\/stylist\/diagnosis"/);
+  assert.match(h, /\{view !== "stylist" && view !== "salon" && \(\s*<Link\s+href="\/stylist\/diagnosis"/);
   assert.match(h, /view === "stylist" \? \(\s*<Link\s+href="\/stylist\/mypage"/);
   // 旧「…アカウントでログインするとご利用いただけます」の案内は残っていない
   assert.doesNotMatch(h, /アカウントでログインするとご利用いただけます/);

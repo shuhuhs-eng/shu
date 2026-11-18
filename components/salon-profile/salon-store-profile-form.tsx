@@ -1,18 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { startTransition, useActionState, useRef, useState, useEffect, type FormEvent } from "react";
 import { saveSalonStoreProfileAction } from "@/lib/salon/store-actions";
 import { initialAuthActionState } from "@/lib/auth/types";
-import { SubmitButton } from "@/components/auth/submit-button";
-import { PendingFieldset } from "@/components/auth/pending-fieldset";
+import { SalonVisibilityField } from "@/components/salon-profile/salon-visibility-field";
 import { FormErrorBanner, FormSuccessBanner } from "@/components/auth/form-messages";
 import { TextField } from "@/components/auth/text-field";
 import { SelectField } from "@/components/profile/select-field";
 import { CheckboxGroupField } from "@/components/profile/checkbox-group-field";
 import { TextareaField } from "@/components/profile/textarea-field";
-import { PREFECTURES, SPECIALTY_OPTIONS, VISIBILITY_LABELS } from "@/lib/validation/profile-options";
-import type { ProfileVisibility } from "@/types/database";
+import { PREFECTURES, SPECIALTY_OPTIONS } from "@/lib/validation/profile-options";
+import type { SalonVisibilityChoice } from "@/lib/salon/store-visibility";
 
 export type SalonStoreProfileFormInitialValues = {
   salonName: string;
@@ -24,7 +23,7 @@ export type SalonStoreProfileFormInitialValues = {
   targetSpecialties: string[];
   bio: string;
   hotpepperUrl: string;
-  visibility: ProfileVisibility;
+  visibility: SalonVisibilityChoice;
 };
 
 type Props = {
@@ -32,9 +31,6 @@ type Props = {
   initialValues: SalonStoreProfileFormInitialValues;
   employeeSizeOptions: Array<{ code: string; label: string }>;
 };
-
-const toOptions = (labels: Record<string, string>) =>
-  Object.entries(labels).map(([value, label]) => ({ value, label }));
 
 /**
  * 店舗単位プロフィールフォーム（法人・複数店舗対応 Phase 3B）。
@@ -49,17 +45,45 @@ const toOptions = (labels: Record<string, string>) =>
  * 必要な項目のみを持つ専用フォームとして新設した。
  */
 export function SalonStoreProfileForm({ storeId, initialValues, employeeSizeOptions }: Props) {
-  const [state, formAction] = useActionState(
+  const [state, formAction, isPending] = useActionState(
     saveSalonStoreProfileAction.bind(null, storeId),
     initialAuthActionState,
   );
+  const submittingRef = useRef(false);
+  // 成功メッセージを消した（再編集を始めた）時点の state。同じ state の成功メッセージは再表示しない。
+  const [dismissedFor, setDismissedFor] = useState<unknown>(null);
+
+  // 送信が終わったら、二重送信のガードを外す。
+  useEffect(() => {
+    if (!isPending) submittingRef.current = false;
+  }, [isPending, state]);
+
+  // <form action> ではなく onSubmit から直接送る。<form action> は完了後に入力欄を初期値へ戻す（React 19）ため、
+  // 保存に失敗したときに入力内容が消え、成功したときも画面の値が保存した値と食い違うことがある。
+  // ここでは入力欄に触れない。保存に成功すると、再取得した保存済みの値でフィールドを作り直す（下の key）。
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (isPending || submittingRef.current) return; // 二重送信の防止
+    submittingRef.current = true;
+    const formData = new FormData(e.currentTarget);
+    startTransition(() => {
+      formAction(formData);
+    });
+  }
+  const dismissSuccess = () => {
+    if (state.success) setDismissedFor(state);
+  };
+  // 保存中は成功も失敗も出さない。成功は、実際の保存成功のあとだけ。
+  const successMessage = !isPending && state.success && dismissedFor !== state ? state.success : undefined;
+  const errorMessage = isPending ? undefined : state.error;
+  const fieldsKey = JSON.stringify(initialValues);
 
   return (
-    <form action={formAction} className="space-y-8">
-      <FormErrorBanner message={state.error} />
-      <FormSuccessBanner message={state.success} />
+    <form onSubmit={handleSubmit} onChange={dismissSuccess} onInput={dismissSuccess} className="space-y-8">
+      <FormErrorBanner message={errorMessage} />
+      <FormSuccessBanner message={successMessage} />
 
-      <PendingFieldset>
+      <fieldset disabled={isPending} key={fieldsKey} className="contents m-0 border-0 p-0">
         <div className="space-y-8">
           <section className="space-y-4">
             <h2 className="eyebrow">店舗プロフィール</h2>
@@ -139,19 +163,19 @@ export function SalonStoreProfileForm({ storeId, initialValues, employeeSizeOpti
 
           <section className="space-y-4">
             <h2 className="eyebrow">公開範囲</h2>
-            <SelectField
-              id="visibility"
-              name="visibility"
-              label="プロフィールの公開範囲"
-              defaultValue={initialValues.visibility}
-              options={toOptions(VISIBILITY_LABELS)}
-              errors={state.fieldErrors?.visibility}
-            />
+            <SalonVisibilityField defaultValue={initialValues.visibility} errors={state.fieldErrors?.visibility} />
           </section>
         </div>
-      </PendingFieldset>
+      </fieldset>
 
-      <SubmitButton pendingText="保存中...">変更を保存</SubmitButton>
+      <button
+        type="submit"
+        disabled={isPending}
+        aria-busy={isPending}
+        className="flex w-full items-center justify-center gap-2 rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface transition-opacity disabled:opacity-60"
+      >
+        {isPending ? "保存中..." : "変更を保存"}
+      </button>
 
       <Link href={`/salon/stores/${storeId}`} className="block text-center text-[13px] text-sub underline">
         店舗ワークスペースへ戻る

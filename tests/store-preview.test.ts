@@ -208,10 +208,10 @@ test("店舗プロフィール編集: 取得失敗では空フォームを出さ
   const c = readFileSync("app/salon/stores/[storeId]/profile/page.tsx", "utf8");
   assert.match(c, /内容を上書きしないよう、編集画面は表示していません/);
   assert.match(c, /店舗プロフィールを作成/);
-  assert.match(c, /公開範囲は「非公開」から始まります/);
+  assert.match(c, /公開範囲は「公開」から始まります/); // 新規入力の初期選択は公開（保存済みの店舗は保存済みの値）
   const g = readFileSync("lib/salon/store-get-initial-values.ts", "utf8");
   assert.match(g, /loadError/);
-  assert.match(g, /visibility: storeProfile\?\.visibility \?\? "PRIVATE"/);
+  assert.match(g, /visibility: storeProfile \? toSalonVisibilityChoice\(storeProfile\.visibility\) : SALON_VISIBILITY_NEW_DEFAULT/);
 });
 
 test("ロゴ・写真・リンクは店舗プロフィール編集画面に統合: ロゴはupdate_salon_logoだけで保存、旧URLは店舗の編集画面へ案内", () => {
@@ -285,7 +285,7 @@ test("0057ドラフト: 店舗プロフィール作成は初回登録ブロッ�
   assert.match(r, /p\.updated_at = b\.row_updated_at/);
 });
 
-test("新規登録の公開設定: 初期値は非公開で、利用者が選んだ値だけが保存される（既定値で公開しない）", () => {
+test("新規登録の公開設定: 新規入力の初期選択は公開（2択）。保存されるのは利用者が選んだ値だけで、読み込み関数は書き換えない", () => {
   const g = readFileSync("lib/salon/get-initial-values.ts", "utf8");
   assert.match(g, /visibility: salon\?\.visibility \?\? "PRIVATE"/);
   const a = readFileSync("lib/salon/actions.ts", "utf8");
@@ -294,7 +294,8 @@ test("新規登録の公開設定: 初期値は非公開で、利用者が選ん
   assert.match(v, /visibility: visibilityEnum,/);
   assert.ok(!/visibilityEnum\.default|visibilityEnum\.catch/.test(v));
   const f = readFileSync("components/salon-profile/salon-profile-form.tsx", "utf8");
-  assert.match(f, /初期値は「非公開」です/);
+  assert.match(f, /SALON_VISIBILITY_NEW_DEFAULT/); // 新規（create）の初期選択は公開。2択の部品に差し替え済み
+  assert.match(f, /SalonVisibilityField/);
 });
 
 test("旧プロフィール編集画面: 店舗プロフィールで編集する案内と店舗ごとのリンクを出す（取得失敗時は案内しない）", () => {

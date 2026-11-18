@@ -42,7 +42,7 @@ export default async function SalonStoreProfilePage({ params }: Props) {
 
   const loaded = await getSalonStoreProfileFormInitialValues(supabase, storeId, store?.store_name ?? null);
   const { employeeSizeOptions, exists, loadError } = loaded;
-  // 未作成の店舗は、店舗名をサロン名の初期値にする。公開範囲は「非公開」から始める。
+  // 未作成の店舗は、店舗名をサロン名の初期値にする。公開範囲は「公開」から始める（保存済みの店舗は保存済みの値）。
   const initialValues = loaded.initialValues;
   // 取得に失敗したときは、空のフォームを出さない（保存すると既存の内容を上書きしてしまうため）。
   const blocked = loadError || storeError;
@@ -79,7 +79,7 @@ export default async function SalonStoreProfilePage({ params }: Props) {
             <p className="mt-3 text-[14px] leading-relaxed text-charcoal">登録内容はいつでも変更できます。</p>
           ) : (
             <p className="mt-3 rounded-xl border border-line bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-ink">
-              この店舗の公開用プロフィールは、まだ作成されていません。保存すると作成され、選んだ公開範囲で美容師に表示されます。公開範囲は「非公開」から始まります。
+              この店舗の公開用プロフィールは、まだ作成されていません。保存すると作成され、選んだ公開範囲で美容師に表示されます。公開範囲は「公開」から始まります（非公開にもできます）。
             </p>
           )}
           {exists && (

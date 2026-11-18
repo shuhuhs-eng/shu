@@ -2,7 +2,8 @@ import { z } from "zod";
 import { SPECIALTY_OPTIONS } from "./profile-options";
 import { hotpepperUrlSchema } from "./salon-profile";
 
-const visibilityEnum = z.enum(["PRIVATE", "LIMITED", "PUBLIC"]);
+// 画面で選べるのは「公開」「非公開」の2択（DB の enum と既存データは変更しない。「一部公開」は新たに保存しない）。
+const visibilityEnum = z.enum(["PRIVATE", "PUBLIC"]);
 
 /**
  * 店舗単位プロフィールフォームの入力検証（法人・複数店舗対応 Phase 3B）。

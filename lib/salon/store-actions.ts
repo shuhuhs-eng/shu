@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { salonStoreProfileFormSchema } from "@/lib/validation/salon-store-profile";
 import type { AuthActionState } from "@/lib/auth/types";
 import { logError } from "@/lib/security/log";
+import { saveStoreProfile } from "@/lib/salon/store-profile-save";
 
 /**
  * 店舗単位プロフィール保存（法人・複数店舗対応 Phase 3B）。
@@ -45,27 +46,14 @@ export async function saveSalonStoreProfileAction(
     };
   }
 
-  const v = parsed.data;
   const supabase = await createClient();
-
-  const { error } = await supabase.rpc("save_salon_store_profile", {
-    p_store_id: storeId,
-    p_salon_name: v.salonName,
-    p_prefecture: v.prefecture,
-    p_city: v.city || null,
-    p_street_address: v.streetAddress || null,
-    p_culture_description: v.cultureDescription || null,
-    p_employee_size_code: v.employeeSizeCode || null,
-    p_target_specialties: v.targetSpecialties,
-    p_bio: v.bio || null,
-    p_visibility: v.visibility,
-    p_hotpepper_url: v.hotpepperUrl || null,
-  });
-
-  if (error) {
-    logError("saveSalonStoreProfileAction", error);
-    return { error: "保存に失敗しました。しばらくしてから再度お試しください。" };
-  }
+  const result = await saveStoreProfile(
+    { rpc: (fn, args) => supabase.rpc(fn as never, args as never) as never, log: (where, error) => logError(where, error) },
+    storeId,
+    parsed.data,
+  );
+  // 保存に失敗した（または結果を確認できない）ときは、成功を表示しない。
+  if (!result.success) return { error: result.error };
 
   revalidatePath(`/salon/stores/${storeId}/profile`);
   revalidatePath(`/salon/stores/${storeId}`);
