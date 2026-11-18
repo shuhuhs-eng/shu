@@ -1,7 +1,9 @@
-import type { SalonLinkType, SalonPhotoCategory } from "@/types/database";
+import type { SalonLinkType } from "@/types/database";
 
 /** get_store_assets / get_public_store_assets（0081）が返す JSON を、画面用の形に直す純粋関数群。 */
-export type StoreAssetPhoto = { id: string; category: SalonPhotoCategory; storagePath: string; sortOrder: number; url: string | null };
+/** category は DB の値。画面では分類しない（0084 以前の interior / atmosphere は引き継がれ、新規は photo）。 */
+export type StoreAssetPhotoCategory = "interior" | "atmosphere" | "photo";
+export type StoreAssetPhoto = { id: string; category: StoreAssetPhotoCategory; storagePath: string; sortOrder: number; url: string | null };
 export type StoreAssetLink = { id: string; linkType: SalonLinkType; label: string | null; url: string; sortOrder: number };
 export type StoreAssetsData = {
   storeId: string;
@@ -12,6 +14,13 @@ export type StoreAssetsData = {
 };
 
 export type ParsedStoreAssets = { storeId: string; logoPath: string | null; photos: Omit<StoreAssetPhoto, "url">[]; links: StoreAssetLink[] };
+
+const CATEGORY_RANK: Record<StoreAssetPhotoCategory, number> = { interior: 0, atmosphere: 1, photo: 2 };
+/** 並び順は sort_order（0084 以降は店舗内で一意）。0084 適用前の DB（カテゴリごとの 0〜2）から読んだ場合だけ、同じ番号をカテゴリ順→id で安定させる。 */
+function comparePhotos(a: { sortOrder: number; category: StoreAssetPhotoCategory; id: string }, b: { sortOrder: number; category: StoreAssetPhotoCategory; id: string }) {
+  return a.sortOrder - b.sortOrder || CATEGORY_RANK[a.category] - CATEGORY_RANK[b.category] || a.id.localeCompare(b.id);
+}
+export { comparePhotos as compareStorePhotos };
 
 const LINK_TYPES: readonly string[] = ["website", "recruit", "instagram", "hotpepper", "other"];
 
@@ -28,9 +37,9 @@ export function parseStoreAssetsJson(raw: unknown, storeId: string): ParsedStore
     photos: photos.flatMap((p) => {
       const r = p as Record<string, unknown>;
       if (typeof r.id !== "string" || typeof r.storage_path !== "string" || !r.storage_path.startsWith(`${storeId}/`)) return [];
-      if (r.category !== "interior" && r.category !== "atmosphere") return [];
-      return [{ id: r.id, category: r.category as SalonPhotoCategory, storagePath: r.storage_path, sortOrder: Number(r.sort_order) || 0 }];
-    }),
+      if (r.category !== "interior" && r.category !== "atmosphere" && r.category !== "photo") return [];
+      return [{ id: r.id, category: r.category as StoreAssetPhotoCategory, storagePath: r.storage_path, sortOrder: Number(r.sort_order) || 0 }];
+    }).sort(comparePhotos),
     links: links.flatMap((k) => {
       const r = k as Record<string, unknown>;
       if (typeof r.id !== "string" || typeof r.url !== "string" || typeof r.link_type !== "string" || !LINK_TYPES.includes(r.link_type)) return [];
@@ -57,7 +66,9 @@ export function nextFreeSortOrder(used: number[], max: number): number | null {
 export function mapStoreAssetError(message: string | undefined): string {
   const m = message ?? "";
   if (/not editable|not accessible|permission/i.test(m)) return "この店舗のロゴ・写真・リンクを変更する権限がありません（閲覧のみの権限では変更できません）。";
+  if (/maximum of 8 photos/i.test(m)) return "店舗の写真は最大8枚までです。追加するには、写真を削除してください。";
   if (/maximum of 5|duplicate key/i.test(m)) return "登録できる上限に達しています。";
+  if (/invalid category|could not find the function|function .* does not exist/i.test(m)) return "写真の保存機能を準備中です。しばらくしてからもう一度お試しください。";
   if (/violates check constraint/i.test(m)) return "URLの形式が正しくありません。";
   if (/must be under the store folder|kind segment|not found/i.test(m)) return "画像の登録に失敗しました。もう一度アップロードしてください。";
   return "保存に失敗しました。もう一度お試しください。";

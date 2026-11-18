@@ -2,6 +2,7 @@ import { deriveSalonTypes, SALON_TYPE_CONTENT } from "@/lib/salon-culture/salon-
 import { SALON_VALUE_PRIORITY_OPTIONS } from "@/lib/validation/profile-options";
 import type { PublicSalonStoreDetail } from "@/lib/store-activity/types";
 import { StoreAssetsSection } from "@/components/store-assets/store-assets-section";
+import { StoreNameWithLogo } from "@/components/store-assets/store-logo";
 import type { StoreAssetsData } from "@/lib/store-assets/parse";
 
 /**
@@ -43,7 +44,7 @@ export function StoreDetailView({ store, employeeSizeLabel, matchSection, assets
   return (
     <>
       <section className="mt-5 rounded-2xl border border-line bg-surface p-6">
-        <h1 className="font-serif text-2xl font-bold text-ink">{store.store_name}</h1>
+        <StoreNameWithLogo name={store.store_name} logoUrl={assets?.logoUrl} />
         {location && <p className="mt-1 text-[13px] text-sub">{location}</p>}
         {store.street_address && <p className="mt-1 text-[12.5px] text-sub">{store.street_address}</p>}
 

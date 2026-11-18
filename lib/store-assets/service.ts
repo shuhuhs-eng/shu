@@ -1,5 +1,5 @@
-import { nextFreeSortOrder, mapStoreAssetError, parseStoreAssetsJson, type StoreAssetPhoto } from "@/lib/store-assets/parse";
-import { STORE_PHOTO_MAX } from "@/lib/store-assets/constants";
+import { mapStoreAssetError, parseStoreAssetsJson, type StoreAssetPhoto } from "@/lib/store-assets/parse";
+import { STORE_PHOTO_FOLDER, STORE_PHOTO_MAX } from "@/lib/store-assets/constants";
 
 /**
  * 店舗別ロゴ・写真の保存処理（DB 呼び出しと Storage 削除を注入できる形）。server action から使い、テストでは偽の依存を渡す。
@@ -38,34 +38,59 @@ export async function setStoreLogo(
   return { success: true, logoPath: storagePath, logoUrl: storagePath ? await deps.sign(storagePath) : null };
 }
 
+/**
+ * 店舗の写真を追加する（分類なし・1店舗最大8枚。0084）。
+ * 並び順（空き番号）と8枚の上限は DB が決める（店舗ごとの排他ロック＋制約）。ここでの枚数確認は、無駄なやり取りを避けるための事前確認にすぎない。
+ * 上限超過・失敗・結果不明のとき、アップロード済みの画像は削除しない（孤児として残す）。
+ */
 export async function addStorePhoto(
   deps: StoreAssetDeps,
   storeId: string,
-  category: "interior" | "atmosphere",
   storagePath: string,
 ): Promise<{ success: true; photo: StoreAssetPhoto } | Fail> {
   const { data: current, error: readError } = await deps.rpc("get_store_assets", { p_store_id: storeId });
   const parsed = readError ? null : parseStoreAssetsJson(current, storeId);
   if (!parsed) return { success: false, error: mapStoreAssetError(readError?.message) }; // 確認できない: 何も消さない
   // 同じパスが既に登録済み（重複送信・保存後に応答だけ失われて再送）: 二重登録せず、登録済みのものを成功として返す
-  const existing = parsed.photos.find((p) => p.storagePath === storagePath && p.category === category);
+  const existing = parsed.photos.find((p) => p.storagePath === storagePath);
   if (existing) return { success: true, photo: { ...existing, url: await deps.sign(storagePath) } };
-  if (parsed.logoPath === storagePath || parsed.photos.some((p) => p.storagePath === storagePath)) {
+  if (parsed.logoPath === storagePath) {
     return { success: false, error: "画像の登録に失敗しました。もう一度アップロードしてください。" }; // 別の用途で使用中: 触らない
   }
-  const sortOrder = nextFreeSortOrder(parsed.photos.filter((p) => p.category === category).map((p) => p.sortOrder), STORE_PHOTO_MAX);
-  if (sortOrder === null) {
+  if (parsed.photos.length >= STORE_PHOTO_MAX) {
     // 上限超過: 画像は削除しない（確認後の削除は、同時の別登録と競合し得るため。孤児として残す）
-    return { success: false, error: "このカテゴリの画像は既に3枚登録されています。" };
+    return { success: false, error: mapStoreAssetError("maximum of 8 photos") };
   }
-  const { data: row, error } = await deps.rpc("add_store_photo", { p_store_id: storeId, p_category: category, p_storage_path: storagePath, p_sort_order: sortOrder });
+  // p_sort_order は互換のための引数（DB は無視して空き番号に入れる）。分類は付けない（category = photo）。
+  const { data: row, error } = await deps.rpc("add_store_photo", { p_store_id: storeId, p_category: STORE_PHOTO_FOLDER, p_storage_path: storagePath, p_sort_order: 0 });
   const r = row as { id?: string; sort_order?: number } | null;
   if (error || !r?.id) {
     deps.log("addStorePhoto", error ?? new Error("no row"));
     // 拒否・通信失敗・結果不明のいずれでも、アップロード済みの画像は消さない
     return { success: false, error: mapStoreAssetError(error?.message) };
   }
-  return { success: true, photo: { id: r.id, category, storagePath, sortOrder: r.sort_order ?? sortOrder, url: await deps.sign(storagePath) } };
+  return { success: true, photo: { id: r.id, category: "photo", storagePath, sortOrder: r.sort_order ?? parsed.photos.length, url: await deps.sign(storagePath) } };
+}
+
+/**
+ * 店舗の写真を差し替える（同じ枠・同じ並び順のまま画像だけ入れ替える。8枚の状態でも可能）。
+ * DB が成功を返した後に、DB が返した「置き換え前のパス」だけを Storage から削除する。失敗時は何も消さない。
+ */
+export async function replaceStorePhoto(
+  deps: StoreAssetDeps,
+  photoId: string,
+  storagePath: string,
+): Promise<{ success: true; storagePath: string; url: string | null } | Fail> {
+  const { data: prev, error } = await deps.rpc("replace_store_photo", { p_photo_id: photoId, p_storage_path: storagePath });
+  if (error) {
+    deps.log("replaceStorePhoto", error);
+    return { success: false, error: mapStoreAssetError(error.message) };
+  }
+  if (typeof prev === "string" && prev !== storagePath) {
+    const { error: removeError } = await deps.removeObjects([prev]);
+    if (removeError) deps.log("replaceStorePhoto.removePrev", removeError);
+  }
+  return { success: true, storagePath, url: await deps.sign(storagePath) };
 }
 
 export async function deleteStorePhoto(deps: StoreAssetDeps, photoId: string): Promise<{ success: true } | Fail> {

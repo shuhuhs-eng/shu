@@ -7,6 +7,7 @@ import {
   addStorePhotoAction,
   deleteStoreLinkAction,
   deleteStorePhotoAction,
+  replaceStorePhotoAction,
   setStoreLogoAction,
 } from "@/lib/store-assets/actions";
 import {
@@ -15,13 +16,16 @@ import {
   STORE_ASSET_MAX_BYTES,
   STORE_ASSET_MIME_TYPES,
   STORE_LINK_MAX,
+  STORE_PHOTO_FOLDER,
+  STORE_PHOTO_FRAME_CLASS,
+  STORE_PHOTO_GRID_CLASS,
+  STORE_PHOTO_IMAGE_CLASS,
   STORE_PHOTO_MAX,
 } from "@/lib/store-assets/constants";
 import type { StoreAssetLink, StoreAssetPhoto, StoreAssetsData } from "@/lib/store-assets/parse";
 import { SALON_LINK_TYPE_LABELS } from "@/lib/validation/salon-links";
 
 type Props = { storeId: string; storeName: string; initial: StoreAssetsData };
-type Category = "interior" | "atmosphere";
 
 function extensionOf(type: string) {
   return type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg";
@@ -77,18 +81,34 @@ export function StoreAssetsEditor({ storeId, storeName, initial }: Props) {
     if (r.success) { setLogoPath(null); setLogoUrl(null); } else setError(r.error);
     setBusy(null);
   }
-  async function onPhoto(category: Category, e: ChangeEvent<HTMLInputElement>) {
+  async function onPhotoAdd(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError(null);
+    if (photos.length >= STORE_PHOTO_MAX) return setError(`店舗の写真は最大${STORE_PHOTO_MAX}枚までです。追加するには、写真を削除してください。`); // アップロードする前に止める（孤児画像を作らない）
+    const problem = checkFile(file);
+    if (problem) return setError(problem);
+    setBusy("photo-add");
+    const path = `${storeId}/${STORE_PHOTO_FOLDER}/${crypto.randomUUID()}.${extensionOf(file.type)}`;
+    if (await upload(path, file)) {
+      const r = await addStorePhotoAction(storeId, path);
+      if (r.success) setPhotos((prev) => [...prev, r.photo]); else setError(r.error);
+    }
+    setBusy(null);
+  }
+  async function onPhotoReplace(photo: StoreAssetPhoto, e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     setError(null);
     const problem = checkFile(file);
     if (problem) return setError(problem);
-    setBusy(`photo-${category}`);
-    const path = `${storeId}/${category}/${crypto.randomUUID()}.${extensionOf(file.type)}`;
+    setBusy(`replace-${photo.id}`);
+    const path = `${storeId}/${STORE_PHOTO_FOLDER}/${crypto.randomUUID()}.${extensionOf(file.type)}`;
     if (await upload(path, file)) {
-      const r = await addStorePhotoAction(storeId, category, path);
-      if (r.success) setPhotos((prev) => [...prev, r.photo].sort((a, b) => a.sortOrder - b.sortOrder)); else setError(r.error);
+      const r = await replaceStorePhotoAction(storeId, photo.id, path);
+      if (r.success) setPhotos((prev) => prev.map((p) => (p.id === photo.id ? { ...p, category: "photo", storagePath: r.storagePath, url: r.url } : p))); else setError(r.error);
     }
     setBusy(null);
   }
@@ -114,36 +134,8 @@ export function StoreAssetsEditor({ storeId, storeName, initial }: Props) {
     setBusy(null);
   }
 
-  const photoBlock = (category: Category, label: string) => {
-    const list = photos.filter((p) => p.category === category);
-    const full = list.length >= STORE_PHOTO_MAX;
-    return (
-      <div>
-        <div className="flex items-center justify-between">
-          <span className="text-[13px] font-medium text-charcoal">{label}</span>
-          <span className="text-[12px] text-sub">{list.length} / {STORE_PHOTO_MAX}枚</span>
-        </div>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          {list.map((p) => (
-            <div key={p.id} className="relative aspect-square overflow-hidden rounded-xl border border-line bg-surface2">
-              {/* eslint-disable-next-line @next/next/no-img-element -- 署名付きURLをそのまま表示するため */}
-              {p.url && <img src={p.url} alt="" className="h-full w-full object-cover" />}
-              <button type="button" onClick={() => onPhotoDelete(p)} disabled={busy !== null} aria-label="削除"
-                className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-ink/70 text-[12px] text-surface disabled:opacity-60">
-                {busy === `del-${p.id}` ? "…" : "×"}
-              </button>
-            </div>
-          ))}
-          {!full && (
-            <label className={`flex aspect-square items-center justify-center rounded-xl border border-dashed border-line bg-surface2 text-center text-[12px] text-sub ${busy ? "opacity-60" : "cursor-pointer"}`}>
-              {busy === `photo-${category}` ? "アップロード中..." : "＋ 画像を追加"}
-              <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy !== null} onChange={(e) => onPhoto(category, e)} />
-            </label>
-          )}
-        </div>
-      </div>
-    );
-  };
+  const photoFull = photos.length >= STORE_PHOTO_MAX;
+  const photoButton = "inline-flex min-h-[36px] items-center justify-center rounded-full bg-ink/80 px-3.5 text-[12px] font-semibold text-surface";
 
   return (
     <div className="space-y-8">
@@ -154,26 +146,59 @@ export function StoreAssetsEditor({ storeId, storeName, initial }: Props) {
 
       <section className="space-y-3">
         <h3 className="eyebrow">店舗ロゴ</h3>
-        <div className="flex items-center gap-4">
-          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-line bg-surface2 text-[11px] text-sub">
+        <p className="text-[12px] text-sub">店名の左に小さく表示されます。写真の一覧には含まれません。</p>
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-surface2 text-[10px] text-sub">
             {/* eslint-disable-next-line @next/next/no-img-element -- 署名付きURLをそのまま表示するため */}
             {logoUrl ? <img src={logoUrl} alt="店舗ロゴ" className="h-full w-full object-contain" /> : "未登録"}
           </div>
-          <div className="flex flex-col gap-2">
-            <label className={`inline-flex min-h-[40px] items-center justify-center rounded-full border border-ink px-4 text-[12.5px] font-semibold text-ink ${busy ? "opacity-60" : "cursor-pointer"}`}>
-              {busy === "logo" ? "保存中..." : logoPath ? "ロゴを差し替える" : "ロゴを選ぶ"}
-              <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy !== null} onChange={onLogo} />
-            </label>
-            {logoPath && <button type="button" onClick={onLogoRemove} disabled={busy !== null} className="text-[12px] text-sub underline disabled:opacity-60">ロゴを削除</button>}
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span className="truncate text-[13px] font-medium text-charcoal">{storeName}</span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <label className={`inline-flex min-h-[36px] items-center justify-center rounded-full border border-ink px-4 text-[12.5px] font-semibold text-ink ${busy ? "opacity-60" : "cursor-pointer"}`}>
+                {busy === "logo" ? "保存中..." : logoPath ? "ロゴを差し替える" : "ロゴを選ぶ"}
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy !== null} onChange={onLogo} />
+              </label>
+              {logoPath && <button type="button" onClick={onLogoRemove} disabled={busy !== null} className="text-[12px] text-sub underline disabled:opacity-60">ロゴを削除</button>}
+            </div>
           </div>
         </div>
         <p className="text-[11.5px] text-sub">JPEG・PNG・WebP / 5MB以下</p>
       </section>
 
-      <section className="space-y-5">
-        <h3 className="eyebrow">店舗の写真</h3>
-        {photoBlock("interior", "内装写真")}
-        {photoBlock("atmosphere", "スタッフ・サロンの雰囲気")}
+      <section className="space-y-3">
+        <div className="flex items-end justify-between gap-3">
+          <h3 className="eyebrow">店舗の写真</h3>
+          <span className="text-[12.5px] font-semibold text-charcoal" aria-live="polite">現在 {photos.length}／{STORE_PHOTO_MAX}枚</span>
+        </div>
+        <p className="text-[12px] leading-relaxed text-sub">最大{STORE_PHOTO_MAX}枚まで登録できます。登録した順に表示されます。差し替え・削除は各写真のボタンから行えます。</p>
+        <ul className={STORE_PHOTO_GRID_CLASS}>
+          {photos.map((p) => (
+            <li key={p.id} className={STORE_PHOTO_FRAME_CLASS}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- 署名付きURLをそのまま表示するため */}
+              {p.url ? <img src={p.url} alt="店舗の写真" className={STORE_PHOTO_IMAGE_CLASS} /> : <span className="flex h-full w-full items-center justify-center text-[12px] text-sub">画像を表示できません</span>}
+              <div className="absolute inset-x-2 bottom-2 flex items-center justify-end gap-2">
+                <label className={`${photoButton} ${busy ? "opacity-60" : "cursor-pointer"}`}>
+                  {busy === `replace-${p.id}` ? "差し替え中..." : "差し替え"}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy !== null} onChange={(e) => onPhotoReplace(p, e)} />
+                </label>
+                <button type="button" onClick={() => onPhotoDelete(p)} disabled={busy !== null} className={`${photoButton} disabled:opacity-60`}>
+                  {busy === `del-${p.id}` ? "削除中..." : "削除"}
+                </button>
+              </div>
+            </li>
+          ))}
+          {!photoFull && (
+            <li>
+              <label className={`${STORE_PHOTO_FRAME_CLASS} flex items-center justify-center border-dashed text-center text-[13px] text-sub ${busy ? "opacity-60" : "cursor-pointer"}`}>
+                {busy === "photo-add" ? "アップロード中..." : "＋ 写真を追加"}
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy !== null} onChange={onPhotoAdd} />
+              </label>
+            </li>
+          )}
+        </ul>
+        {photoFull && <p className="text-[12px] leading-relaxed text-sub">上限の{STORE_PHOTO_MAX}枚に達しています。新しい写真を追加するには、不要な写真を削除してください（写真の入れ替えは「差し替え」で行えます）。</p>}
+        <p className="text-[11.5px] text-sub">JPEG・PNG・WebP / 1枚5MB以下</p>
       </section>
 
       <section className="space-y-3">

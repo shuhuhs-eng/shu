@@ -5,9 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { looseRpc } from "@/lib/diagnosis-limit/rpc";
 import { logError } from "@/lib/security/log";
 import { addSalonLinkSchema } from "@/lib/validation/salon-links";
-import { STORE_ASSET_BUCKET, STORE_ASSET_SIGNED_URL_EXPIRES_IN } from "@/lib/store-assets/constants";
+import { STORE_ASSET_BUCKET, STORE_ASSET_SIGNED_URL_EXPIRES_IN, STORE_PHOTO_FOLDER } from "@/lib/store-assets/constants";
 import { mapStoreAssetError, type StoreAssetLink, type StoreAssetPhoto } from "@/lib/store-assets/parse";
-import { addStorePhoto, deleteStorePhoto, setStoreLogo, type StoreAssetDeps } from "@/lib/store-assets/service";
+import { addStorePhoto, deleteStorePhoto, replaceStorePhoto, setStoreLogo, type StoreAssetDeps } from "@/lib/store-assets/service";
 
 /**
  * 店舗別のロゴ・写真・リンクの保存・削除（0081 の RPC の薄いラッパー）。
@@ -21,7 +21,7 @@ import { addStorePhoto, deleteStorePhoto, setStoreLogo, type StoreAssetDeps } fr
  */
 const uuid = z.string().uuid();
 const logoPath = (storeId: string) => new RegExp(`^${storeId}/logo/[^/]+$`);
-const photoPath = (storeId: string, category: string) => new RegExp(`^${storeId}/${category}/[^/]+$`);
+const photoPath = (storeId: string) => new RegExp(`^${storeId}/${STORE_PHOTO_FOLDER}/[^/]+$`);
 const NOT_LOGGED_IN = "セッションが切れています。再度ログインしてください。";
 
 type Fail = { success: false; error: string };
@@ -52,16 +52,29 @@ export async function setStoreLogoAction(
 
 export async function addStorePhotoAction(
   storeId: string,
-  category: "interior" | "atmosphere",
   storagePath: string,
 ): Promise<{ success: true; photo: StoreAssetPhoto } | Fail> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: NOT_LOGGED_IN };
-  if (!uuid.safeParse(storeId).success || (category !== "interior" && category !== "atmosphere") || !photoPath(storeId, category).test(storagePath)) {
+  if (!uuid.safeParse(storeId).success || !photoPath(storeId).test(storagePath)) {
     return { success: false, error: "画像の登録に失敗しました。もう一度アップロードしてください。" };
   }
-  return addStorePhoto(depsFor(supabase), storeId, category, storagePath);
+  return addStorePhoto(depsFor(supabase), storeId, storagePath);
+}
+
+export async function replaceStorePhotoAction(
+  storeId: string,
+  photoId: string,
+  storagePath: string,
+): Promise<{ success: true; storagePath: string; url: string | null } | Fail> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: NOT_LOGGED_IN };
+  if (!uuid.safeParse(storeId).success || !uuid.safeParse(photoId).success || !photoPath(storeId).test(storagePath)) {
+    return { success: false, error: "画像の登録に失敗しました。もう一度アップロードしてください。" };
+  }
+  return replaceStorePhoto(depsFor(supabase), photoId, storagePath);
 }
 
 export async function deleteStorePhotoAction(photoId: string): Promise<{ success: true } | Fail> {
