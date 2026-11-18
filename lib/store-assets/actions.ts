@@ -17,7 +17,7 @@ import { addStorePhoto, deleteStorePhoto, replaceStorePhoto, setStoreLogo, type 
  * 順序の方針:
  *  ・保存失敗・上限超過・結果不明のとき、アップロード済みの画像は削除しない（同時の別登録と競合して使用中の画像を消さないため。孤児として残る。service.ts）。
  *  ・差し替え・削除は「DB（権限判定を含む）→ Storage」の順。DBが拒否したら Storage は触らない。
- *  ・置き換えた古い画像（DB が返した前のパス）は Storage から削除する（発行済みの署名付きURLが残る時間を短くするため）。
+ *  ・ロゴ差し替え・写真削除で DB が返した前のパスは Storage から削除する。写真の差し替え（replace_store_photo）は旧画像を削除せず残す（再登録との競合で使用中の画像を消さないため）。
  */
 const uuid = z.string().uuid();
 const logoPath = (storeId: string) => new RegExp(`^${storeId}/logo/[^/]+$`);

@@ -74,21 +74,19 @@ export async function addStorePhoto(
 
 /**
  * 店舗の写真を差し替える（同じ枠・同じ並び順のまま画像だけ入れ替える。8枚の状態でも可能）。
- * DB が成功を返した後に、DB が返した「置き換え前のパス」だけを Storage から削除する。失敗時は何も消さない。
+ * ★置き換え前の画像は Storage から削除しない（残す）。DB の応答（旧パス）を受けてから削除するまでの間に、別のリクエストが
+ *   同じ旧パスを再登録すると、使用中の画像を消してしまうため。使われなくなった旧画像は孤児として残り、自動掃除はしない
+ *   （必要なら、登録済みパスと突き合わせる運用で別途掃除する）。失敗時も何も消さない。
  */
 export async function replaceStorePhoto(
   deps: StoreAssetDeps,
   photoId: string,
   storagePath: string,
 ): Promise<{ success: true; storagePath: string; url: string | null } | Fail> {
-  const { data: prev, error } = await deps.rpc("replace_store_photo", { p_photo_id: photoId, p_storage_path: storagePath });
+  const { error } = await deps.rpc("replace_store_photo", { p_photo_id: photoId, p_storage_path: storagePath });
   if (error) {
     deps.log("replaceStorePhoto", error);
     return { success: false, error: mapStoreAssetError(error.message) };
-  }
-  if (typeof prev === "string" && prev !== storagePath) {
-    const { error: removeError } = await deps.removeObjects([prev]);
-    if (removeError) deps.log("replaceStorePhoto.removePrev", removeError);
   }
   return { success: true, storagePath, url: await deps.sign(storagePath) };
 }

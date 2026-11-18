@@ -290,12 +290,13 @@ test("写真追加: 7枚なら追加できる（分類なし photo で DB を呼
   if (!rr.success) assert.match(rr.error, /最大8枚/);
   assert.deepEqual(race.removed, []);
 });
-test("写真差し替え: 成功時だけ DB が返した前のパスを消す／拒否・通信失敗・同じ画像の再送では何も消さない", async () => {
+test("写真差し替え: 成功しても旧画像は削除しない（残す）／拒否・通信失敗でも何も消さない", async () => {
   const old = `${S}/interior/old.webp`;
   const ok = fakeDeps({ replace_store_photo: () => ({ data: old }) });
   const r = await replaceStorePhoto(ok.deps, "p1", `${S}/photo/new.webp`);
   assert.equal(r.success, true);
-  assert.deepEqual(ok.removed, [old]);
+  if (r.success) assert.equal(r.storagePath, `${S}/photo/new.webp`);
+  assert.deepEqual(ok.removed, []);
   for (const error of [REJECT, NETWORK]) {
     const f = fakeDeps({ replace_store_photo: () => ({ error }) });
     assert.equal((await replaceStorePhoto(f.deps, "p1", `${S}/photo/new.webp`)).success, false);
@@ -304,8 +305,21 @@ test("写真差し替え: 成功時だけ DB が返した前のパスを消す�
   const same = fakeDeps({ replace_store_photo: () => ({ data: `${S}/photo/new.webp` }) });
   assert.equal((await replaceStorePhoto(same.deps, "p1", `${S}/photo/new.webp`)).success, true);
   assert.deepEqual(same.removed, []);
-  const rmFail = fakeDeps({ replace_store_photo: () => ({ data: old }) }, true);
-  assert.equal((await replaceStorePhoto(rmFail.deps, "p1", `${S}/photo/new.webp`)).success, true); // 旧画像の削除失敗は保存成功を妨げない
+});
+test("写真差し替え: 差し替え後に別リクエストが旧パスを再登録しても、使用中の画像は削除されない", async () => {
+  const old = `${S}/interior/old.webp`;
+  // 差し替えの応答（旧パス）→その直後に別リクエストが同じ旧パスを別の写真として登録、という順序を模擬
+  const calls: string[] = [];
+  const f = fakeDeps({
+    replace_store_photo: () => { calls.push("replace"); return { data: old }; },
+    get_store_assets: () => ({ data: assetsJson([]) }), // 差し替えで外れたので、旧パスは未登録に見える
+    add_store_photo: () => { calls.push("re-register"); return { data: { id: "p2", sort_order: 3 } }; },
+  });
+  assert.equal((await replaceStorePhoto(f.deps, "p1", `${S}/photo/new.webp`)).success, true);
+  const reg = await addStorePhoto(f.deps, S, old);
+  assert.equal(reg.success, true);
+  assert.deepEqual(f.removed, []); // どちらの操作でも Storage の削除は一度も呼ばれない（旧画像は残り、再登録された写真は表示できる）
+  assert.deepEqual(calls, ["replace", "re-register"]);
 });
 test("静的確認: 編集画面に分類名・タブ・分類の操作が無く、枚数表示「現在 n／8枚」・差し替え・削除がある", () => {
   const editor = strip("components/store-assets/store-assets-editor.tsx");
@@ -343,6 +357,8 @@ test("ロゴ設定: DB拒否・通信失敗・使用中のどれでも、渡さ�
 test("静的確認: 保存処理に「確認してから削除」の経路（未登録確認・条件付き削除）が残っていない", () => {
   const svc = strip("lib/store-assets/service.ts");
   assert.doesNotMatch(svc, /removeUploadedIfSafe|isDefiniteRejection/);
+  const replaceFn = svc.slice(svc.indexOf("export async function replaceStorePhoto"), svc.indexOf("export async function deleteStorePhoto"));
+  assert.doesNotMatch(replaceFn, /removeObjects/); // 写真の差し替えは旧画像を削除しない
   // Storage の削除は、DB が返した前のパス／削除した写真のパスにだけ使う（storagePath を直接渡す削除が無い）
   assert.doesNotMatch(svc, /removeObjects\(\[storagePath\]\)/);
 });
