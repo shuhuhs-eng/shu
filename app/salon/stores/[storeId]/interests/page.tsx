@@ -16,7 +16,7 @@ type Props = {
 };
 
 /**
- * 店舗単位「興味を持ってくれた美容師」一覧（/salon/stores/[storeId]/interests、Phase 6）。
+ * 店舗単位「見学を希望してくれた美容師」一覧（/salon/stores/[storeId]/interests、Phase 6）。
  *
  * ★アクセス権: layout.tsxと同じく、salon_storesへの直接SELECT（RLS=
  * is_store_accessible）の結果だけで判定する。storeIdは常にURLのparams.storeId。
@@ -82,13 +82,13 @@ export default async function StoreInterestsPage({ params }: Props) {
     <StorePageShell
       storeId={storeId}
       storeName={store.store_name}
-      eyebrow="興味を持ってくれた美容師"
-      description="この店舗に「話を聞いてみたい」を送ってくれた美容師です。プロフィールを確認して、条件を満たす方には給与条件を提示できます。"
+      eyebrow="見学を希望してくれた美容師"
+      description="この店舗に「見学を希望したい」を送ってくれた美容師です。プロフィールを確認して、条件を満たす方には給与条件を提示できます。"
     >
       {interests === null ? (
         <p className="mt-8 text-center text-[13px] text-sub">一覧を取得できませんでした。時間をおいて再度お試しください。</p>
       ) : interests.length === 0 ? (
-        <p className="mt-8 text-center text-[13px] text-sub">現在、届いている「話を聞いてみたい」はありません。</p>
+        <p className="mt-8 text-center text-[13px] text-sub">現在、届いている「見学を希望したい」はありません。</p>
       ) : (
         <div className="mt-8 space-y-4">
           {interests.map((interest) => (

@@ -171,15 +171,15 @@ test("関心一覧: 進捗未作成／作成済み。『返信済み』を使わ
   state.rpc = async (fn) => (fn === "is_platform_admin" ? { data: true, error: null } : { data: { as_of: "x", total: 2, legacy_rows_without_store: 4, rows: [row("1", "not_created"), row("2", "created")] }, error: null });
   let out = await render("../app/admin/interests/page");
   assert.match(out, /進捗未作成/); assert.match(out, /進捗作成済み/); assert.ok(!/返信済み/.test(out));
-  assert.match(out, /旧形式の「話を聞いてみたい」が 4件/);
+  assert.match(out, /旧形式の「見学を希望したい」が 4件/);
   assert.match(out, /スカウトへの返信/, "進捗の起点を表示（起点がスカウトでも作成済み）");
   assert.match(out, /\/admin\/messages\/new\?audience=stylist&amp;recipient=u1/);
   state.rpc = async (fn) => (fn === "is_platform_admin" ? { data: true, error: null } : { data: { as_of: "x", total: 0, legacy_rows_without_store: 0, rows: [] }, error: null });
   out = await render("../app/admin/interests/page");
-  assert.match(out, /条件に合う「話を聞いてみたい」はありません/);
+  assert.match(out, /条件に合う「見学を希望したい」はありません/);
   state.rpc = async (fn) => (fn === "is_platform_admin" ? { data: true, error: null } : { data: null, error: { code: "PGRST202", message: "Could not find the function" } });
   out = await render("../app/admin/interests/page");
-  assert.match(out, /取得できませんでした/); assert.ok(!/条件に合う「話を聞いてみたい」はありません/.test(out));
+  assert.match(out, /取得できませんでした/); assert.ok(!/条件に合う「見学を希望したい」はありません/.test(out));
 });
 test("診断状況: 状態の内訳・8項目と12項目を別に表示・数値は出さない・失敗の区別", async () => {
   state.guard = "admin";

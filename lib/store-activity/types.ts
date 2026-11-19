@@ -14,7 +14,7 @@ export type PublicSalonStore = Functions["get_public_salon_stores"]["Returns"][n
 /** 美容師向け: 公開中の店舗の詳細（get_public_salon_store_detail）。 */
 export type PublicSalonStoreDetail = Functions["get_public_salon_store_detail"]["Returns"];
 
-/** 店舗側: 「話を聞いてみたい」を送った美容師の1行（get_store_received_interests）。 */
+/** 店舗側: 「見学を希望したい」を送った美容師の1行（get_store_received_interests）。 */
 export type StoreReceivedInterest = Functions["get_store_received_interests"]["Returns"][number];
 
 /** 店舗側: スカウト履歴の1行（get_store_scouts）。 */

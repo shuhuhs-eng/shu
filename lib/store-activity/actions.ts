@@ -101,7 +101,7 @@ export async function getStoreScoutQuota(storeId: string): Promise<StoreScoutQuo
  * 店舗側の履歴画面で美容師名を表示するための名前表。
  *
  * get_store_scouts / get_store_salary_offers は美容師のIDしか返さないため、
- * ・この店舗に「話を聞いてみたい」を送った美容師（get_store_received_interests）
+ * ・この店舗に「見学を希望したい」を送った美容師（get_store_received_interests）
  * ・スカウト対象として公開中の美容師（get_public_stylists_for_scout）
  * の公開名を合わせて名前表にする。どちらにも居ない美容師（公開を停止した等）は
  * 呼び出し側で「美容師」と表示する。いずれも既存RPCで、新しいDBアクセスは無い。

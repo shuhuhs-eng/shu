@@ -9,7 +9,7 @@ type Props = {
 };
 
 /**
- * 店舗単位「話を聞いてみたい」ボタン（美容師側・店舗詳細）。
+ * 店舗単位「見学を希望したい」ボタン（美容師側・店舗詳細）。
  * set_store_interest のみを呼ぶ（storeIdはURL由来。salon_user_idは渡さない）。
  * 送信済みの場合は取り消し（interested=false）もできる。
  * 失敗時は生のエラーを出さず、決まった文言のみ表示する。
@@ -44,8 +44,8 @@ export function StoreInterestButton({ storeId, isInterested }: Props) {
         {pending
           ? "送信中..."
           : interested
-            ? "「話を聞いてみたい」を送信済み（取り消す）"
-            : "話を聞いてみたい"}
+            ? "「見学を希望したい」を送信済み（取り消す）"
+            : "見学を希望したい"}
       </button>
       <p className="mt-2 text-center text-[11px] leading-relaxed text-sub">
         {interested

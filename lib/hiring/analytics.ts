@@ -88,7 +88,7 @@ export function ratePointDiff(curNum: number, curDen: number, prevNum: number, p
 
 // ---- CSV（集計値と店舗名・入口名だけ。個人名・社内メモ・IDは含めない） ----
 export const COHORT_CSV_HEADER = ["区分", "名称", "候補者", "面談化", "面談実施", "選考", "採用", "辞退", "不採用", "採用率(%)"];
-const CSV_SOURCE_LABELS: Record<string, string> = { interest: "興味あり", scout: "スカウト", salary_offer: "給与オファー" };
+const CSV_SOURCE_LABELS: Record<string, string> = { interest: "見学希望", scout: "スカウト", salary_offer: "給与オファー" };
 
 function rateNumber(n: number, d: number): string {
   return d <= 0 ? "" : String(Math.round((n / d) * 1000) / 10);

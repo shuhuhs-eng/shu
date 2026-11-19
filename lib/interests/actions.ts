@@ -9,7 +9,7 @@ import { logError } from "@/lib/security/log";
 const storeIdSchema = z.string().uuid();
 
 /**
- * 店舗単位「話を聞いてみたい」の送信・取消（Phase 6）。set_store_interest()
+ * 店舗単位「見学を希望したい」の送信・取消（Phase 6）。set_store_interest()
  * のみを呼ぶ。storeIdは呼び出し元（URLのparams.storeId）が明示的に渡す値で、
  * salon_user_idは一切渡さない。権限検証（stylist role・PUBLIC店舗）はRPC内。
  */
@@ -30,7 +30,7 @@ export async function setStoreInterestAction(
 
   if (error) {
     logError("setStoreInterestAction", error);
-    // 新規の「話を聞いてみたい」は停止中の店舗には送れない（既に送信済みの再送・取り消しは影響なし）。
+    // 新規の「見学を希望したい」は停止中の店舗には送れない（既に送信済みの再送・取り消しは影響なし）。
     if (isRecruitingPausedError(error.message)) {
       return { success: false, error: RECRUITING_PAUSED_MESSAGE };
     }

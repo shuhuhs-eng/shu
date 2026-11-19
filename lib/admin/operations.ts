@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isPlatformAdmin } from "@/lib/admin/is-admin";
 
 /**
- * 運営の「面接・採用の進捗」「話を聞いてみたい（関心）」「サロンらしさ診断の不足」の一覧（読み取り専用）。
+ * 運営の「面接・採用の進捗」「見学を希望したい（関心）」「サロンらしさ診断の不足」の一覧（読み取り専用）。
  * DB側は 0085（草案）の admin_list_* 3つのRPC。
  * ★権限は二重: ここで is_platform_admin() を確認し、DB側のRPCも先頭で同じ確認をする。
  * ★取得に失敗したとき（RPCの不在・エラー・想定外の戻り値）は 0件 にしない。ok:false を返し、画面は「取得できませんでした」と表示する。

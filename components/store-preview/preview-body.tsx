@@ -85,7 +85,7 @@ export function StorePreviewBody({ storeId, result, assets = null }: Props) {
       )}
 
       <p className="mt-6 text-center text-[11.5px] leading-relaxed text-sub">
-        プレビューでは、「話を聞いてみたい」などの操作はできません。この画面を見ても、美容師への通知や閲覧の記録は発生しません。
+        プレビューでは、「見学を希望したい」などの操作はできません。この画面を見ても、美容師への通知や閲覧の記録は発生しません。
       </p>
     </main>
   );}

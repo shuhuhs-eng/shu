@@ -122,7 +122,7 @@ test("共用表示部品: 美容師向けと同じ構成（店舗情報→店舗
   assert.match(html, /従業員数: 1〜5名/);
 });
 
-test("美容師向け店舗詳細は共用部品を使い、相性計算・話を聞いてみたいは従来どおり残る", () => {
+test("美容師向け店舗詳細は共用部品を使い、相性計算・見学を希望したいは従来どおり残る", () => {
   const c = strip("app/stylist/salons/[storeId]/page.tsx");
   assert.match(c, /StoreDetailView/);
   assert.match(c, /calculateStylistStoreMatch/);

@@ -95,7 +95,7 @@ export default async function AdminDashboardPage() {
         </div>
         <p className="mt-2 flex flex-wrap gap-x-4 text-[12px] font-semibold">
           <Link href="/admin/interviews" className="underline">面接・採用の進捗 ›</Link>
-          <Link href="/admin/interests" className="underline">「話を聞いてみたい」 ›</Link>
+          <Link href="/admin/interests" className="underline">「見学を希望したい」 ›</Link>
           <Link href="/admin/culture-readiness" className="underline">サロンらしさ診断の状況 ›</Link>
         </p>
       </section>

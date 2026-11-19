@@ -73,7 +73,7 @@ export default async function StylistStoreDetailPage({ params }: Props) {
         })
       : null;
 
-  // 「話を聞いてみたい」の送信済み判定。stylist_salon_interestsには美容師本人の
+  // 「見学を希望したい」の送信済み判定。stylist_salon_interestsには美容師本人の
   // SELECTのみ許可するRLS（stylist_user_id = auth.uid()）が既にあるため、
   // 本人×この店舗の行の有無だけを確認する（新しいDB変更は不要）。
   const { data: interestRow } = await supabase

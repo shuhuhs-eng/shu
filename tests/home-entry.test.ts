@@ -105,7 +105,7 @@ test("トップの表示出し分け: 美容師/サロン/管理者/未ログイ
   assert.match(h, /\{\(showStylistCard \|\| showSalonEntry\) && \(/);
   assert.match(h, /\{showStylistCard && \(\s*<section/); assert.match(h, /\{showSalonEntry && \(\s*<aside/);
   // 美容師: 診断ボタンを出さず、マイページ導線は残す。初回案内は未ログインのみ
-  assert.match(h, /\{view !== "stylist" && view !== "salon" && \(\s*<Link\s+href="\/stylist\/diagnosis"/);
+  assert.match(h, /\{view !== "stylist" && view !== "salon" && view !== "admin" && \(\s*<Link\s+href="\/stylist\/diagnosis"/);
   assert.match(h, /view === "stylist" \? \(\s*<Link\s+href="\/stylist\/mypage"/);
   // 旧「…アカウントでログインするとご利用いただけます」の案内は残っていない
   assert.doesNotMatch(h, /アカウントでログインするとご利用いただけます/);
@@ -117,4 +117,16 @@ test("トップの表示出し分け: 美容師/サロン/管理者/未ログイ
   assert.equal((h.match(/初めての方は30問の診断から始めましょう/g) ?? []).length, 1);
   // 認証・アクセス制御は表示だけに頼らない（再診断は /stylist/mypage の「診断を受け直す」）
   assert.match(src("app/stylist/mypage/page.tsx"), /診断を受け直す/);
+});
+
+test("ホーム: 運営管理者でも、30問診断の案内（説明文・ボタン・特徴の行）を出さない。未ログイン・美容師の表示は維持", () => {
+  const h = strip(src("app/page.tsx"));
+  // サロンと同じ条件に運営管理者を追加（説明文・特徴の行）。美容師向けの表示条件は変えていない
+  assert.equal((h.match(/\{view !== "salon" && view !== "admin" && \(/g) ?? []).length, 2);
+  assert.match(h, /view !== "stylist" && view !== "salon" && view !== "admin" && \(\s*<Link\s+href="\/stylist\/diagnosis"/);
+  // 診断機能そのもの（ページ）には手を入れていない
+  assert.match(src("app/stylist/diagnosis/page.tsx"), /./);
+  // 美容師カードとサロン入口は guest/stylist・guest/salon のまま（admin は出ない）
+  assert.match(h, /const showStylistCard = view === "guest" \|\| view === "stylist"/);
+  assert.match(h, /const showSalonEntry = view === "guest" \|\| view === "salon"/);
 });

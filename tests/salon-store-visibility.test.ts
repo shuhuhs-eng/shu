@@ -131,8 +131,8 @@ test("店舗プロフィールの保存処理: 公開範囲を書き換える処
 });
 test("ホーム: サロンでログイン中は「30問」の診断カード・CTA・説明を出さない（美容師・未ログインは従来どおり）", () => {
   const src = readFileSync("app/page.tsx", "utf8");
-  assert.match(src, /view !== "stylist" && view !== "salon" && \(/); // 30問CTA
-  assert.equal((src.match(/view !== "salon" && \(/g) ?? []).length >= 3, true); // 説明文・3アイコン列・CTA
+  assert.match(src, /view !== "stylist" && view !== "salon" && view !== "admin" && \(/); // 30問CTA（運営管理者も非表示）
+  assert.equal((src.match(/view !== "salon" && view !== "admin" && \(/g) ?? []).length >= 2, true); // 説明文・3アイコン列（CTAは上の行）
   assert.match(src, /30問であなたのタイプを診断する/); // 診断機能そのもの・美容師側の表示は残る
   assert.match(src, /showStylistCard = view === "guest" \|\| view === "stylist"/);
 });

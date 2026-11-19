@@ -57,7 +57,7 @@ export async function createStoreSalaryOffer(input: z.infer<typeof storeOfferSch
     console.error("[createStoreSalaryOffer] RPC failed", { message: error.message, code: error.code });
     if (isRecruitingPausedError(error.message)) return { success: false, error: RECRUITING_PAUSED_MESSAGE };
     if (error.message.includes("interest required")) {
-      return { success: false, error: "この美容師から「話を聞いてみたい」が届いていないため、条件を提示できません。" };
+      return { success: false, error: "この美容師から「見学を希望したい」が届いていないため、条件を提示できません。" };
     }
     if (error.message.includes("verified opt-in profile required")) {
       return { success: false, error: "実績の確認が完了している美容師にのみ条件を提示できます。" };

@@ -104,7 +104,7 @@ export default async function StoreWorkspacePage({ params }: Props) {
           href={`/salon/stores/${storeId}/interests`}
           className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
         >
-          <span className="font-serif text-[15px] font-bold text-ink">興味を持ってくれた美容師</span>
+          <span className="font-serif text-[15px] font-bold text-ink">見学を希望してくれた美容師</span>
           <span className="text-[12px] text-sub">確認・条件を提示 ›</span>
         </Link>
         <Link
