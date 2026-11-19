@@ -8,6 +8,7 @@ const ITEMS = [
   { href: "/admin/stylists", label: "美容師" },
   { href: "/admin/messages", label: "連絡" },
   { href: "/admin/interviews", label: "面接・進捗" },
+  { href: "/admin/visit-requests", label: "見学・体験入店" },
   { href: "/admin/interests", label: "見学を希望したい" },
   { href: "/admin/culture-readiness", label: "診断の状況" },
   { href: "/admin/companies", label: "会社（採用・請求）" },

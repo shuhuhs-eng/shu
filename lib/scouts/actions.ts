@@ -64,7 +64,7 @@ export async function markScoutRead(
 const respondScoutSchema = z
   .object({
     scoutId: z.string().uuid(),
-    response: z.enum(["interested", "question", "considering", "declined"]),
+    response: z.enum(["visit_requested", "trial_requested", "question", "considering", "declined"]),
     responseMessage: z.string().trim().max(1000).nullable(),
   })
   .refine((v) => v.response !== "question" || (v.responseMessage != null && v.responseMessage.length > 0), {

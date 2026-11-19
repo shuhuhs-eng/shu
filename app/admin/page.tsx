@@ -16,6 +16,7 @@ import {
 import { getAdminInvoiceDocuments } from "@/lib/invoices/actions";
 import { getAdminOrganizationContracts } from "@/lib/contracts/actions";
 import { countOperations } from "@/lib/admin/operations";
+import { countVisitRequestsByStatus } from "@/lib/admin/visit-requests";
 
 /**
  * 運営ダッシュボード（/admin）。採用成立と成功報酬の状況を集計する。
@@ -29,13 +30,15 @@ export default async function AdminDashboardPage() {
   const { data: isAdmin } = await supabase.rpc("is_platform_admin");
   if (!isAdmin) redirect("/mypage");
 
-  const [fees, issues, orgs, contracts, documents, opCounts] = await Promise.all([
+  const [fees, issues, orgs, contracts, documents, opCounts, unclaimedVisits, schedulingVisits] = await Promise.all([
     getAdminSuccessFees(),
     getBillingIntegrityIssues(),
     getAdminOrganizationOverview(),
     getAdminOrganizationContracts(),
     getAdminInvoiceDocuments(),
     countOperations(supabase),
+    countVisitRequestsByStatus(supabase, "unclaimed"),
+    countVisitRequestsByStatus(supabase, "scheduling"),
   ]);
   // 各カードは、必要な取得元だけを見る。取得失敗のカードは残し「取得できませんでした」と表示する（0にしない）。
   const contractChecks = buildContractCards(contracts, fees);
@@ -50,7 +53,11 @@ export default async function AdminDashboardPage() {
   const countCards = buildCountCards(fees);
   const amountCards = buildAmountCards(fees);
   const daily = buildDailyCards({ fees, issues, contracts, documents });
-  const operations = buildOperationCards(opCounts);
+  const operations = [
+    ...buildOperationCards(opCounts),
+    { label: "見学・体験入店: 未受付", value: unclaimedVisits, href: "/admin/visit-requests?status=unclaimed", alert: true } satisfies DashboardCard,
+    { label: "見学・体験入店: 日程調整中", value: schedulingVisits, href: "/admin/visit-requests?status=scheduling" } satisfies DashboardCard,
+  ];
 
   return (
     <main className="mx-auto max-w-[760px] px-5 py-12">
@@ -96,6 +103,7 @@ export default async function AdminDashboardPage() {
         <p className="mt-2 flex flex-wrap gap-x-4 text-[12px] font-semibold">
           <Link href="/admin/interviews" className="underline">面接・採用の進捗 ›</Link>
           <Link href="/admin/interests" className="underline">「見学を希望したい」 ›</Link>
+          <Link href="/admin/visit-requests" className="underline">見学・体験入店の受付 ›</Link>
           <Link href="/admin/culture-readiness" className="underline">サロンらしさ診断の状況 ›</Link>
         </p>
       </section>

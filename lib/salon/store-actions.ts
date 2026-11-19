@@ -30,12 +30,13 @@ export async function saveSalonStoreProfileAction(
     prefecture: formData.get("prefecture"),
     city: formData.get("city"),
     streetAddress: formData.get("streetAddress"),
-    cultureDescription: formData.get("cultureDescription"),
     employeeSizeCode: formData.get("employeeSizeCode"),
     targetSpecialties: formData.getAll("targetSpecialties"),
     bio: formData.get("bio"),
     visibility: formData.get("visibility"),
     hotpepperUrl: formData.get("hotpepperUrl"),
+    expectedRevision: formData.get("expectedRevision") || null,
+    introDisplay: formData.get("introDisplay") || "keep",
   };
 
   const parsed = salonStoreProfileFormSchema.safeParse(raw);

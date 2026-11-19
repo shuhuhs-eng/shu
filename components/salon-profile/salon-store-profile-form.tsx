@@ -12,13 +12,20 @@ import { CheckboxGroupField } from "@/components/profile/checkbox-group-field";
 import { TextareaField } from "@/components/profile/textarea-field";
 import { PREFECTURES, SPECIALTY_OPTIONS } from "@/lib/validation/profile-options";
 import type { SalonVisibilityChoice } from "@/lib/salon/store-visibility";
+import { StoreIntroField } from "@/components/salon-profile/store-intro-field";
+import { STORE_INTRO_MAX } from "@/lib/validation/salon-store-profile";
 
 export type SalonStoreProfileFormInitialValues = {
   salonName: string;
   prefecture: string;
   city: string;
   streetAddress: string;
-  cultureDescription: string;
+  /** 以前の「店舗のカルチャー・文化」欄の文章（読み取り専用。削除しない。公開表示は introUnified で切り替わる） */
+  legacyCulture: string;
+  /** 保存時に画面が読み込んでいた店舗紹介の版。他の画面での更新を上書きしないための照合に使う（未保存の店舗は null） */
+  introRevision: number | null;
+  /** 「統合済み」（旧文化欄の公開表示を止める印）か */
+  introUnified: boolean;
   employeeSizeCode: string;
   targetSpecialties: string[];
   bio: string;
@@ -77,6 +84,7 @@ export function SalonStoreProfileForm({ storeId, initialValues, employeeSizeOpti
   const successMessage = !isPending && state.success && dismissedFor !== state ? state.success : undefined;
   const errorMessage = isPending ? undefined : state.error;
   const fieldsKey = JSON.stringify(initialValues);
+  const [overLimit, setOverLimit] = useState(false);
 
   return (
     <form onSubmit={handleSubmit} onChange={dismissSuccess} onInput={dismissSuccess} className="space-y-8">
@@ -135,14 +143,6 @@ export function SalonStoreProfileForm({ storeId, initialValues, employeeSizeOpti
               defaultValues={initialValues.targetSpecialties}
               errors={state.fieldErrors?.targetSpecialties}
             />
-            <TextareaField
-              id="cultureDescription"
-              name="cultureDescription"
-              label="店舗のカルチャー・文化（任意）"
-              defaultValue={initialValues.cultureDescription}
-              maxLength={2000}
-              errors={state.fieldErrors?.cultureDescription}
-            />
             <TextField
               id="hotpepperUrl"
               name="hotpepperUrl"
@@ -151,14 +151,15 @@ export function SalonStoreProfileForm({ storeId, initialValues, employeeSizeOpti
               defaultValue={initialValues.hotpepperUrl}
               errors={state.fieldErrors?.hotpepperUrl}
             />
-            <TextareaField
-              id="bio"
-              name="bio"
-              label="店舗紹介（任意）"
-              defaultValue={initialValues.bio}
-              maxLength={1000}
+            <StoreIntroField
+              defaultBio={initialValues.bio}
+              legacyCulture={initialValues.legacyCulture}
+              unified={initialValues.introUnified}
+              max={STORE_INTRO_MAX}
               errors={state.fieldErrors?.bio}
+              onOverChange={setOverLimit}
             />
+            {initialValues.introRevision != null && <input type="hidden" name="expectedRevision" value={initialValues.introRevision} />}
           </section>
 
           <section className="space-y-4">
@@ -170,7 +171,7 @@ export function SalonStoreProfileForm({ storeId, initialValues, employeeSizeOpti
 
       <button
         type="submit"
-        disabled={isPending}
+        disabled={isPending || overLimit}
         aria-busy={isPending}
         className="flex w-full items-center justify-center gap-2 rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface transition-opacity disabled:opacity-60"
       >

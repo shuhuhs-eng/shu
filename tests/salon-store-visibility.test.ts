@@ -14,13 +14,13 @@ const OTHER = "22222222-2222-4222-8222-222222222222";
 const strip = (f: string) => readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/\/\/.*$/gm, "");
 
 const values = (visibility: "PUBLIC" | "PRIVATE") => ({
-  salonName: "テスト店", prefecture: "神奈川県", city: "横浜市", streetAddress: "", cultureDescription: "", employeeSizeCode: "",
+  salonName: "テスト店", prefecture: "神奈川県", city: "横浜市", streetAddress: "", employeeSizeCode: "",
   targetSpecialties: ["カット"] as never, bio: "", hotpepperUrl: "", visibility,
 });
 function fakeRpc(reply: (args: Record<string, unknown>) => { data?: unknown; error?: { message: string; code?: string } | null }) {
   const calls: Record<string, unknown>[] = [];
   const deps: StoreProfileSaveDeps = {
-    rpc: async (fn, args) => { assert.equal(fn, "save_salon_store_profile"); calls.push(args); const r = reply(args); return { data: r.data ?? null, error: r.error ?? null }; },
+    rpc: async (fn, args) => { assert.equal(fn, "save_salon_store_profile_v2"); /* 0088: 文化欄を書かない新RPC */ calls.push(args); const r = reply(args); return { data: r.data ?? null, error: r.error ?? null }; },
     log: () => {},
   };
   return { deps, calls };

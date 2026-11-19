@@ -85,11 +85,9 @@ export function SalonCard({ salon, employeeSizeLabel, match, salonType, isFavori
         </div>
       )}
 
-      {salon.culture_description && (
-        <p className="mt-3 text-[13px] leading-relaxed text-charcoal">{salon.culture_description}</p>
-      )}
-      {!salon.culture_description && salon.bio && (
-        <p className="mt-3 text-[13px] leading-relaxed text-charcoal">{salon.bio}</p>
+      {/* 店舗紹介（bio）を優先して表示する。bio が空のときだけ、以前の文化欄を紹介として表示する（空欄にならない）。 */}
+      {(salon.bio || salon.culture_description) && (
+        <p className="mt-3 text-[13px] leading-relaxed text-charcoal">{salon.bio || salon.culture_description}</p>
       )}
 
       {salon.instagram_handle && (

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { getStoreScouts, getStoreStylistNameMap } from "@/lib/store-activity/actions";
-import { SCOUT_RESPONSE_LABELS } from "@/lib/scouts/options";
+import { SCOUT_RESPONSE_LABELS, isPositiveScoutResponse, isVisitOrTrialRequest } from "@/lib/scouts/options";
 import { SCOUT_READ_LABELS, formatJstDateTime } from "@/lib/store-activity/format";
 import { StorePageShell } from "@/components/store-activity/store-page-shell";
 import { getStoreHiringProcesses } from "@/lib/hiring/actions";
@@ -117,21 +117,23 @@ export default async function StoreScoutsPage({ params }: Props) {
 
               {/* 前向きな返信（興味あり/質問あり）のスカウトだけ、採用進捗に追加できる。
                   追加は店舗側の明示操作のみ（自動では候補者にしない）。 */}
-              {(scout.response_status === "interested" || scout.response_status === "question") &&
+              {isPositiveScoutResponse(scout.response_status) &&
                 !hiringProcessByStylist.has(scout.stylist_user_id) && (
                   <p className="mt-3 text-[11.5px] leading-relaxed text-charcoal">
-                    前向きな返信が届いています。採用進捗に追加すると、面談の調整や選考の管理ができます。
+                    {isVisitOrTrialRequest(scout.response_status)
+                      ? "見学・体験入店の希望が届いています。日程や参加はまだ確定していません。採用進捗に追加すると、連絡の調整や選考の管理ができます。"
+                      : "前向きな返信が届いています。採用進捗に追加すると、面談の調整や選考の管理ができます。"}
                     {!canShowAddHiring && "（追加できるのは、採用担当者以上の権限を持つ方です）"}
                   </p>
                 )}
-              {(scout.response_status === "interested" || scout.response_status === "question" ||
+              {(isPositiveScoutResponse(scout.response_status) ||
                 hiringProcessByStylist.has(scout.stylist_user_id)) && (
                 <AddCandidateButton
                   storeId={storeId}
                   recruitingPaused={recruitingPaused}
                   stylistUserId={scout.stylist_user_id}
                   processId={hiringProcessByStylist.get(scout.stylist_user_id) ?? null}
-                  canManage={canShowAddHiring && (scout.response_status === "interested" || scout.response_status === "question")}
+                  canManage={canShowAddHiring && isPositiveScoutResponse(scout.response_status)}
                 />
               )}
             </article>

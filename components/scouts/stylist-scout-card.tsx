@@ -31,7 +31,7 @@ export function StylistScoutCard({ scout, salonName, history, storeId = null, ar
   const [current, setCurrent] = useState(scout);
   const [expanded, setExpanded] = useState(scout.read_status === "read");
   const [opening, setOpening] = useState(false);
-  const [step, setStep] = useState<"choice" | "interested" | "question" | "considering" | "declined">("choice");
+  const [step, setStep] = useState<"choice" | "visit_requested" | "trial_requested" | "question" | "considering" | "declined">("choice");
   const [responseMessage, setResponseMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export function StylistScoutCard({ scout, salonName, history, storeId = null, ar
     setExpanded(true);
   }
 
-  async function answer(response: "interested" | "question" | "considering" | "declined") {
+  async function answer(response: "visit_requested" | "trial_requested" | "question" | "considering" | "declined") {
     setBusy(true);
     setMsg(null);
     const r = await respondScout({
@@ -106,18 +106,22 @@ export function StylistScoutCard({ scout, salonName, history, storeId = null, ar
                       「今回は見送る」もtext-subのような薄いトーンにはせず、
                       他の3つと同じ濃さの配色にして「押せそうに見えない」状態を
                       避けている。 */}
-                  <button disabled={busy} onClick={() => setStep("interested")} className="rounded-full border border-[#285B45]/30 bg-[#EAF3EC] py-2.5 text-[12px] font-bold text-[#1F5A3F]">話を聞いてみたい</button>
+                  <button disabled={busy} onClick={() => setStep("visit_requested")} className="rounded-full border border-[#285B45]/30 bg-[#EAF3EC] py-2.5 text-[12px] font-bold text-[#1F5A3F]">見学を希望する</button>
+                  <button disabled={busy} onClick={() => setStep("trial_requested")} className="rounded-full border border-[#285B45]/30 bg-[#EAF3EC] py-2.5 text-[12px] font-bold text-[#1F5A3F]">体験入店を希望する</button>
                   <button disabled={busy} onClick={() => setStep("question")} className="rounded-full border border-[#2B5C88]/30 bg-[#E8EFF7] py-2.5 text-[12px] font-bold text-[#2B5C88]">条件をもう少し知りたい</button>
                   <button disabled={busy} onClick={() => setStep("considering")} className="rounded-full border border-[#8A6A2E]/30 bg-[#F5EFE0] py-2.5 text-[12px] font-bold text-[#8A6A2E]">今は検討中</button>
-                  <button disabled={busy} onClick={() => setStep("declined")} className="rounded-full border border-[#8A2E2E]/30 bg-[#F5E9E9] py-2.5 text-[12px] font-bold text-[#8A2E2E]">今回は見送る</button>
+                  <button disabled={busy} onClick={() => setStep("declined")} className="col-span-2 rounded-full border border-[#8A2E2E]/30 bg-[#F5E9E9] py-2.5 text-[12px] font-bold text-[#8A2E2E]">今回は見送る</button>
                 </div>
               )}
-              {step === "interested" && (
+              {(step === "visit_requested" || step === "trial_requested") && (
                 <div className="mt-4">
-                  <p className="text-[12px] font-semibold text-charcoal">「話を聞いてみたい」を送りますか？</p>
+                  <p className="text-[12px] font-semibold text-charcoal">「{step === "visit_requested" ? "見学を希望する" : "体験入店を希望する"}」を送りますか？</p>
+                  <p className="mt-1 text-[11.5px] leading-relaxed text-sub">
+                    送信しても、日程や参加はまだ確定しません。店舗と運営が内容を確認し、日程の調整へ進みます。
+                  </p>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <button disabled={busy} onClick={() => setStep("choice")} className="rounded-full border border-line py-2 text-[11px]">戻る</button>
-                    <button disabled={busy} onClick={() => void answer("interested")} className="rounded-full bg-[#285B45] py-2 text-[11px] font-bold text-white">{busy ? "送信中..." : "送信する"}</button>
+                    <button disabled={busy} onClick={() => void answer(step)} className="rounded-full bg-[#285B45] py-2 text-[11px] font-bold text-white">{busy ? "送信中..." : "送信する"}</button>
                   </div>
                 </div>
               )}

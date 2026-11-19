@@ -13,7 +13,11 @@ export const STORE_ASSET_SIGNED_URL_EXPIRES_IN = 300;
 export const STORE_ASSET_CACHE_CONTROL = "60";
 export const STORE_ASSET_MAX_BYTES = 5 * 1024 * 1024;
 export const STORE_ASSET_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-/** 店舗の写真は分類なしで1店舗あたり最大8枚（0084。DB の CHECK(sort_order 0〜7)＋unique(store_id, sort_order) が上限を保証する）。 */
+/** 写真欄の表示名と説明文（編集画面・プレビュー・美容師向け店舗詳細で共通）。 */
+export const STORE_PHOTO_TITLE = "お店の雰囲気";
+export const STORE_PHOTO_DESCRIPTION = "お店の雰囲気が伝わる写真です。";
+
+/** お店の雰囲気（写真欄）は分類なしで1店舗あたり最大8枚（0084。DB の CHECK(sort_order 0〜7)＋unique(store_id, sort_order) が上限を保証する）。 */
 export const STORE_PHOTO_MAX = 8;
 /** 新しく登録する写真の保存先フォルダ名・category（0084。既存の interior / atmosphere は引き継がれ、画面では分類しない）。 */
 export const STORE_PHOTO_FOLDER = "photo";

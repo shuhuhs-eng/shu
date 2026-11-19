@@ -66,7 +66,7 @@ export function nextFreeSortOrder(used: number[], max: number): number | null {
 export function mapStoreAssetError(message: string | undefined): string {
   const m = message ?? "";
   if (/not editable|not accessible|permission/i.test(m)) return "この店舗のロゴ・写真・リンクを変更する権限がありません（閲覧のみの権限では変更できません）。";
-  if (/maximum of 8 photos/i.test(m)) return "店舗の写真は最大8枚までです。追加するには、写真を削除してください。";
+  if (/maximum of 8 photos/i.test(m)) return "お店の雰囲気の写真は最大8枚までです。追加するには、写真を削除してください。";
   if (/maximum of 5|duplicate key/i.test(m)) return "登録できる上限に達しています。";
   if (/invalid category|could not find the function|function .* does not exist/i.test(m)) return "写真の保存機能を準備中です。しばらくしてからもう一度お試しください。";
   if (/violates check constraint/i.test(m)) return "URLの形式が正しくありません。";

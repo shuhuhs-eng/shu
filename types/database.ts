@@ -613,6 +613,8 @@ export type Database = {
           prefecture: string | null; city: string | null; street_address: string | null;
           culture_description: string | null; employee_size_code: string | null;
           target_specialties: string[]; bio: string | null; hotpepper_url: string | null;
+          // 0088（レビュー中・未適用）。intro_unified_at は表示制御の印（文章は削除しない）。intro_revision は保存時の競合検出。
+          intro_revision: number; intro_unified_at: string | null; text_guard_since: string | null;
         } & Timestamps;
         Insert: Record<string, never>;
         Update: Record<string, never>;
@@ -1649,6 +1651,16 @@ export type Database = {
           p_target_specialties: string[];
           p_bio: string | null;
           p_hotpepper_url?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["salon_store_profiles"]["Row"];
+      };
+      // 0088（レビュー中・未適用）: culture を書かない新RPC。リビジョン照合・表示の印の変更を行ロック下で行う。
+      save_salon_store_profile_v2: {
+        Args: {
+          p_store_id: string; p_salon_name: string; p_visibility: ProfileVisibility; p_prefecture: string;
+          p_city: string | null; p_street_address: string | null; p_employee_size_code: string | null;
+          p_target_specialties: string[]; p_bio: string | null; p_hotpepper_url: string | null;
+          p_expected_revision: number | null; p_intro_display: "keep" | "unified" | "restore";
         };
         Returns: Database["public"]["Tables"]["salon_store_profiles"]["Row"];
       };

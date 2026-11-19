@@ -43,7 +43,7 @@ export async function loadStorePreview(supabase: SupabaseClient<Database>, store
   const [profileRes, cultureRes] = await Promise.all([
     supabase
       .from("salon_store_profiles")
-      .select("visibility, prefecture, city, street_address, culture_description, employee_size_code, target_specialties, bio, hotpepper_url")
+      .select("visibility, prefecture, city, street_address, culture_description, intro_unified_at, employee_size_code, target_specialties, bio, hotpepper_url")
       .eq("store_id", storeId)
       .maybeSingle(),
     supabase
@@ -99,7 +99,8 @@ export async function loadStorePreview(supabase: SupabaseClient<Database>, store
       prefecture: profile.prefecture,
       city: profile.city,
       street_address: profile.street_address,
-      culture_description: profile.culture_description,
+      // 統合済み（表示の印）なら公開側と同じく旧文化欄は出さない（文章はDBに残る）
+      culture_description: profile.intro_unified_at ? null : profile.culture_description,
       employee_size_code: profile.employee_size_code,
       target_specialties: profile.target_specialties,
       bio: profile.bio,

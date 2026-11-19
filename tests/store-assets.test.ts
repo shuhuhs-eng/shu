@@ -92,7 +92,9 @@ test("表示: 登録があれば店舗別のロゴ・写真・リンクを表示
   const html = renderToStaticMarkup(createElement(StoreAssetsSection, { assets }));
   assert.doesNotMatch(html, /signed\.test\/logo/); // ロゴは写真の一覧に含めない（店名の左に小さく表示する）
   assert.match(html, /signed\.test\/p1/);
-  assert.match(html, />店舗の写真</);
+  assert.match(html, />お店の雰囲気</);
+  assert.doesNotMatch(html, /店舗の写真/);
+  assert.match(html, /お店の雰囲気が伝わる写真です。/);
   assert.doesNotMatch(html, /スタッフ・サロンの雰囲気|店内の様子|内装写真/); // 分類名は出さない
   assert.equal((html.match(/<img/g) ?? []).length, 1); // 署名URLの無い写真は出さない
   assert.match(html, /HOTPEPPER Beauty/);
@@ -327,7 +329,8 @@ test("静的確認: 編集画面に分類名・タブ・分類の操作が無く
   assert.match(editor, /現在 \{photos\.length\}／\{STORE_PHOTO_MAX\}枚/);
   assert.match(editor, /replaceStorePhotoAction/);
   assert.match(editor, /deleteStorePhotoAction/);
-  assert.match(editor, /店舗の写真/);
+  assert.match(editor, /STORE_PHOTO_TITLE/);
+  assert.doesNotMatch(editor, /店舗の写真/);
   assert.match(editor, /STORE_PHOTO_GRID_CLASS/); // 表示側と同じ枠
   const view = strip("components/store-assets/store-assets-section.tsx");
   assert.match(view, /STORE_PHOTO_GRID_CLASS/);

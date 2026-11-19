@@ -20,7 +20,9 @@ import {
   STORE_PHOTO_FRAME_CLASS,
   STORE_PHOTO_GRID_CLASS,
   STORE_PHOTO_IMAGE_CLASS,
+  STORE_PHOTO_DESCRIPTION,
   STORE_PHOTO_MAX,
+  STORE_PHOTO_TITLE,
 } from "@/lib/store-assets/constants";
 import type { StoreAssetLink, StoreAssetPhoto, StoreAssetsData } from "@/lib/store-assets/parse";
 import { SALON_LINK_TYPE_LABELS } from "@/lib/validation/salon-links";
@@ -86,7 +88,7 @@ export function StoreAssetsEditor({ storeId, storeName, initial }: Props) {
     e.target.value = "";
     if (!file) return;
     setError(null);
-    if (photos.length >= STORE_PHOTO_MAX) return setError(`店舗の写真は最大${STORE_PHOTO_MAX}枚までです。追加するには、写真を削除してください。`); // アップロードする前に止める（孤児画像を作らない）
+    if (photos.length >= STORE_PHOTO_MAX) return setError(`${STORE_PHOTO_TITLE}の写真は最大${STORE_PHOTO_MAX}枚までです。追加するには、写真を削除してください。`); // アップロードする前に止める（孤児画像を作らない）
     const problem = checkFile(file);
     if (problem) return setError(problem);
     setBusy("photo-add");
@@ -168,15 +170,15 @@ export function StoreAssetsEditor({ storeId, storeName, initial }: Props) {
 
       <section className="space-y-3">
         <div className="flex items-end justify-between gap-3">
-          <h3 className="eyebrow">店舗の写真</h3>
+          <h3 className="eyebrow">{STORE_PHOTO_TITLE}</h3>
           <span className="text-[12.5px] font-semibold text-charcoal" aria-live="polite">現在 {photos.length}／{STORE_PHOTO_MAX}枚</span>
         </div>
-        <p className="text-[12px] leading-relaxed text-sub">最大{STORE_PHOTO_MAX}枚まで登録できます。登録した順に表示されます。差し替え・削除は各写真のボタンから行えます。</p>
+        <p className="text-[12px] leading-relaxed text-sub">{STORE_PHOTO_DESCRIPTION}最大{STORE_PHOTO_MAX}枚まで登録できます。登録した順に表示されます。差し替え・削除は各写真のボタンから行えます。</p>
         <ul className={STORE_PHOTO_GRID_CLASS}>
           {photos.map((p) => (
             <li key={p.id} className={STORE_PHOTO_FRAME_CLASS}>
               {/* eslint-disable-next-line @next/next/no-img-element -- 署名付きURLをそのまま表示するため */}
-              {p.url ? <img src={p.url} alt="店舗の写真" className={STORE_PHOTO_IMAGE_CLASS} /> : <span className="flex h-full w-full items-center justify-center text-[12px] text-sub">画像を表示できません</span>}
+              {p.url ? <img src={p.url} alt={STORE_PHOTO_TITLE} className={STORE_PHOTO_IMAGE_CLASS} /> : <span className="flex h-full w-full items-center justify-center text-[12px] text-sub">画像を表示できません</span>}
               <div className="absolute inset-x-2 bottom-2 flex items-center justify-end gap-2">
                 <label className={`${photoButton} ${busy ? "opacity-60" : "cursor-pointer"}`}>
                   {busy === `replace-${p.id}` ? "差し替え中..." : "差し替え"}
