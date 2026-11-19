@@ -9,6 +9,7 @@ import { loadCultureEditState } from "@/lib/salon-culture/load-edit-state";
 import { answersSameAsPublished } from "@/lib/salon-culture/draft";
 import { extraNotice } from "@/lib/diagnosis-limit/messages";
 import {
+  changedBaseKeys,
   extractBaseAnswers,
   type BaseAnswers,
   type SupplementAnswers,
@@ -32,6 +33,8 @@ export default async function SalonCultureAnalysisPage() {
   const base = st.hasPublished ? extractBaseAnswers(st.initial.answers) : null;
   if (!base) redirect("/salon/culture");
   const initial = st.initial.extra;
+  // 追加回答を答えたときの基本5問から、いまの基本5問が変わっているなら、直さずに保存するときは確認が必要。
+  const requireAck = st.publishedExtra != null && changedBaseKeys(st.publishedExtraBase, base).length > 0;
   const notices = extraNotice(st.limitStatus, {
     hadExtra: st.publishedExtra != null,
     pendingTwelveChange: st.hasDraft && !answersSameAsPublished(st.initial.answers, st.publishedAnswers),
@@ -39,9 +42,9 @@ export default async function SalonCultureAnalysisPage() {
 
   const { data: salon } = await supabase.from("salon_profiles").select("salon_name").eq("user_id", user.id).maybeSingle();
 
-  async function save(answers: SupplementAnswers, expectedBase: BaseAnswers, requestId: string) {
+  async function save(answers: SupplementAnswers, expectedBase: BaseAnswers, requestId: string, acknowledged: boolean) {
     "use server";
-    return saveExtraAndConfirmAction(null, answers, expectedBase, requestId);
+    return saveExtraAndConfirmAction(null, answers, expectedBase, requestId, acknowledged);
   }
 
   return (
@@ -57,6 +60,7 @@ export default async function SalonCultureAnalysisPage() {
         expectedBase={base}
         initial={initial}
         save={save}
+        requireAck={requireAck}
         notices={notices}
         doneHref="/salon/mypage"
         cancelHref="/salon/mypage"

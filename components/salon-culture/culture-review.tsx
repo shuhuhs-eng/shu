@@ -4,6 +4,9 @@ import Link from "next/link";
 import { SALON_VALUE_PRIORITY_OPTIONS } from "@/lib/validation/profile-options";
 import type { LimitErrorCode } from "@/lib/diagnosis-limit/messages";
 import type { CultureAnswers } from "@/lib/salon-culture/draft";
+import { SUPPLEMENT_KEYS, type SupplementAnswers } from "@/lib/salon-culture/analysis/v1";
+import { SUPPLEMENT_TITLES } from "@/lib/salon-culture/analysis/scenes";
+import { extraValueLabel } from "@/components/salon-culture/extra-questions";
 
 type Q = { key: string; title: string; leftLabel: string; rightLabel: string };
 
@@ -16,6 +19,14 @@ type Props = {
   /** 追加5問が回答済みで、5問を変えたため、追加5問も答え直す必要がある */
   extraRequired: boolean;
   analysisHref: string;
+  /** 追加の5問（任意）の、いまの入力（部分回答を含む）。 */
+  extra: Partial<SupplementAnswers>;
+  /** 追加回答を答えたときの基本5問から変わっているのに、追加回答を直していない → 確認操作が必要。 */
+  /** 確認が必要な状況（確認済みでも表示し続ける）。 */
+  extraAckNeeded: boolean;
+  extraAckOk: boolean;
+  onAcknowledge: () => void;
+  extraStep: number;
   error: string | null;
   errorCode: LimitErrorCode | "invalid" | null;
   saving: boolean;
@@ -46,12 +57,27 @@ export function CultureReview(p: Props) {
         </div>
       )}
 
+      {p.extraAckNeeded && (
+        <div role="alert" data-testid="extra-ack-required" className="rounded-2xl border border-line bg-surface px-4 py-3 text-[13.5px] leading-relaxed text-ink">
+          <p>基本の質問のうち5つの回答が、追加の5問に答えたときから変わっています。追加の回答は消さずに下に表示しています。今の内容でよいか確認してください。</p>
+          <button
+            type="button"
+            onClick={p.onAcknowledge}
+            disabled={p.saving || p.extraAckOk}
+            aria-pressed={p.extraAckOk}
+            className={`mt-3 min-h-[44px] w-full rounded-full border px-4 py-2.5 text-[13px] font-semibold disabled:opacity-60 ${p.extraAckOk ? "border-ink bg-ink text-surface" : "border-line bg-surface text-charcoal"}`}
+          >
+            {p.extraAckOk ? "✓ この内容で確認しました" : "この内容で確認しました"}
+          </button>
+        </div>
+      )}
+
       {p.extraRequired && (
         <div role="alert" className="rounded-2xl border border-line bg-surface px-4 py-3 text-[13.5px] leading-relaxed text-ink">
-          <p>5つの質問の回答を変えたため、追加の5問も答え直してから確定します。</p>
-          <Link href={p.analysisHref} className="mt-2 inline-flex min-h-[44px] items-center font-semibold underline">
-            追加の5問に答え直す
-          </Link>
+          <p>5つの質問の回答を変えたため、追加の5問も確認してから確定します。</p>
+          <button type="button" onClick={() => p.onEdit(p.extraStep)} className="mt-2 inline-flex min-h-[44px] items-center font-semibold underline">
+            追加の5問を確認する
+          </button>
         </div>
       )}
 
@@ -85,6 +111,26 @@ export function CultureReview(p: Props) {
           <button type="button" onClick={() => p.onEdit(p.questions.length + 1)} disabled={p.saving}
             className="mt-1 inline-flex min-h-[44px] items-center text-[13px] font-semibold text-sub underline disabled:opacity-60">
             直す
+          </button>
+        </li>
+        <li className="rounded-2xl border border-line bg-surface px-4 py-3" data-testid="review-extra">
+          <p className="text-[12.5px] leading-relaxed text-sub">追加の5問（任意）</p>
+          {SUPPLEMENT_KEYS.every((k) => p.extra[k] == null) ? (
+            <p className="mt-1 text-[14px] leading-relaxed text-ink">未回答（答えなくても他の機能は使えます）</p>
+          ) : (
+            <ul className="mt-1 space-y-1.5 text-[13.5px] leading-relaxed text-ink">
+              {SUPPLEMENT_KEYS.map((k) => (
+                <li key={k}>
+                  <span className="text-sub">{SUPPLEMENT_TITLES[k]}</span>
+                  <br />
+                  {extraValueLabel(p.extra[k])}
+                </li>
+              ))}
+            </ul>
+          )}
+          <button type="button" onClick={() => p.onEdit(p.extraStep)} disabled={p.saving}
+            className="mt-1 inline-flex min-h-[44px] items-center text-[13px] font-semibold text-sub underline disabled:opacity-60">
+            {SUPPLEMENT_KEYS.every((k) => p.extra[k] == null) ? "回答する" : "直す"}
           </button>
         </li>
       </ol>

@@ -22,5 +22,5 @@ test("追加5問: 回答を変える・再保存を始めると成功表示は�
 });
 
 test("追加5問: 保存処理（Server Action）は変えない", () => {
-  assert.ok(src.includes("save(values as SupplementAnswers, expectedBase, requestRef.current.id)"));
+  assert.ok(src.includes("save(values as SupplementAnswers, expectedBase, requestRef.current.id, needAck && acked)"));
 });

@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FivePointScale } from "@/components/shared/five-point-scale";
-import { SCENES, SUPPLEMENT_TITLES } from "@/lib/salon-culture/analysis/scenes";
+import { ExtraQuestions } from "@/components/salon-culture/extra-questions";
 import { SUPPLEMENT_KEYS, type BaseAnswers, type SupplementAnswers, type SupplementKey, type SupplementValue } from "@/lib/salon-culture/analysis/v1";
 import type { SaveExtraResult } from "@/lib/salon-culture/draft-actions";
 import { SaveFeedback } from "@/components/profile/save-feedback";
@@ -19,7 +18,12 @@ type Props = {
   initial: Partial<SupplementAnswers> | null;
   /** 保存処理（Server Action を呼ぶ薄い関数）。 */
   /** 追加5問を保存して確定する（requestIdは同じ内容の再送で同じ値）。 */
-  save: (answers: SupplementAnswers, expectedBase: BaseAnswers, requestId: string) => Promise<SaveExtraResult>;
+  save: (answers: SupplementAnswers, expectedBase: BaseAnswers, requestId: string, acknowledged: boolean) => Promise<SaveExtraResult>;
+  /**
+   * 追加回答を答えたときの基本5問から、いまの基本5問が変わっている（追加回答は消さずに表示している）。
+   * 追加回答を直さずに保存するときは、「この内容で確認しました」の操作を必須にする。
+   */
+  requireAck?: boolean;
   /** 保存前の回数の案内（表示専用。判定は保存時にDB）。 */
   notices?: string[];
   doneHref: string;
@@ -30,7 +34,7 @@ type Props = {
  * サロンらしさ 追加5問の回答フォーム。回答を促すが強制はしない（既存機能は回答なしでも使える）。
  * 「当てはまらない」は数値で埋めず、そのまま保存する。
  */
-export function AnalysisForm({ targetName, targetKind, expectedBase, initial, save, notices = [], doneHref, cancelHref }: Props) {
+export function AnalysisForm({ targetName, targetKind, expectedBase, initial, save, requireAck = false, notices = [], doneHref, cancelHref }: Props) {
   const router = useRouter();
   const [values, setValues] = useState<Partial<SupplementAnswers>>(initial ?? {});
   const [saving, setSaving] = useState(false);
@@ -42,22 +46,27 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
   const inFlight = useRef(false);
 
   const complete = SUPPLEMENT_KEYS.every((k) => values[k] != null);
+  // 回答を1つでも直したなら確認は不要（直したこと自体が見直し）。直さないで保存するときだけ確認を必須にする。
+  const [acked, setAcked] = useState(false);
+  const untouched = SUPPLEMENT_KEYS.every((k) => (initial ?? {})[k] != null && values[k] === (initial ?? {})[k]);
+  const needAck = requireAck && untouched;
 
   function set(key: SupplementKey, v: SupplementValue) {
+    setAcked(false); // 回答を変えたら確認は取り消す（元の値に戻しても確認し直す）
     setSaved(false);
     setValues((prev) => ({ ...prev, [key]: v }));
   }
 
   async function handleSave() {
-    if (!complete || saving || inFlight.current) return;
+    if (!complete || saving || inFlight.current || (needAck && !acked)) return;
     inFlight.current = true;
     setSaving(true);
     setError(null);
     setSaved(false);
     try {
-      const key = JSON.stringify(values);
+      const key = JSON.stringify(values) + (needAck && acked ? "|ack" : "");
       if (!requestRef.current || requestRef.current.key !== key) requestRef.current = { id: crypto.randomUUID(), key };
-      const result = await save(values as SupplementAnswers, expectedBase, requestRef.current.id);
+      const result = await save(values as SupplementAnswers, expectedBase, requestRef.current.id, needAck && acked);
       if (!result.success) {
         setError({ code: result.code, message: result.error });
         return;
@@ -98,37 +107,22 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
         どちらが良い・悪いという質問ではありません。当てはまらない場合は「当てはまらない」を選べます。
       </p>
 
-      {SUPPLEMENT_KEYS.map((key, i) => {
-        const scene = SCENES[key];
-        const value = values[key];
-        const isNa = value === "na";
-        return (
-          <section key={key} className="rounded-2xl border border-line bg-surface p-5">
-            <p className="eyebrow mb-2">追加の質問 {i + 1} / {SUPPLEMENT_KEYS.length}</p>
-            <h2 className="text-[14.5px] font-bold leading-relaxed text-ink">{SUPPLEMENT_TITLES[key]}</h2>
-            <div className="mt-4">
-              <FivePointScale
-                leftLabel={scene.low}
-                rightLabel={scene.high}
-                value={typeof value === "number" ? value : undefined}
-                onChange={(n) => set(key, n as 1 | 2 | 3 | 4 | 5)}
-                disabled={saving}
-              />
-              <button
-                type="button"
-                disabled={saving}
-                aria-pressed={isNa}
-                onClick={() => set(key, "na")}
-                className={`mt-4 min-h-[44px] w-full rounded-full border px-4 py-2.5 text-[13px] font-semibold disabled:opacity-60 ${
-                  isNa ? "border-ink bg-ink text-surface" : "border-line bg-surface text-charcoal"
-                }`}
-              >
-                当てはまらない
-              </button>
-            </div>
-          </section>
-        );
-      })}
+      {needAck && (
+        <div role="alert" className="rounded-2xl border border-line bg-surface px-4 py-3 text-[13.5px] leading-relaxed text-ink">
+          <p>基本の質問のうち5つの回答が、追加の回答をしたときから変わっています。追加の回答は消さずに表示しています。今の内容でよいか確認してください。</p>
+          <button
+            type="button"
+            aria-pressed={acked}
+            disabled={saving}
+            onClick={() => setAcked((v) => !v)}
+            className={`mt-3 min-h-[44px] w-full rounded-full border px-4 py-2.5 text-[13px] font-semibold disabled:opacity-60 ${acked ? "border-ink bg-ink text-surface" : "border-line bg-surface text-charcoal"}`}
+          >
+            {acked ? "✓ この内容で確認しました" : "この内容で確認しました"}
+          </button>
+        </div>
+      )}
+
+      <ExtraQuestions values={values} onChange={set} disabled={saving} />
 
       {error && (
         <div role="alert" className="rounded-xl border border-line bg-surface2 p-4 text-[13px] leading-relaxed text-ink">
@@ -149,7 +143,7 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
         <button
           type="button"
           onClick={handleSave}
-          disabled={!complete || saving}
+          disabled={!complete || saving || (needAck && !acked)}
           className="flex w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface disabled:opacity-50"
         >
           {saving ? "保存しています…" : "回答を保存する"}
@@ -163,6 +157,7 @@ export function AnalysisForm({ targetName, targetKind, expectedBase, initial, sa
           </div>
         )}
         {!complete && <p className="text-[12px] text-sub">すべての質問に回答すると保存できます。</p>}
+        {complete && needAck && !acked && <p className="text-[12px] text-sub">「この内容で確認しました」を押すと保存できます。</p>}
         <Link href={cancelHref} className="inline-flex min-h-[44px] items-center text-[13px] text-sub underline">
           あとで回答する
         </Link>

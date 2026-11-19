@@ -9,6 +9,8 @@ export type CultureEditState = {
   publishedStatus: string | null;
   publishedAnswers: unknown;
   publishedExtra: SupplementAnswers | null;
+  /** 公開中の追加5問を答えた時点の基本5問（base_snapshot）。追加5問が無ければ null。 */
+  publishedExtraBase: unknown;
   /** 編集の出発点: 下書きがあれば下書き、なければ公開中の結果（途中保存の旧行も含む）。 */
   initial: DraftState;
   initialRev: number | null;
@@ -39,7 +41,7 @@ export async function loadCultureEditState(supabaseIn: unknown, userId: string, 
 
   const [pub, extra, draft, status] = await Promise.all([
     supabase.from(profileTable).select("*").eq(ownerCol, ownerVal).maybeSingle(),
-    supabase.from("salon_culture_analysis_answers").select("answers").eq(ownerCol, ownerVal).eq("analysis_version", ANALYSIS_VERSION).maybeSingle(),
+    supabase.from("salon_culture_analysis_answers").select("answers, base_snapshot").eq(ownerCol, ownerVal).eq("analysis_version", ANALYSIS_VERSION).maybeSingle(),
     canEdit ? supabase.from("salon_culture_drafts").select("payload, rev").eq(ownerCol, ownerVal).maybeSingle() : Promise.resolve({ data: null, error: null }),
     getDiagnosisChangeStatus(supabaseIn, storeId ? "salon_culture_store" : "salon_culture_user", storeId ?? undefined),
   ]);
@@ -57,6 +59,7 @@ export async function loadCultureEditState(supabaseIn: unknown, userId: string, 
     publishedStatus: profile?.status ?? null,
     publishedAnswers: profile?.answers ?? null,
     publishedExtra,
+    publishedExtraBase: publishedExtra ? ((extra.data as { base_snapshot?: unknown }).base_snapshot ?? null) : null,
     initial: fromDraft ?? published,
     initialRev: draftRow?.rev ?? null,
     hasDraft: !!fromDraft,
@@ -67,7 +70,7 @@ export async function loadCultureEditState(supabaseIn: unknown, userId: string, 
 
   function failed(): CultureEditState {
     return {
-      hasPublished: false, publishedStatus: null, publishedAnswers: null, publishedExtra: null,
+      hasPublished: false, publishedStatus: null, publishedAnswers: null, publishedExtra: null, publishedExtraBase: null,
       initial: fromPublished(null, null), initialRev: null, hasDraft: false, limitStatus: UNKNOWN_STATUS, canEdit: false, loadError: true,
     };
   }

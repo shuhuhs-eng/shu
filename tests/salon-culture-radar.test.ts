@@ -39,7 +39,9 @@ test("ready: 見出し・対象名・五角形・5軸の名称・根拠文・見
   assert.match(html, /回答全体では、/);
   assert.match(html, /この5段階の見方/);
   assert.match(html, /統計的に検証したものではありません/);
-  assert.match(html, /href="\/salon\/culture\/analysis"/);
+  // 更新の入口は「診断内容を更新する」（基本12問＋追加5問を同じフローで見直す）。追加5問だけの画面へは送らない
+  assert.match(html, /href="\/salon\/culture\?edit=1"[^>]*>診断内容を更新する/);
+  assert.ok(!html.includes("追加の5問を更新する"));
 });
 
 test("優劣を示す表現を画面文言に使わない", () => {
@@ -107,8 +109,11 @@ test("閲覧のみ: 追加回答の導線を出さず、理由を表示する。
 
 test("更新リンクは渡された対象（本人/店舗）の画面へ向く", () => {
   const store = render({ status: "completed", supplement: null, answerPath: "/salon/stores/abc/culture", analysisPath: "/salon/stores/abc/culture/analysis", targetKind: "store" });
-  assert.match(store, /href="\/salon\/stores\/abc\/culture\/analysis"/);
+  assert.match(store, /href="\/salon\/stores\/abc\/culture\/analysis"/);   // 追加5問に初めて答える入口は従来どおり
   assert.ok(!store.includes('href="/salon/culture/analysis"'));
+  const storeReady = render({ answerPath: "/salon/stores/abc/culture", analysisPath: "/salon/stores/abc/culture/analysis", targetKind: "store" });
+  assert.match(storeReady, /href="\/salon\/stores\/abc\/culture\?edit=1"[^>]*>診断内容を更新する/);
+  assert.ok(!storeReady.includes('href="/salon/culture?edit=1"'));
 });
 
 test("タイプ根拠: 判定式・選出は変更なし（8タイプの参照軸が式と一致）", () => {

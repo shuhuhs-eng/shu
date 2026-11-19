@@ -155,7 +155,7 @@ export function mapLimitError(err: { message?: string | null; details?: string |
   if (msg.includes("draft_changed"))
     return { code: "draft_changed", lockedUntil: null, definite: true, message: `別の画面で回答が更新されています。内容を確認して、もう一度保存してください。${NOT_COUNTED}` };
   if (msg.includes("extra answers required"))
-    return { code: "extra_required", lockedUntil: null, definite: true, message: `追加の質問への回答がそろっていないため、保存できません。${NOT_COUNTED}` };
+    return { code: "extra_required", lockedUntil: null, definite: true, message: `追加の質問への回答がそろっていない、または基本の質問を変えたあとの確認が済んでいないため、保存できません。${NOT_COUNTED}` };
   if (msg.includes("draft incomplete"))
     return { code: "draft_incomplete", lockedUntil: null, definite: true, message: `未回答の質問があります。すべて答えてから保存してください。${NOT_COUNTED}` };
   if (msg.includes("not allowed to edit this store"))

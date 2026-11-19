@@ -69,6 +69,7 @@ export default async function SalonStoreCulturePage({ params, searchParams }: Pr
           hasPublished={st.hasPublished}
           publishedAnswers={st.publishedAnswers}
           publishedExtra={st.publishedExtra}
+          publishedExtraBase={st.publishedExtraBase}
           limitStatus={st.limitStatus}
         />
       </div>

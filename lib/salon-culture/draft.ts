@@ -1,4 +1,4 @@
-import { BASE_KEYS, extractBaseAnswers, extractSupplementAnswers, type SupplementAnswers } from "@/lib/salon-culture/analysis/v1";
+import { BASE_KEYS, changedBaseKeys, extractBaseAnswers, extractSupplementAnswers, SUPPLEMENT_KEYS, type BaseAnswers, type SupplementAnswers } from "@/lib/salon-culture/analysis/v1";
 
 /**
  * サロンらしさの「途中回答（下書き）」の形と、画面側の判定（純粋関数）。
@@ -7,6 +7,13 @@ import { BASE_KEYS, extractBaseAnswers, extractSupplementAnswers, type Supplemen
  */
 export type CultureAnswers = Record<string, number | undefined>;
 
+/**
+ * 「この内容で確認しました」の記録。確認した時点の基本5問と追加5問をそのまま持つ。
+ * 値が1つでも変わると無効（値の比較で決めるので、確認済みフラグだけが残ることはない）。
+ * 下書きから読み戻さない（下書き再開・別タブでは必ず確認し直す）。
+ */
+export type ExtraAck = { base: BaseAnswers; extra: SupplementAnswers };
+
 export type DraftState = {
   respondentRole: string;
   currentStep: number;
@@ -14,6 +21,13 @@ export type DraftState = {
   valuePriorities: string[];
   comment: string;
   extra: SupplementAnswers | null;
+  /**
+   * 追加5問の「途中回答」（1〜4問だけ答えた状態）。5問そろっていない回答は公開できないので、完成済みの extra とは別に持つ。
+   * 未回答の問は欠けたまま（数値や「当てはまらない」で補わない）。extra が完成しているときは使わない。
+   */
+  extraPartial?: Partial<SupplementAnswers> | null;
+  /** 画面内の確認記録。fromPayload / fromPublished では常に null。 */
+  extraAck?: ExtraAck | null;
 };
 
 export type DraftPayload = {
@@ -22,7 +36,9 @@ export type DraftPayload = {
   answers: CultureAnswers;
   value_priorities: string[];
   comment: string;
-  extra: { version: string; answers: SupplementAnswers } | null;
+  extra: { version: string; answers: SupplementAnswers; acknowledged?: ExtraAck } | null;
+  /** 途中回答。DBの確定処理は extra だけを読むため、ここに入れた値が公開されることはない（既存RPCと互換）。 */
+  extra_partial?: { version: string; answers: Partial<SupplementAnswers> };
 };
 
 export const DEFAULT_RESPONDENT_ROLE = "owner_representative";
@@ -49,8 +65,39 @@ export function toPayload(s: DraftState, version: string): DraftPayload {
     answers: s.answers,
     value_priorities: s.valuePriorities,
     comment: s.comment,
-    extra: s.extra ? { version, answers: s.extra } : null,
+    // 確認記録は、いまの回答と一致するときだけ書く（古い確認を下書きへ残さない）。
+    extra: s.extra ? { version, answers: s.extra, ...(extraAckValid(s) && s.extraAck ? { acknowledged: s.extraAck } : {}) } : null,
+    ...(!s.extra && countPartial(s.extraPartial) > 0 ? { extra_partial: { version, answers: cleanPartial(s.extraPartial) } } : {}),
   };
+}
+
+export function countPartial(p: Partial<SupplementAnswers> | null | undefined): number {
+  return p ? SUPPLEMENT_KEYS.filter((k) => p[k] != null).length : 0;
+}
+
+/** 有効な値（1〜5 / "na"）だけを残す。それ以外は捨てる（補完しない）。 */
+export function cleanPartial(raw: unknown): Partial<SupplementAnswers> {
+  const out: Partial<SupplementAnswers> = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const k of SUPPLEMENT_KEYS) {
+    const v = (raw as Record<string, unknown>)[k];
+    if (v === "na") out[k] = "na";
+    else if (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 5) out[k] = v as SupplementAnswers[typeof k];
+  }
+  return out;
+}
+
+/** 確認記録が、いまの基本5問・追加5問と完全に一致しているか。 */
+export function extraAckValid(s: Pick<DraftState, "answers" | "extra" | "extraAck">): boolean {
+  if (!s.extraAck || !s.extra) return false;
+  const base = extractBaseAnswers(s.answers);
+  if (!base) return false;
+  return JSON.stringify(sortKeys(s.extraAck.base)) === JSON.stringify(sortKeys(base)) &&
+    JSON.stringify(sortKeys(s.extraAck.extra)) === JSON.stringify(sortKeys(s.extra));
+}
+
+function sortKeys(o: object): object {
+  return Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 }
 
 /** DBの payload を画面用の状態へ。形が違う・欠けている部分は空として扱う（推測で補わない）。 */
@@ -65,13 +112,17 @@ export function fromPayload(payload: unknown): DraftState | null {
     }
   }
   const extraRaw = p.extra && typeof p.extra === "object" ? (p.extra as Record<string, unknown>).answers : null;
+  const partialRaw = p.extra_partial && typeof p.extra_partial === "object" ? (p.extra_partial as Record<string, unknown>).answers : null;
+  const extraComplete = extraRaw ? extractSupplementAnswers(extraRaw) : null;
+  const partial = extraComplete ? {} : cleanPartial(partialRaw);
   return {
     respondentRole: typeof p.respondent_role === "string" ? p.respondent_role : DEFAULT_RESPONDENT_ROLE,
     currentStep: typeof p.current_step === "number" ? p.current_step : 0,
     answers,
     valuePriorities: Array.isArray(p.value_priorities) ? p.value_priorities.filter((x): x is string => typeof x === "string") : [],
     comment: typeof p.comment === "string" ? p.comment : "",
-    extra: extraRaw ? extractSupplementAnswers(extraRaw) : null,
+    extra: extraComplete,
+    extraPartial: countPartial(partial) > 0 ? partial : null,
   };
 }
 
@@ -114,18 +165,32 @@ export function previewConfirm(args: {
   draft: DraftState;
   publishedAnswers: unknown;
   publishedExtra: SupplementAnswers | null;
-}): { changed: boolean; extraRequired: boolean; extraFirst: boolean; initial: boolean } {
+  /** 公開中の追加5問を答えた時点の基本5問（base_snapshot）。無ければ null（公開中の回答で代用しない）。 */
+  publishedExtraBase?: unknown;
+}): { changed: boolean; extraRequired: boolean; extraAckNeeded: boolean; extraAckRequired: boolean; extraFirst: boolean; initial: boolean } {
   const { hasPublished, draft, publishedAnswers, publishedExtra } = args;
-  if (!hasPublished) return { changed: true, extraRequired: false, extraFirst: false, initial: true };
+  if (!hasPublished) return { changed: true, extraRequired: false, extraAckNeeded: false, extraAckRequired: false, extraFirst: false, initial: true };
   const same12 = answersSameAsPublished(draft.answers, publishedAnswers);
   let changed = !same12;
   let extraRequired = false;
+  let extraAckNeeded = false;
+  let extraAckRequired = false;
   let extraFirst = false;
   if (publishedExtra) {
     if (baseFiveChanged(draft.answers, publishedAnswers) && !draft.extra) extraRequired = true;
-    if (draft.extra && JSON.stringify(draft.extra) !== JSON.stringify(publishedExtra)) changed = true;
+    const extraEdited = !!draft.extra && JSON.stringify(sortKeys(draft.extra)) !== JSON.stringify(sortKeys(publishedExtra));
+    if (extraEdited) changed = true;
+    // 追加回答を答えたときの基本5問と、いまの基本5問が違うのに、追加回答を直していない → 明示的な確認が必要。
+    // （公開中の回答との差ではなく、追加回答の基準との差で見る。古い状態の追加回答を黙って組み合わせない）
+    const base = extractBaseAnswers(draft.answers);
+    const snapshotDiffers = args.publishedExtraBase !== undefined
+      ? !base || changedBaseKeys(args.publishedExtraBase, base).length > 0
+      : baseFiveChanged(draft.answers, publishedAnswers);
+    // Needed: 確認が要る状況（確認済みでも表示は残す）。Required: 要るのに、いまの値に対する確認が済んでいない。
+    extraAckNeeded = !!draft.extra && !extraEdited && snapshotDiffers;
+    extraAckRequired = extraAckNeeded && !extraAckValid(draft);
   } else if (!changed && draft.extra) {
     extraFirst = true;
   }
-  return { changed, extraRequired, extraFirst, initial: false };
+  return { changed, extraRequired, extraAckNeeded, extraAckRequired, extraFirst, initial: false };
 }

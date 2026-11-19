@@ -6,6 +6,7 @@ import { TextareaField } from "@/components/profile/textarea-field";
 import { SALON_VALUE_PRIORITY_OPTIONS } from "@/lib/validation/profile-options";
 import { useCultureDraft } from "@/components/salon-culture/use-culture-draft";
 import { CultureReview } from "@/components/salon-culture/culture-review";
+import { ExtraStep } from "@/components/salon-culture/extra-step";
 import { ChangeLimitBanner } from "@/components/salon-culture/change-limit-banner";
 import type { DraftState } from "@/lib/salon-culture/draft";
 import type { LimitStatus } from "@/lib/diagnosis-limit/messages";
@@ -44,6 +45,8 @@ type Props = {
   hasPublished: boolean;
   publishedAnswers: unknown;
   publishedExtra: SupplementAnswers | null;
+  /** 公開中の追加5問を答えた時点の基本5問（base_snapshot）。 */
+  publishedExtraBase?: unknown;
   limitStatus: LimitStatus;
 };
 
@@ -128,11 +131,12 @@ const QUESTIONS: {
   },
 ];
 
-const TOTAL_STEPS = QUESTIONS.length + 2;
+const TOTAL_STEPS = QUESTIONS.length + 3;
 const VALUE_PRIORITIES_STEP = QUESTIONS.length;
 const COMMENT_STEP = VALUE_PRIORITIES_STEP + 1;
+const EXTRA_STEP = COMMENT_STEP + 1; // 追加の5問（任意）
 
-export function SalonStoreCultureWizard({ storeId, initial, initialRev, hasPublished, publishedAnswers, publishedExtra, limitStatus }: Props) {
+export function SalonStoreCultureWizard({ storeId, initial, initialRev, hasPublished, publishedAnswers, publishedExtra, publishedExtraBase, limitStatus }: Props) {
   // ステップごとの回答は「下書き」にだけ保存する。公開中の結果が変わるのは、確認画面で「確定する」を押したときだけ（0058）。
   // 常に0（Q1）から始める（既回答は選択済みで表示される）。
   const d = useCultureDraft({
@@ -143,6 +147,7 @@ export function SalonStoreCultureWizard({ storeId, initial, initialRev, hasPubli
     hasPublished,
     publishedAnswers,
     publishedExtra,
+    publishedExtraBase,
     limitStatus,
   });
   const { answers, setAnswers, valuePriorities, setValuePriorities, comment, setComment, step, setStep, saving, error, setError } = d;
@@ -173,6 +178,11 @@ export function SalonStoreCultureWizard({ storeId, initial, initialRev, hasPubli
 
   // 最後のステップのあと、下書きを保存して確認画面へ（ここではまだ公開結果は変わらない）。
   async function handleToReview() {
+    if (d.extraPartial) {
+      // 途中回答は下書きに保存する（再読込・再開で戻る）。ただし確認画面・確定には進めない。
+      if (await d.saveDraft(step)) d.setError("追加の5問は、5問すべてに答えるか、すべて空のままにしてください。途中の回答は下書きに保存しました。");
+      return;
+    }
     await d.startReview(step);
   }
 
@@ -192,6 +202,11 @@ export function SalonStoreCultureWizard({ storeId, initial, initialRev, hasPubli
         comment={comment}
         notice={d.notice}
         extraRequired={d.preview.extraRequired}
+        extra={d.extraDraft}
+        extraAckNeeded={d.preview.extraAckNeeded}
+        extraAckOk={d.extraAckOk}
+        onAcknowledge={d.acknowledgeExtra}
+        extraStep={EXTRA_STEP}
         analysisHref={analysisHref}
         error={error}
         errorCode={d.errorCode}
@@ -264,6 +279,20 @@ export function SalonStoreCultureWizard({ storeId, initial, initialRev, hasPubli
             />
           </div>
         </div>
+      )}
+
+      {step === EXTRA_STEP && (
+        <ExtraStep
+          values={d.extraDraft}
+          onChange={(k, v) => d.setExtraDraft((e) => ({ ...e, [k]: v }))}
+          disabled={saving}
+          hasPublishedExtra={publishedExtra != null}
+          partial={d.extraPartial}
+          canClear={d.canClearExtra}
+          onClear={() => { void d.clearExtra(); }}
+          onSaveDraft={() => { void d.saveDraftExplicit(); }}
+          note={d.note}
+        />
       )}
 
       {step === COMMENT_STEP && (

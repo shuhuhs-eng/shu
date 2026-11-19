@@ -230,7 +230,7 @@ function body(result: AnalysisResult, p: SectionProps): React.ReactNode {
           <p className="text-[13.5px] leading-relaxed text-charcoal">
             5軸の表示に使う既存の回答が揃っていません。サロンらしさの回答を更新すると表示できます。
           </p>
-          <Cta href={`${p.answerPath}?edit=1`}>サロンらしさを更新する</Cta>
+          <Cta href={`${p.answerPath}?edit=1`}>診断内容を更新する</Cta>
         </>
       );
     case "need_supplement":
@@ -251,7 +251,11 @@ function body(result: AnalysisResult, p: SectionProps): React.ReactNode {
           <p className="text-[13.5px] leading-relaxed text-charcoal">
             サロンらしさの既存の回答が、追加の回答のあとに更新されています。前の回答と組み合わせず、追加の5問を確認し直してください。
           </p>
-          {analysisCta}
+          {canEdit ? (
+            <Cta href={`${p.answerPath}?edit=1`}>診断内容を更新する</Cta>
+          ) : (
+            <p className="mt-3 text-[12px] leading-relaxed text-sub">この店舗では閲覧のみの権限のため、追加の回答はできません。</p>
+          )}
           <AxisList axes={result.axes} />
           <HowToRead />
         </>
@@ -263,7 +267,7 @@ function body(result: AnalysisResult, p: SectionProps): React.ReactNode {
             「当てはまらない」の回答がある軸は判定できないため、5軸の図は表示していません。判定できた軸と回答の根拠は下に表示しています。
           </p>
           <AxisList axes={result.axes} />
-          {canEdit && <Cta href={p.analysisPath} primary={false}>追加の5問を更新する</Cta>}
+          {canEdit && <Cta href={`${p.answerPath}?edit=1`} primary={false}>診断内容を更新する</Cta>}
           <HowToRead />
         </>
       );
@@ -276,7 +280,7 @@ function body(result: AnalysisResult, p: SectionProps): React.ReactNode {
           </p>
           <AxisList axes={result.axes} />
           <HowToRead />
-          {canEdit && <Cta href={p.analysisPath} primary={false}>追加の5問を更新する</Cta>}
+          {canEdit && <Cta href={`${p.answerPath}?edit=1`} primary={false}>診断内容を更新する</Cta>}
         </>
       );
   }

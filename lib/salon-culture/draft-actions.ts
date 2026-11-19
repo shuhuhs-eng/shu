@@ -50,12 +50,16 @@ export async function saveCultureDraftAction(
     comment: state.comment,
   });
   const extra = state.extra == null ? { success: true as const, data: null } : supplementAnswersSchema.safeParse(state.extra);
-  if (!storeId.success || !rev.success || !step.success || !extra.success) return INVALID;
+  // 途中回答: 各問は1〜5か「当てはまらない」だけ。余分なキーは不可。空なら無いものとして扱う。
+  const partial = !state.extraPartial || Object.keys(state.extraPartial).length === 0
+    ? { success: true as const, data: null }
+    : supplementAnswersSchema.partial().safeParse(state.extraPartial);
+  if (!storeId.success || !rev.success || !step.success || !extra.success || !partial.success) return INVALID;
 
   const supabase = await createClient();
   const { data, error } = await looseRpc(supabase).rpc("save_salon_culture_draft", {
     p_store_id: storeId.data,
-    p_payload: toPayload({ ...state, extra: extra.data as DraftState["extra"] }, ANALYSIS_VERSION),
+    p_payload: toPayload({ ...state, extra: extra.data as DraftState["extra"], extraPartial: partial.data as DraftState["extraPartial"] }, ANALYSIS_VERSION),
     p_expected_rev: rev.data,
   });
   if (error || !data) {
@@ -131,6 +135,7 @@ export async function saveExtraAndConfirmAction(
   extraIn: unknown,
   expectedBaseIn: unknown,
   requestIdIn: string,
+  acknowledged = false,
 ): Promise<SaveExtraResult> {
   const storeId = storeIdSchema.safeParse(storeIdIn);
   const requestId = requestIdSchema.safeParse(requestIdIn);
@@ -176,6 +181,9 @@ export async function saveExtraAndConfirmAction(
     };
   }
   state.extra = extractSupplementAnswers(extra.data);
+  // 画面で「この内容で確認しました」が押されたときだけ、いまの基本5問と追加5問を確認記録として下書きへ載せる。
+  // 記録はいまの値と一致するときだけ保存される（toPayload）。DBも同じ値と照合する。
+  state.extraAck = acknowledged === true && state.extra ? { base, extra: state.extra } : null;
 
   const saved = await saveCultureDraftAction(store, state, draftRow ? (draftRow as { rev: number }).rev : null);
   if (!saved.success) return saved;

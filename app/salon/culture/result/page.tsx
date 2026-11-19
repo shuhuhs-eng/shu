@@ -53,8 +53,8 @@ export default async function SalonCultureResultPage() {
   }
 
   // ★ボタン重複の解消: 新12軸が揃っていない場合、CultureResult内に既に
-  // 「サロンらしさを更新する」ボタンが表示されるため、ここでの
-  // 「回答を見直す」ボタンは重複になる。12軸が揃っている場合のみ表示する。
+  // 「診断内容を更新する」ボタンが表示されるため、ここでの
+  // 「診断内容を更新する」ボタンは重複になる。12軸が揃っている場合のみ表示する。
   const hasNewAxes = hasAllTwelveAxes(cultureProfile.culture_axes ?? {});
 
   return (
@@ -72,7 +72,7 @@ export default async function SalonCultureResultPage() {
             href="/salon/culture?edit=1"
             className="flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-4 text-[15px] font-semibold text-ink"
           >
-            回答を見直す
+            診断内容を更新する
           </Link>
         )}
         <Link href="/salon/mypage" className="text-[13px] text-sub underline">

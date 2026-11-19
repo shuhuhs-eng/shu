@@ -54,6 +54,7 @@ export default async function SalonCulturePage({
           hasPublished={st.hasPublished}
           publishedAnswers={st.publishedAnswers}
           publishedExtra={st.publishedExtra}
+          publishedExtraBase={st.publishedExtraBase}
           limitStatus={st.limitStatus}
         />
       </div>

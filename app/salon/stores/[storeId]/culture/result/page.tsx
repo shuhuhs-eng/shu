@@ -71,7 +71,7 @@ export default async function SalonStoreCultureResultPage({ params }: Props) {
             href={`/salon/stores/${storeId}/culture?edit=1`}
             className="flex w-full items-center justify-center rounded-full border border-line bg-surface px-6 py-4 text-[15px] font-semibold text-ink"
           >
-            回答を見直す
+            診断内容を更新する
           </Link>
         )}
         <Link href={`/salon/stores/${storeId}`} className="text-[13px] text-sub underline">

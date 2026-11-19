@@ -89,7 +89,7 @@ export function StoreCultureResult({ storeId, profile, supplement, storeName, ca
       ) : (
         <section className="rounded-2xl border border-line bg-surface2 p-6 text-center">
           <p className="text-[13.5px] leading-relaxed text-charcoal">
-            サロンらしさを更新すると、
+            診断内容を更新すると、
             <br />
             新しいサロンタイプが表示されます。
           </p>
@@ -98,7 +98,7 @@ export function StoreCultureResult({ storeId, profile, supplement, storeName, ca
               href={`/salon/stores/${storeId}/culture?edit=1`}
               className="flex w-full max-w-[280px] items-center justify-center rounded-full bg-ink px-6 py-3 text-[14px] font-semibold text-surface"
             >
-              サロンらしさを更新する
+              診断内容を更新する
             </Link>
           </div>
         </section>
