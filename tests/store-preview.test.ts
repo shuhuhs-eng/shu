@@ -321,10 +321,15 @@ test("店舗プロフィール編集画面: 対象店舗を明示し、プレビ
 test("美容師向け詳細: 操作ボタン→共用部品の順と、相性の各状態の文言が従来どおり", () => {
   const raw = readFileSync("app/stylist/salons/[storeId]/page.tsx", "utf8");
   assert.ok(raw.indexOf("<StoreInterestButton") > 0 && raw.indexOf("<StoreInterestButton") < raw.indexOf("<StoreDetailView"));
-  for (const t of ["相性を確認できませんでした", "働きたいサロン環境を回答すると相性が分かります", "相性診断準備中", "総合マッチ度", "MATCH_AXIS_LABELS", "isInterested"]) {
+  for (const t of ["相性を確認できませんでした", "総合マッチ度", "MATCH_AXIS_LABELS", "isInterested"]) {
     assert.ok(raw.includes(t), t);
   }
   assert.match(raw, /notFound\(\)/);
+  // 相性を表示できない理由の文言は、美容師側と店舗側を分けて readiness に集約した（「相性診断準備中」の一括表示は廃止）。
+  assert.ok(raw.includes("MATCH_UNAVAILABLE_MESSAGES") && raw.includes("classifyMatchUnavailable"));
+  assert.ok(!raw.includes("相性診断準備中"));
+  const readiness = readFileSync("lib/matching/readiness.ts", "utf8");
+  assert.ok(readiness.includes("働きたいサロン環境を回答すると相性が分かります"));
 });
 
 test("写真: プレビューは他店舗・他人の写真を取得・表示しない（写真は店舗単位ではなくサロン本人単位のため、今回は表示対象にしない）", () => {

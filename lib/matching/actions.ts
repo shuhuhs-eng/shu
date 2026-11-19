@@ -295,3 +295,27 @@ export async function getPublicSalonLogoSignedUrl(salonUserId: string): Promise<
   if (error || !signedData) return null;
   return signedData.signedUrl;
 }
+
+/**
+ * 美容師本人の「働きたいサロン環境」の8軸（preference_axes）を読む。
+ * 相性が表示できないとき、原因が美容師側か店舗側かを画面で出し分けるためだけに使う
+ * （既存のRLS stylist_preference_profiles_select_own。計算は一切しない）。
+ * 戻り値: 取得失敗は null（原因を断定しない）。行が無い場合は { axes: null }。
+ */
+export async function getOwnPreferenceAxes(): Promise<{ axes: unknown } | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from("stylist_preference_profiles")
+    .select("preference_axes")
+    .eq("stylist_user_id", user.id)
+    .maybeSingle();
+  if (error) {
+    logError("getOwnPreferenceAxes", error);
+    return null;
+  }
+  return { axes: data?.preference_axes ?? null };
+}

@@ -1,3 +1,4 @@
+import { salonSideMatchUnavailableMessage } from "@/lib/matching/readiness";
 import { SalonOfferForm } from "@/components/salary-offers/salon-offer-form";
 import { formatExperienceInline } from "@/lib/profile/experience-years";
 import { isSalaryOfferPresentationPaused } from "@/lib/salary-offers/pause";
@@ -64,7 +65,7 @@ export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPa
               </p>
             </div>
           ) : (
-            <p className="text-[11px] text-sub">相性診断準備中</p>
+            <p className="text-[11px] text-sub">{salonSideMatchUnavailableMessage(match.available ? null : match.reason)}</p>
           )}
           <p className="mt-1 text-[12px] text-sub">{formatExperienceInline(interest.experience_years)}</p>
         </div>

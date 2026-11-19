@@ -2,11 +2,14 @@ import Link from "next/link";
 import type { StylistStoreMatchResult } from "@/lib/matching/types";
 import { MATCH_AXIS_LABELS } from "@/lib/matching/types";
 import type { PublicSalonStore } from "@/lib/store-activity/types";
+import { classifyMatchUnavailable, MATCH_UNAVAILABLE_MESSAGES, isStylistSideCause } from "@/lib/matching/readiness";
 
 type Props = {
   store: PublicSalonStore;
   employeeSizeLabel: string | null;
   match: StylistStoreMatchResult | null;
+  /** 美容師本人の preference_axes。undefined＝取得できていない（原因を美容師側と断定しない）。 */
+  stylistAxes?: unknown;
 };
 
 /**
@@ -14,7 +17,8 @@ type Props = {
  * カードデザイン（rounded-2xl border border-line bg-surface）を踏襲する。
  * 詳細へのリンクはstore_id（RPC結果由来）のみを使う。
  */
-export function StoreCard({ store, employeeSizeLabel, match }: Props) {
+export function StoreCard({ store, employeeSizeLabel, match, stylistAxes }: Props) {
+  const cause = match && !match.available ? classifyMatchUnavailable({ reason: match.reason, stylistAxes }) : null;
   const location = [store.prefecture, store.city].filter(Boolean).join(" ");
 
   return (
@@ -56,14 +60,10 @@ export function StoreCard({ store, employeeSizeLabel, match }: Props) {
 
         {match === null && <p className="text-[12.5px] text-sub">相性を確認できませんでした。</p>}
 
-        {match && !match.available && match.reason === "stylist_preference_incomplete" && (
-          <p className="text-[12.5px] leading-relaxed text-charcoal">
-            働きたいサロン環境を回答すると相性が分かります
+        {match && !match.available && cause && (
+          <p className={`text-[12.5px] leading-relaxed ${isStylistSideCause(cause) ? "text-charcoal" : "text-sub"}`}>
+            {MATCH_UNAVAILABLE_MESSAGES[cause]}
           </p>
-        )}
-
-        {match && !match.available && match.reason !== "stylist_preference_incomplete" && (
-          <p className="text-[12.5px] leading-relaxed text-sub">相性診断準備中</p>
         )}
 
         {match?.available && (

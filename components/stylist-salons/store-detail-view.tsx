@@ -1,4 +1,9 @@
 import { deriveSalonTypes, SALON_TYPE_CONTENT } from "@/lib/salon-culture/salon-culture-types";
+import {
+  resolveStoreTypeState,
+  STORE_TYPE_AXES_MISSING_MESSAGE,
+  STORE_TYPE_PREPARING_MESSAGE,
+} from "@/lib/matching/readiness";
 import { SALON_VALUE_PRIORITY_OPTIONS } from "@/lib/validation/profile-options";
 import type { PublicSalonStoreDetail } from "@/lib/store-activity/types";
 import { StoreAssetsSection } from "@/components/store-assets/store-assets-section";
@@ -38,7 +43,9 @@ type Props = {
 
 export function StoreDetailView({ store, employeeSizeLabel, matchSection, assets = null }: Props) {
   const culture = store.culture;
-  const classification = culture?.culture_axes ? deriveSalonTypes(culture.culture_axes) : null;
+  // 店舗タイプは店舗の12軸で判定する（相性の8軸判定とは別）。使えない値がある場合は算出しない。
+  const typeState = resolveStoreTypeState(culture);
+  const classification = typeState.state === "ready" && culture?.culture_axes ? deriveSalonTypes(culture.culture_axes) : null;
   const location = [store.prefecture, store.city].filter(Boolean).join(" ");
 
   return (
@@ -83,8 +90,12 @@ export function StoreDetailView({ store, employeeSizeLabel, matchSection, assets
       <section className="mt-5 rounded-2xl border border-line bg-surface p-6">
         <p className="eyebrow mb-3">この店舗のタイプ</p>
 
-        {!culture && (
-          <p className="text-[12.5px] leading-relaxed text-charcoal">サロンらしさは現在準備中です</p>
+        {typeState.state === "preparing" && (
+          <p className="text-[12.5px] leading-relaxed text-charcoal">{STORE_TYPE_PREPARING_MESSAGE}</p>
+        )}
+
+        {typeState.state === "axes_missing" && (
+          <p className="text-[12.5px] leading-relaxed text-charcoal">{STORE_TYPE_AXES_MISSING_MESSAGE}</p>
         )}
 
         {culture && classification && (

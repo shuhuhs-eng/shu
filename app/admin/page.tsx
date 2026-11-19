@@ -2,12 +2,20 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAdminOrganizationOverview, getAdminSuccessFees, getBillingIntegrityIssues } from "@/lib/billing/actions";
-import { formatYen } from "@/lib/billing/format";
 import { countSeverities } from "@/lib/billing/integrity";
-import { summarizeFees } from "@/lib/billing/summary";
-import { countPaymentStates } from "@/lib/billing/payment";
+import {
+  buildAmountCards,
+  buildContractCards,
+  buildCountCards,
+  buildDailyCards,
+  buildOperationCards,
+  cardValueText,
+  FETCH_FAILED_TEXT,
+  type DashboardCard,
+} from "@/lib/admin/dashboard-cards";
 import { getAdminInvoiceDocuments } from "@/lib/invoices/actions";
 import { getAdminOrganizationContracts } from "@/lib/contracts/actions";
+import { countOperations } from "@/lib/admin/operations";
 
 /**
  * 運営ダッシュボード（/admin）。採用成立と成功報酬の状況を集計する。
@@ -21,30 +29,16 @@ export default async function AdminDashboardPage() {
   const { data: isAdmin } = await supabase.rpc("is_platform_admin");
   if (!isAdmin) redirect("/mypage");
 
-  const [fees, issues, orgs, contracts, documents] = await Promise.all([
+  const [fees, issues, orgs, contracts, documents, opCounts] = await Promise.all([
     getAdminSuccessFees(),
     getBillingIntegrityIssues(),
     getAdminOrganizationOverview(),
     getAdminOrganizationContracts(),
     getAdminInvoiceDocuments(),
+    countOperations(supabase),
   ]);
-  // 契約まわりの「要確認」の件数（異常と断定するものではなく、確認の目安）。
-  const contractChecks = contracts
-    ? [
-        { label: "契約条件が未設定の会社", value: contracts.filter((o) => o.contract === null).length, href: "/admin/contracts?filter=unset" },
-        { label: "試用中の会社", value: contracts.filter((o) => o.contract?.contract_status === "trial").length, href: "/admin/contracts?filter=trial" },
-        { label: "一時停止の会社", value: contracts.filter((o) => o.contract?.contract_status === "suspended").length, href: "/admin/contracts?filter=suspended" },
-        { label: "解約の会社", value: contracts.filter((o) => o.contract?.contract_status === "cancelled").length, href: "/admin/contracts?filter=cancelled" },
-        { label: "成功報酬額が未設定の契約", value: contracts.filter((o) => o.contract !== null && o.contract.success_fee_amount === null).length, href: "/admin/contracts?filter=no_amount" },
-        ...(fees
-          ? [{
-              label: "基準額と請求額が異なる成功報酬",
-              value: fees.filter((f) => f.contract_success_fee_amount !== null && f.fee_amount !== null && f.fee_amount !== f.contract_success_fee_amount).length,
-              href: "/admin/success-fees?view=diff",
-            }]
-          : []),
-      ]
-    : null;
+  // 各カードは、必要な取得元だけを見る。取得失敗のカードは残し「取得できませんでした」と表示する（0にしない）。
+  const contractChecks = buildContractCards(contracts, fees);
   const orgTotals = orgs
     ? {
         companies: orgs.length,
@@ -53,50 +47,10 @@ export default async function AdminDashboardPage() {
       }
     : null;
   const integrity = issues ? countSeverities(issues) : null;
-  const summary = fees ? summarizeFees(fees) : null;
-
-  const payStates = fees ? countPaymentStates(fees) : null;
-  // 発行済みの請求書PDFが無い、0045以降の請求（旧請求データは対象外）。取得できなければ判断しない。
-  const withoutPdf = fees && documents
-    ? (() => {
-        const issued = new Set(documents.map((d) => d.success_fee_id));
-        return fees.filter((f) => (f.fee_status === "invoiced" || f.fee_status === "paid") && f.invoice_number !== null && !issued.has(f.fee_id)).length;
-      })()
-    : null;
-  const daily: Array<{ label: string; value: number; href: string; alert?: boolean }> | null =
-    summary && payStates && integrity && withoutPdf !== null
-      ? [
-          { label: "成功報酬の確認待ち", value: summary.counts.pending_confirmation, href: "/admin/success-fees?view=pre_invoice" },
-          { label: "請求待ち（金額確定済み）", value: summary.counts.confirmed, href: "/admin/success-fees?view=pre_invoice" },
-          { label: "請求書PDFが未発行", value: withoutPdf, href: "/admin/success-fees" },
-          { label: "未入金", value: payStates.unpaid + payStates.overdue, href: "/admin/success-fees?view=unpaid" },
-          { label: "支払期限超過", value: payStates.overdue, href: "/admin/success-fees?view=overdue", alert: true },
-          { label: "整合性の異常", value: integrity.total, href: "/admin/integrity", alert: true },
-          ...(contracts
-            ? [{ label: "契約が停止中の会社", value: contracts.filter((o) => o.contract?.contract_status === "suspended").length, href: "/admin/contracts?filter=suspended" }]
-            : []),
-          { label: "採用成立（累計）", value: summary.hiredCount, href: "/admin/success-fees" },
-        ]
-      : null;
-
-  const countCards: Array<{ label: string; value: number }> = summary
-    ? [
-        { label: "採用成立", value: summary.hiredCount },
-        { label: "請求確認中", value: summary.counts.pending_confirmation },
-        { label: "請求額確定", value: summary.counts.confirmed },
-        { label: "請求済み", value: summary.counts.invoiced },
-        { label: "入金済み", value: summary.counts.paid },
-        { label: "免除", value: summary.counts.waived },
-        { label: "取消", value: summary.counts.cancelled },
-      ]
-    : [];
-  const amountCards: Array<{ label: string; value: string; note: string }> = summary
-    ? [
-        { label: "成功報酬総額", value: formatYen(summary.confirmedTotal), note: "金額確定以降（免除・取消を除く）の合計" },
-        { label: "請求済み総額", value: formatYen(summary.invoicedTotal), note: "請求済み＋入金済みの合計" },
-        { label: "入金済み総額", value: formatYen(summary.paidTotal), note: "入金済みの合計" },
-      ]
-    : [];
+  const countCards = buildCountCards(fees);
+  const amountCards = buildAmountCards(fees);
+  const daily = buildDailyCards({ fees, issues, contracts, documents });
+  const operations = buildOperationCards(opCounts);
 
   return (
     <main className="mx-auto max-w-[760px] px-5 py-12">
@@ -104,46 +58,46 @@ export default async function AdminDashboardPage() {
       <h1 className="font-serif text-2xl font-bold text-ink">運営ダッシュボード</h1>
       <p className="mt-2 text-[12.5px] leading-relaxed text-sub">採用成立と成功報酬の状況です。</p>
 
-      {summary === null ? (
-        <p className="mt-6 rounded-lg bg-[#C24545]/10 px-3 py-2 text-[12px] text-[#8A2E2E]">成功報酬の情報を取得できませんでした。時間をおいて再度お試しください。</p>
-      ) : (
-        <>
-          <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {countCards.map((c) => (
-              <div key={c.label} className="rounded-2xl border border-line bg-surface p-4">
-                <p className="text-[11px] text-sub">{c.label}</p>
-                <p className="mt-1 font-serif text-[26px] font-bold text-ink">{c.value}</p>
-              </div>
-            ))}
-          </section>
-          <section className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {amountCards.map((c) => (
-              <div key={c.label} className="rounded-2xl border border-line bg-surface p-4">
-                <p className="text-[11px] text-sub">{c.label}</p>
-                <p className="mt-1 font-serif text-[20px] font-bold text-ink">{c.value}</p>
-                <p className="mt-1 text-[10px] text-sub">{c.note}</p>
-              </div>
-            ))}
-          </section>
-        </>
-      )}
+      <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {countCards.map((c) => (
+          <StatCard key={c.label} card={c} unit="" />
+        ))}
+      </section>
+      <section className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {amountCards.map((c) => (
+          <div key={c.label} className="rounded-2xl border border-line bg-surface p-4">
+            <p className="text-[11px] text-sub">{c.label}</p>
+            <p className={c.value === null ? "mt-1 text-[12px] font-semibold text-[#8A2E2E]" : "mt-1 font-serif text-[20px] font-bold text-ink"}>
+              {c.value === null ? FETCH_FAILED_TEXT : c.value}
+            </p>
+            <p className="mt-1 text-[10px] text-sub">{c.note}</p>
+          </div>
+        ))}
+      </section>
 
       <section className="mt-8">
         <p className="eyebrow mb-1">毎日の確認</p>
         <p className="mb-3 text-[11.5px] leading-relaxed text-sub">対応が必要な件数です。押すと該当の一覧へ移動します。</p>
-        {daily === null ? (
-          <p className="rounded-lg bg-[#C24545]/10 px-3 py-2 text-[12px] text-[#8A2E2E]">確認に必要な情報を取得できませんでした。時間をおいて再度お試しください。</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {daily.map((m) => (
-              <Link key={m.label} href={m.href}
-                className={`rounded-2xl border p-4 ${m.alert && m.value > 0 ? "border-[#C24545]/40 bg-[#C24545]/5" : "border-line bg-surface"}`}>
-                <p className="text-[11px] text-sub">{m.label}</p>
-                <p className={`mt-1 font-serif text-[22px] font-bold ${m.alert && m.value > 0 ? "text-[#8A2E2E]" : "text-ink"}`}>{m.value}件</p>
-              </Link>
-            ))}
-          </div>
-        )}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {daily.map((m) => (
+            <StatCard key={m.label} card={m} />
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <p className="eyebrow mb-1">面接・関心・診断</p>
+        <p className="mb-3 text-[11.5px] leading-relaxed text-sub">確認の目安となる件数です。取得できないときは「取得できませんでした」と表示し、0件とは区別します。</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {operations.map((m) => (
+            <StatCard key={m.label} card={m} />
+          ))}
+        </div>
+        <p className="mt-2 flex flex-wrap gap-x-4 text-[12px] font-semibold">
+          <Link href="/admin/interviews" className="underline">面接・採用の進捗 ›</Link>
+          <Link href="/admin/interests" className="underline">「話を聞いてみたい」 ›</Link>
+          <Link href="/admin/culture-readiness" className="underline">サロンらしさ診断の状況 ›</Link>
+        </p>
       </section>
 
       <section className="mt-8">
@@ -152,18 +106,11 @@ export default async function AdminDashboardPage() {
           <Link href="/admin/contracts" className="text-[12px] font-semibold underline">契約一覧 ›</Link>
         </div>
         <p className="mb-3 text-[11.5px] leading-relaxed text-sub">異常ではなく、確認の目安となる件数です。</p>
-        {contractChecks === null ? (
-          <p className="rounded-lg bg-[#C24545]/10 px-3 py-2 text-[12px] text-[#8A2E2E]">契約の情報を取得できませんでした。</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {contractChecks.map((m) => (
-              <Link key={m.label} href={m.href} className="rounded-2xl border border-line bg-surface p-4">
-                <p className="text-[11px] text-sub">{m.label}</p>
-                <p className="mt-1 font-serif text-[22px] font-bold text-ink">{m.value}</p>
-              </Link>
-            ))}
-          </div>
-        )}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {contractChecks.map((m) => (
+            <StatCard key={m.label} card={m} unit="" />
+          ))}
+        </div>
       </section>
 
       <Link href="/admin/companies" className="mt-8 block rounded-2xl border border-line bg-surface p-5">
@@ -203,5 +150,36 @@ export default async function AdminDashboardPage() {
         </Link>
       </div>
     </main>
+  );
+}
+
+/**
+ * 件数カード。取得できなかったときもカードは残し、数字の代わりに「取得できませんでした」を出す。
+ * 取得できて 0 件のときは「0件」を出す（失敗とは文言も色も変えて区別する）。
+ */
+function StatCard({ card, unit = "件" }: { card: DashboardCard; unit?: string }) {
+  const failed = card.value === null;
+  const alert = !failed && card.alert && (card.value ?? 0) > 0;
+  const cls = `rounded-2xl border p-4 ${alert ? "border-[#C24545]/40 bg-[#C24545]/5" : "border-line bg-surface"}`;
+  const body = (
+    <>
+      <p className="text-[11px] text-sub">{card.label}</p>
+      <p
+        className={
+          failed
+            ? "mt-1 text-[12px] font-semibold text-[#8A2E2E]"
+            : `mt-1 font-serif text-[22px] font-bold ${alert ? "text-[#8A2E2E]" : "text-ink"}`
+        }
+      >
+        {cardValueText(card.value, unit)}
+      </p>
+    </>
+  );
+  return card.href ? (
+    <Link href={card.href} className={cls}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cls}>{body}</div>
   );
 }

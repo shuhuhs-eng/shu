@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
-import { calculateStylistStoreMatch } from "@/lib/matching/actions";
+import { calculateStylistStoreMatch, getOwnPreferenceAxes } from "@/lib/matching/actions";
+import { classifyMatchUnavailable, MATCH_UNAVAILABLE_MESSAGES, isStylistSideCause } from "@/lib/matching/readiness";
 import { getPublicSalonStoreDetail } from "@/lib/store-activity/actions";
 import { MATCH_AXIS_LABELS } from "@/lib/matching/types";
 import { StoreDetailView } from "@/components/stylist-salons/store-detail-view";
@@ -61,6 +62,16 @@ export default async function StylistStoreDetailPage({ params }: Props) {
   // 店舗別のロゴ・写真・リンク（0081。未適用・取得失敗のときは表示しないだけで、画面は従来どおり）。
   const assetsResult = await loadStoreAssets(supabase, store.store_id, "stylist");
   const match = await calculateStylistStoreMatch(store.store_id);
+  // 相性を表示できないときだけ、原因（美容師側／店舗側）の判定に使う。取得失敗は undefined（断定しない）。
+  const ownPreference = match && !match.available ? await getOwnPreferenceAxes() : null;
+  const matchCause =
+    match && !match.available
+      ? classifyMatchUnavailable({
+          reason: match.reason,
+          stylistAxes: ownPreference ? ownPreference.axes : undefined,
+          storeAxes: store.culture ? store.culture.culture_axes : undefined,
+        })
+      : null;
 
   // 「話を聞いてみたい」の送信済み判定。stylist_salon_interestsには美容師本人の
   // SELECTのみ許可するRLS（stylist_user_id = auth.uid()）が既にあるため、
@@ -96,11 +107,9 @@ export default async function StylistStoreDetailPage({ params }: Props) {
 
           {match === null && <p className="text-center text-[12.5px] text-sub">相性を確認できませんでした。</p>}
 
-          {match && !match.available && (
-            <p className="text-center text-[12.5px] leading-relaxed text-charcoal">
-              {match.reason === "stylist_preference_incomplete"
-                ? "働きたいサロン環境を回答すると相性が分かります"
-                : "相性診断準備中"}
+          {match && !match.available && matchCause && (
+            <p className={`text-center text-[12.5px] leading-relaxed ${isStylistSideCause(matchCause) ? "text-charcoal" : "text-sub"}`}>
+              {MATCH_UNAVAILABLE_MESSAGES[matchCause]}
             </p>
           )}
 

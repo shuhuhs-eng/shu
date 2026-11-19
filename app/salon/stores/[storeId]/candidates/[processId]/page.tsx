@@ -1,3 +1,4 @@
+import { salonSideMatchUnavailableMessage } from "@/lib/matching/readiness";
 import Link from "next/link";
 import { formatExperienceInline } from "@/lib/profile/experience-years";
 import { notFound, redirect } from "next/navigation";
@@ -99,7 +100,7 @@ export default async function CandidateDetailPage({ params }: Props) {
           <div className="flex gap-2">
             <dt className="w-20 shrink-0 text-sub">相性</dt>
             <dd>
-              {p.match.available && p.match.overall_score != null ? `${p.match.overall_score}%` : "相性診断準備中"}
+              {p.match.available && p.match.overall_score != null ? `${p.match.overall_score}%` : salonSideMatchUnavailableMessage(p.match.available ? null : p.match.reason)}
             </dd>
           </div>
           <div className="flex gap-2">

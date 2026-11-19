@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
-import { calculateStylistStoreMatch } from "@/lib/matching/actions";
+import { calculateStylistStoreMatch, getOwnPreferenceAxes } from "@/lib/matching/actions";
 import { getPublicSalonStores } from "@/lib/store-activity/actions";
 import { StoreCard } from "@/components/stylist-salons/store-card";
 
@@ -46,7 +46,12 @@ export default async function StylistSalonsPage() {
   }
 
   // 各店舗との相性を並列取得する。
-  const matches = await Promise.all(storeList.map((s) => calculateStylistStoreMatch(s.store_id)));
+  const [matches, ownPreference] = await Promise.all([
+    Promise.all(storeList.map((s) => calculateStylistStoreMatch(s.store_id))),
+    getOwnPreferenceAxes(),
+  ]);
+  // 取得できなかったときは undefined（原因を美容師側とも店舗側とも断定しない）。
+  const stylistAxes = ownPreference ? ownPreference.axes : undefined;
 
   // 相性を計算できる店舗はスコアの高い順。計算できない店舗はその後ろ（同点は取得順）。
   const rankedStores = storeList
@@ -87,6 +92,7 @@ export default async function StylistSalonsPage() {
                 store.employee_size_code ? sizeLabelByCode.get(store.employee_size_code) ?? null : null
               }
               match={match}
+              stylistAxes={stylistAxes}
             />
           ))}
         </div>
