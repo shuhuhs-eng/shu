@@ -404,6 +404,8 @@ export type Database = {
         Row: {
           id: string; stylist_user_id: string; salon_user_id: string | null;
           store_id: string | null; created_at: string;
+          /** 0095で追加。visit=見学／trial=体験入店（適用前のDBには無い。無ければ見学扱い）。 */
+          kind?: "visit" | "trial";
         };
         Insert: Record<string, never>;
         Update: Record<string, never>;
@@ -1018,6 +1020,11 @@ export type Database = {
       set_store_interest: {
         // 0035で追加。store単位「話を聞いてみたい」の送信・取消。salon_user_idは渡さない。
         Args: { p_store_id: string; p_interested: boolean };
+        Returns: boolean;
+      };
+      set_store_interest_v2: {
+        // 0095で追加。種別（visit/trial）ごとの送信・取消。取消は店舗の公開・停止状態に関係なく可能。
+        Args: { p_store_id: string; p_kind: "visit" | "trial"; p_interested: boolean };
         Returns: boolean;
       };
       calculate_stylist_store_match: {

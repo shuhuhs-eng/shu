@@ -15,7 +15,10 @@ export type PublicSalonStore = Functions["get_public_salon_stores"]["Returns"][n
 export type PublicSalonStoreDetail = Functions["get_public_salon_store_detail"]["Returns"];
 
 /** 店舗側: 「見学を希望したい」を送った美容師の1行（get_store_received_interests）。 */
-export type StoreReceivedInterest = Functions["get_store_received_interests"]["Returns"][number];
+export type StoreReceivedInterest = Functions["get_store_received_interests"]["Returns"][number] & {
+  /** 希望の種別（0095以降のRPCが必ず返す）。0095適用前のRPCには無く、その場合は見学（旧DBでは見学しか送れない）。 */
+  kind?: "visit" | "trial";
+};
 
 /** 店舗側: スカウト履歴の1行（get_store_scouts）。 */
 export type StoreScout = Functions["get_store_scouts"]["Returns"][number];

@@ -12,7 +12,7 @@ export default function AdminError({ error, reset }: { error: Error & { digest?:
     <StatusPanel
       title="一時的に表示できません"
       homeHref="/admin"
-      homeLabel="管理画面へ戻る"
+      homeLabel="運営TOPへ戻る"
       action={
         <button type="button" onClick={reset} className="flex w-full items-center justify-center rounded-full bg-ink px-6 py-4 text-[15px] font-semibold text-surface">
           もう一度試す

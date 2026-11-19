@@ -4,6 +4,7 @@ import { formatExperienceInline } from "@/lib/profile/experience-years";
 import { isSalaryOfferPresentationPaused } from "@/lib/salary-offers/pause";
 import { JOB_CHANGE_INTENT_LABELS } from "@/lib/validation/profile-options";
 import { CAREER_GOAL_LABELS, type CareerGoalCode } from "@/lib/match-profile/options";
+import { INTEREST_KIND_SHORT, normalizeInterestKind, type InterestKind } from "@/lib/interests/kinds";
 import { formatJstDateTime } from "@/lib/store-activity/format";
 import type { StoreReceivedInterest, StoreSalaryOffer } from "@/lib/store-activity/types";
 import type { StoreAgeInfo } from "@/lib/age-disclosure/actions";
@@ -21,6 +22,8 @@ type Props = {
   canManage?: boolean;
   /** 年齢情報（get_store_stylist_age_infos）。無い（未対応・取得失敗）ときは年齢を表示しない。 */
   ageInfo?: StoreAgeInfo | null;
+  /** 同じ美容師が送った希望の種別ごとの送信日時（無ければ interest 自身の種別・日時）。 */
+  kinds?: Array<{ kind: InterestKind; created_at: string }>;
 };
 
 const VERIFICATION_LABELS: Record<string, string> = {
@@ -33,12 +36,12 @@ const VERIFICATION_LABELS: Record<string, string> = {
 };
 
 /**
- * 「見学を希望したい」を送ってくれた美容師のカード（店舗側、store単位）。
+ * 見学・体験入店の希望を送ってくれた美容師のカード（店舗側、store単位）。
  * 表示内容は旧マイページの受信カードと同じ考え方で、店舗単位の相性を加える。
  * 給与オファーのフォームは、DB側(create_salary_offer_v2)の条件と同じ
  * 「実績に基づくオファーを希望」かつ「提出資料の確認済み」の美容師にだけ表示する。
  */
-export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPaused = false, canManage = true, ageInfo = null }: Props) {
+export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPaused = false, canManage = true, ageInfo = null, kinds }: Props) {
   const ageLabel = ageInfo && ageInfo.age_request_status !== "unavailable" ? formatAgeLabel(ageInfo) : null;
   const mp = interest.match_profile;
   const match = interest.match;
@@ -54,7 +57,14 @@ export function StoreInterestCard({ storeId, interest, latestOffer, recruitingPa
               "プロフィール情報未設定"}
           </p>
           {ageLabel && <p className="mt-1 text-[12px] text-charcoal">年齢: {ageLabel}</p>}
-          <p className="mt-1 text-[10.5px] text-sub">{formatJstDateTime(interest.created_at)} に送信</p>
+          <div className="mt-1 space-y-0.5 text-[10.5px] text-sub">
+            {(kinds && kinds.length > 0 ? kinds : [{ kind: normalizeInterestKind(interest.kind), created_at: interest.created_at }]).map((k) => (
+              <p key={k.kind}>
+                <span data-testid="interest-kind" className="mr-1.5 rounded-full bg-surface2 px-2 py-0.5 text-[10.5px] font-semibold text-charcoal">{INTEREST_KIND_SHORT[k.kind]}の希望</span>
+                {formatJstDateTime(k.created_at)} に送信
+              </p>
+            ))}
+          </div>
         </div>
         <div className="shrink-0 text-right">
           {match.available && match.overall_score != null ? (

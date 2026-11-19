@@ -13,7 +13,7 @@ export const HIRING_STATUS_LABELS: Record<string, string> = {
 };
 
 export const HIRING_SOURCE_LABELS: Record<string, string> = {
-  interest: "見学を希望したい",
+  interest: "店舗への直接希望（見学・体験入店）",
   scout: "スカウトへの返信",
   salary_offer: "給与オファーへの回答",
 };

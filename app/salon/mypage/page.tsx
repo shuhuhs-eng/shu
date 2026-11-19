@@ -316,7 +316,7 @@ export default async function SalonMyPage() {
       <section id="interests" className="mt-6 rounded-2xl border border-line bg-surface p-6">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="eyebrow mb-1">見学を希望したい</p>
+            <p className="eyebrow mb-1">見学・体験入店の希望</p>
             <h2 className="font-serif text-lg font-bold text-ink">見学を希望してくれた美容師</h2>
           </div>
           <span className="rounded-full bg-surface2 px-3 py-1.5 text-[13px] font-bold text-ink">

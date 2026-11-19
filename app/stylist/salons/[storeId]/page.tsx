@@ -8,6 +8,7 @@ import { getPublicSalonStoreDetail } from "@/lib/store-activity/actions";
 import { MATCH_AXIS_LABELS } from "@/lib/matching/types";
 import { StoreDetailView } from "@/components/stylist-salons/store-detail-view";
 import { StoreInterestButton } from "@/components/stylist-salons/store-interest-button";
+import { loadOwnInterestState } from "@/lib/interests/load";
 import { loadStoreAssets } from "@/lib/store-assets/load";
 
 type Props = {
@@ -73,16 +74,10 @@ export default async function StylistStoreDetailPage({ params }: Props) {
         })
       : null;
 
-  // 「見学を希望したい」の送信済み判定。stylist_salon_interestsには美容師本人の
-  // SELECTのみ許可するRLS（stylist_user_id = auth.uid()）が既にあるため、
-  // 本人×この店舗の行の有無だけを確認する（新しいDB変更は不要）。
-  const { data: interestRow } = await supabase
-    .from("stylist_salon_interests")
-    .select("id")
-    .eq("stylist_user_id", user.id)
-    .eq("store_id", store.store_id)
-    .maybeSingle();
-  const isInterested = !!interestRow;
+  // 希望（見学／体験入店）の送信済み判定。stylist_salon_interestsには美容師本人の
+  // SELECTのみ許可するRLS（stylist_user_id = auth.uid()）がある。取得に失敗したときは
+  // 「未送信」と表示せず、状態不明として送信・取消を止める（旧DB互換の扱いは loadOwnInterestState）。
+  const interestState = await loadOwnInterestState(supabase as never, user.id, store.store_id);
 
   return (
     <main className="mx-auto max-w-[640px] px-5 py-12">
@@ -95,7 +90,7 @@ export default async function StylistStoreDetailPage({ params }: Props) {
         ← 店舗一覧に戻る
       </Link>
 
-      <StoreInterestButton storeId={store.store_id} isInterested={isInterested} />
+      <StoreInterestButton storeId={store.store_id} interestState={interestState} />
 
       <StoreDetailView
         store={store}

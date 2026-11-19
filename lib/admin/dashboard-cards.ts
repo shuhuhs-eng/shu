@@ -114,7 +114,7 @@ export type OperationCounts = { elapsedNotUpdated: number | null; interestsNotCr
 export function buildOperationCards(c: OperationCounts): DashboardCard[] {
   return [
     { label: "面接予定日時を過ぎて結果が未更新", value: c.elapsedNotUpdated, href: "/admin/interviews?view=interview_elapsed_not_updated", alert: true },
-    { label: "「見学を希望したい」で進捗が未作成", value: c.interestsNotCreated, href: "/admin/interests?progress=not_created" },
+    { label: "直接希望で進捗が未作成", value: c.interestsNotCreated, href: "/admin/interests?progress=not_created" },
     { label: "公開店舗でサロンらしさが未完成", value: c.cultureNotReady, href: "/admin/culture-readiness" },
   ];
 }

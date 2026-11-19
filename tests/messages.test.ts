@@ -122,12 +122,12 @@ test("Server→Clientで関数を渡さない（連絡作成画面が「一時�
   }
 });
 
-test("管理画面のエラーは「管理画面へ戻る」→/admin、一般画面は従来どおり「トップへ戻る」→/、ナビに「サイトのホームへ」→/", () => {
+test("管理画面のエラーは「運営TOPへ戻る」→/admin、一般画面は従来どおり「トップへ戻る」→/、ナビに「HOME」→/", () => {
   const ae = src("app/admin/error.tsx");
-  assert.match(ae, /homeHref="\/admin"/); assert.match(ae, /管理画面へ戻る/);
+  assert.match(ae, /homeHref="\/admin"/); assert.match(ae, /運営TOPへ戻る/);
   assert.match(src("components/error-panel.tsx"), /homeHref = "\/"/); assert.match(src("components/error-panel.tsx"), /トップへ戻る/);
   assert.doesNotMatch(src("app/error.tsx"), /homeHref/);
-  assert.match(src("components/admin/admin-nav.tsx"), /href: "\/", label: "サイトのホームへ"/);
+  assert.match(src("components/admin/admin-nav.tsx"), /href: "\/", label: "HOME"/);
 });
 
 test("権限確認は維持: エラー画面・ナビの変更で管理画面の入口の確認は外れていない", () => {

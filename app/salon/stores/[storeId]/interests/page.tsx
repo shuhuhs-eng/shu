@@ -5,6 +5,7 @@ import { getStoreReceivedInterests, getStoreSalaryOffers } from "@/lib/store-act
 import { getStoreStylistAgeInfos } from "@/lib/age-disclosure/actions";
 import type { StoreSalaryOffer } from "@/lib/store-activity/types";
 import { StorePageShell } from "@/components/store-activity/store-page-shell";
+import { groupInterestsByStylist } from "@/lib/interests/kinds";
 import { StoreInterestCard } from "@/components/store-activity/store-interest-card";
 import { getStoreHiringProcesses } from "@/lib/hiring/actions";
 import { canManageStoreHiringHint } from "@/lib/hiring/permissions";
@@ -82,22 +83,23 @@ export default async function StoreInterestsPage({ params }: Props) {
     <StorePageShell
       storeId={storeId}
       storeName={store.store_name}
-      eyebrow="見学を希望してくれた美容師"
-      description="この店舗に「見学を希望したい」を送ってくれた美容師です。プロフィールを確認して、条件を満たす方には給与条件を提示できます。"
+      eyebrow="見学・体験入店を希望してくれた美容師"
+      description="この店舗に「見学を希望する」「体験入店を希望する」を送ってくれた美容師です（同じ美容師は1枚にまとめて表示します）。プロフィールを確認して、条件を満たす方には給与条件を提示できます。"
     >
       {interests === null ? (
         <p className="mt-8 text-center text-[13px] text-sub">一覧を取得できませんでした。時間をおいて再度お試しください。</p>
       ) : interests.length === 0 ? (
-        <p className="mt-8 text-center text-[13px] text-sub">現在、届いている「見学を希望したい」はありません。</p>
+        <p className="mt-8 text-center text-[13px] text-sub">現在、届いている見学・体験入店の希望はありません。</p>
       ) : (
         <div className="mt-8 space-y-4">
-          {interests.map((interest) => (
+          {groupInterestsByStylist(interests).map(({ interest, kinds }) => (
             <div key={interest.interest_id}>
               <StoreInterestCard
                 storeId={storeId}
                 recruitingPaused={recruitingPaused}
                 canManage={canManageHiring}
                 interest={interest}
+                kinds={kinds}
                 ageInfo={ageInfos[interest.stylist_user_id] ?? null}
                 latestOffer={latestOfferByStylist.get(interest.stylist_user_id) ?? null}
               />

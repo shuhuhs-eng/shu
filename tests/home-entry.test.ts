@@ -58,12 +58,12 @@ test("トップ: 「あなたのタイプ」見出し・30問診断の導線を�
   assert.doesNotMatch(h, /マイページ（管理画面へ）/);
 });
 
-test("ヘッダー: 管理者のみ「管理画面へ」（ログアウトの左）。一般は「マイページ」。未ログインには出ない", () => {
+test("ヘッダー: 管理者のみ「運営TOPへ」（ログアウトの左）。一般は「マイページ」。未ログインには出ない", () => {
   const h = src("app/page.tsx");
   const bar = h.slice(h.indexOf("{user && ("), h.indexOf("Hero行"));
-  assert.match(bar, /isAdmin \? \([\s\S]*?href="\/admin"[\s\S]*?管理画面へ/);
+  assert.match(bar, /isAdmin \? \([\s\S]*?href="\/admin"[\s\S]*?運営TOPへ/);
   assert.match(bar, /href="\/mypage"[\s\S]*?マイページ/);
-  assert.ok(bar.indexOf("管理画面へ") < bar.indexOf("signOutAction"), "管理画面へ は ログアウトより左（前）");
+  assert.ok(bar.indexOf("運営TOPへ") < bar.indexOf("signOutAction"), "運営TOPへ は ログアウトより左（前）");
   assert.match(h, /const adminStatus = user \? await getAdminStatus\(supabase\) : "not_admin"/);
 });
 
@@ -110,9 +110,9 @@ test("トップの表示出し分け: 美容師/サロン/管理者/未ログイ
   // 旧「…アカウントでログインするとご利用いただけます」の案内は残っていない
   assert.doesNotMatch(h, /アカウントでログインするとご利用いただけます/);
   assert.doesNotMatch(h, /運営アカウントです。上の/);
-  // サロン: サロンマイページへ。ヘッダーのマイページは user 全般に残る。管理者はヘッダーの「管理画面へ」
+  // サロン: サロンマイページへ。ヘッダーのマイページは user 全般に残る。管理者はヘッダーの「運営TOPへ」
   assert.match(h, /view === "salon" \? \(\s*<Link\s+href="\/salon\/mypage"/);
-  assert.match(h, /href="\/mypage"[\s\S]*?マイページ/); assert.match(h, /href="\/admin"[\s\S]*?管理画面へ/);
+  assert.match(h, /href="\/mypage"[\s\S]*?マイページ/); assert.match(h, /href="\/admin"[\s\S]*?運営TOPへ/);
   // 初回案内（30問の診断から）は未ログイン側のログインリンクと同じブロックにだけある
   assert.equal((h.match(/初めての方は30問の診断から始めましょう/g) ?? []).length, 1);
   // 認証・アクセス制御は表示だけに頼らない（再診断は /stylist/mypage の「診断を受け直す」）

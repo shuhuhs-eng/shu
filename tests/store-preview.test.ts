@@ -321,7 +321,7 @@ test("店舗プロフィール編集画面: 対象店舗を明示し、プレビ
 test("美容師向け詳細: 操作ボタン→共用部品の順と、相性の各状態の文言が従来どおり", () => {
   const raw = readFileSync("app/stylist/salons/[storeId]/page.tsx", "utf8");
   assert.ok(raw.indexOf("<StoreInterestButton") > 0 && raw.indexOf("<StoreInterestButton") < raw.indexOf("<StoreDetailView"));
-  for (const t of ["相性を確認できませんでした", "総合マッチ度", "MATCH_AXIS_LABELS", "isInterested"]) {
+  for (const t of ["相性を確認できませんでした", "総合マッチ度", "MATCH_AXIS_LABELS", "interestState"]) {
     assert.ok(raw.includes(t), t);
   }
   assert.match(raw, /notFound\(\)/);

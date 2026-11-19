@@ -48,7 +48,7 @@ const COPY = {
     signupHref: null,
     signupLabel: null,
     crossLinkHref: "/",
-    crossLinkLabel: "サイトのホームへ",
+    crossLinkLabel: "HOME",
   },
 } as const;
 

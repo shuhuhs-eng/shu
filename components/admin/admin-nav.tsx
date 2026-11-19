@@ -2,14 +2,14 @@ import Link from "next/link";
 
 const ITEMS = [
   // 一般向けサイトのホーム（エラー画面の「管理画面へ戻る」→/admin とは行き先を分けている）。スマホでも先頭で見えるよう最初に置く。
-  { href: "/", label: "サイトのホームへ" },
-  { href: "/admin", label: "運営トップ" },
+  { href: "/", label: "HOME" },
+  { href: "/admin", label: "運営TOP" },
   { href: "/admin/salons", label: "会社・店舗" },
   { href: "/admin/stylists", label: "美容師" },
   { href: "/admin/messages", label: "連絡" },
   { href: "/admin/interviews", label: "面接・進捗" },
   { href: "/admin/visit-requests", label: "見学・体験入店" },
-  { href: "/admin/interests", label: "見学を希望したい" },
+  { href: "/admin/interests", label: "直接希望（見学・体験入店）" },
   { href: "/admin/culture-readiness", label: "診断の状況" },
   { href: "/admin/companies", label: "会社（採用・請求）" },
   { href: "/admin/contracts", label: "契約" },

@@ -47,7 +47,7 @@ export default async function Home() {
   //   guest        … 未ログイン: 現在のトップ構成（美容師の診断枠＋サロン入口＋管理者入口）
   //   stylist      … 美容師: 「あなたのタイプ」＋マイページ導線のみ。サロンの枠・診断ボタン・初回案内は出さない（再診断はマイページから）
   //   salon        … サロン: 「サロンマイページへ」のみ。「あなたのタイプ」・美容師向け案内は出さない
-  //   admin        … 管理者: 通常の美容師・サロン向け枠は出さず、ヘッダーの「管理画面へ」
+  //   admin        … 管理者: 通常の美容師・サロン向け枠は出さず、ヘッダーの「運営TOPへ」
   //   check_failed … 運営権限／役割を確認できない: どの役割の枠も出さず、再読み込みを案内
   //   no_role      … 役割が未登録（オンボーディング前など）: どちらの枠も出さない（ヘッダーの「マイページ」から振り分け）
   // これは表示の整理のみ。アクセス制御は middleware・各ページ・DBのRPCが従来どおり行う。
@@ -114,7 +114,7 @@ export default async function Home() {
           ) : isAdmin ? (
             // 管理者としてログイン中のみ表示（未ログイン・ログアウト後・一般の美容師/サロンには出さない）。ログアウトの左。
             <Link href="/admin" className="inline-flex min-h-[44px] items-center rounded-full border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-ink lg:text-[12.5px]">
-              管理画面へ
+              運営TOPへ
             </Link>
           ) : view === "stylist" || view === "salon" ? (
             // 美容師・サロン: ログアウトの左は「マイページ」ではなく通知ベル（マイページへの導線は下部カード・本文内に残る）。
@@ -150,7 +150,12 @@ export default async function Home() {
           となるよう調整している（カード行に relative z-10 を付与）。
           コンテンツ幅は1320px前後で中央配置する（margin-leftに寄せない）。 */}
       <div className="mx-auto w-full max-w-[1320px]">
-        <div className="relative overflow-visible">
+        {/* ★PCの最小高さ（lg:min-h-[350px]）: キャラクターは Hero行の下端を基準に absolute 配置されるため、行の高さが
+            内容で決まると、運営ログイン時（30問の案内・CTA・3メリットを非表示にするため行が低くなる）に
+            キャラクターの頭が画面上端で切れていた。通常のHOME（未ログイン等）の行の高さ（約350px）を最小値として
+            固定し、どの表示でも頭が上端から約5px下（通常HOMEと同じ位置）に収まるようにする。通常時の高さは変わらない。
+            スマホ（lg未満）はキャラクターが通常フローなので対象外。 */}
+        <div className="relative overflow-visible lg:min-h-[350px]">
           <div className="lg:max-w-[860px]">
             <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
               {/* ロゴ: 画像ではなくCSS/HTMLで組んだ横長ロゴ（BRマーク＋ワードマーク）。

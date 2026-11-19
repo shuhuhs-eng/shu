@@ -29,7 +29,7 @@ export default async function AdminVisitRequestsPage({ searchParams }: { searchP
     <main className="mx-auto max-w-[900px] px-5 py-10">
       <PageHead
         title="見学・体験入店の受付"
-        lead={<>スカウトへの返信と、美容師から店舗への「見学を希望したい」を、入口と希望種別を分けて確認します。<b>受付しても日程や参加は確定しません</b>。請求・決済は作られません（見学料は実施後に双方へ確認し、運営が別途手動で扱います）。連絡は既存の連絡機能で行います。</>}
+        lead={<>スカウトへの返信と、美容師から店舗への直接希望（見学・体験入店）を、入口と希望種別を分けて確認します。<b>受付しても日程や参加は確定しません</b>。請求・決済は作られません（見学料は実施後に双方へ確認し、運営が別途手動で扱います）。連絡は既存の連絡機能で行います。</>}
       />
       <form method="get" className="mt-5 grid gap-3 rounded-2xl border border-line bg-surface p-4">
         <select name="entrance" defaultValue={f.entrance} className={sel} aria-label="入口">

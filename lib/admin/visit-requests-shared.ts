@@ -4,7 +4,7 @@ export const VISIT_KINDS = ["visit", "trial"] as const;
 export const VISIT_STATUSES = ["received", "reviewing", "scheduling", "scheduled", "post_visit_check", "attended", "closed"] as const;
 export const VISIT_LIST_STATUSES = ["unclaimed", ...VISIT_STATUSES] as const;
 
-export const ENTRANCE_LABELS: Record<string, string> = { scout_reply: "スカウトへの返信", direct_interest: "美容師から店舗へ（見学を希望したい）" };
+export const ENTRANCE_LABELS: Record<string, string> = { scout_reply: "スカウトへの返信", direct_interest: "店舗詳細からの直接希望" };
 export const KIND_LABELS: Record<string, string> = { visit: "見学", trial: "体験入店" };
 export const STATUS_LABELS: Record<string, string> = {
   unclaimed: "未受付", received: "受付", reviewing: "運営確認中", scheduling: "日程調整中", scheduled: "日程確定",

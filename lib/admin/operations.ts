@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isPlatformAdmin } from "@/lib/admin/is-admin";
 
 /**
- * 運営の「面接・採用の進捗」「見学を希望したい（関心）」「サロンらしさ診断の不足」の一覧（読み取り専用）。
+ * 運営の「面接・採用の進捗」店舗への直接希望（関心）「サロンらしさ診断の不足」の一覧（読み取り専用）。
  * DB側は 0085（草案）の admin_list_* 3つのRPC。
  * ★権限は二重: ここで is_platform_admin() を確認し、DB側のRPCも先頭で同じ確認をする。
  * ★取得に失敗したとき（RPCの不在・エラー・想定外の戻り値）は 0件 にしない。ok:false を返し、画面は「取得できませんでした」と表示する。
@@ -60,6 +60,7 @@ export type InterestRow = {
   interest_id: string; created_at: string;
   stylist_user_id: string; stylist_public_name: string | null; stylist_full_name: string | null;
   store_id: string; store_name: string; organization_id: string; organization_name: string;
+  kind?: "visit" | "trial";
   progress_state: InterestProgress; process_id: string | null; process_status: string | null; process_source: string | null;
 };
 export type InterestList = { as_of: string; total: number; legacy_rows_without_store: number; rows: InterestRow[] };
@@ -96,6 +97,7 @@ export function isInterestList(d: unknown): d is InterestList {
   if (!isObj(d) || !isCount(d.total) || !isCount(d.legacy_rows_without_store) || !Array.isArray(d.rows)) return false;
   return d.rows.every(
     (r) => isObj(r) && isStr(r.interest_id) && isStr(r.created_at) && isStr(r.stylist_user_id) && isStr(r.store_id) &&
+      (r.kind === undefined || r.kind === "visit" || r.kind === "trial") &&
       (r.progress_state === "not_created" || r.progress_state === "created"),
   );
 }
