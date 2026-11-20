@@ -12,6 +12,7 @@ import type { AiOutputType, Database } from "@/types/database";
 import { JOB_CHANGE_INTENT_LABELS } from "@/lib/validation/profile-options";
 import { CAREER_GOAL_LABELS, type CareerGoalCode } from "@/lib/match-profile/options";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { EmailNotificationSetting } from "@/components/notifications/email-notification-setting";
 import { getNotificationsForBell, getUnreadNotificationRefs } from "@/lib/notifications/get-notifications";
 import { CardNotificationBadge } from "@/components/notifications/card-notification-badge";
 import { logError } from "@/lib/security/log";
@@ -27,7 +28,8 @@ type ReceivedInterest = Database["public"]["Functions"]["get_received_salon_inte
  * ユーザーがアクセスした場合は、美容師側へ決め打ちで飛ばすのではなく、
  * サロンオンボーディングへ誘導する。
  */
-export default async function SalonMyPage() {
+export default async function SalonMyPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const emailPref = (await searchParams)?.email_pref;
   const supabase = await createClient();
   const {
     data: { user },
@@ -544,6 +546,7 @@ export default async function SalonMyPage() {
           loadFailed={salonAiLoadFailed}
         />
       </div>
+      <EmailNotificationSetting back="/salon/mypage" result={typeof emailPref === "string" ? emailPref : undefined} />
     </main>
   );
 }

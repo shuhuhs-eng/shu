@@ -10,6 +10,7 @@ const ITEMS = [
   { href: "/admin/interviews", label: "面接・進捗" },
   { href: "/admin/visit-requests", label: "見学・体験入店" },
   { href: "/admin/interests", label: "直接希望（見学・体験入店）" },
+  { href: "/admin/email-outbox", label: "通知メール" },
   { href: "/admin/culture-readiness", label: "診断の状況" },
   { href: "/admin/companies", label: "会社（採用・請求）" },
   { href: "/admin/contracts", label: "契約" },

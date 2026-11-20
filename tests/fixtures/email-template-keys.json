@@ -1,0 +1,24 @@
+{
+ "source": "0100 email_template_keys()",
+ "keys": [
+  "action_required",
+  "age_disclosure_update",
+  "cancel_interest_generic",
+  "cancel_interest_trial",
+  "cancel_interest_visit",
+  "evidence_update",
+  "hiring_interview",
+  "hiring_interview_changed",
+  "hiring_update",
+  "interest_generic",
+  "interest_trial",
+  "interest_visit",
+  "message_received",
+  "message_reply_received",
+  "offer_update",
+  "scout_received",
+  "scout_reply_other",
+  "scout_reply_trial",
+  "scout_reply_visit"
+ ]
+}

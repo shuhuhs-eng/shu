@@ -28,6 +28,7 @@ import { CORE_TYPE_CONTENT } from "@/lib/diagnosis/core-type-content";
 import type { AiOutputType, Database } from "@/types/database";
 import type { TraitScores } from "@/lib/diagnosis";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { EmailNotificationSetting } from "@/components/notifications/email-notification-setting";
 import { getNotificationsForBell } from "@/lib/notifications/get-notifications";
 import { getMyHiringProcesses } from "@/lib/hiring/actions";
 import { isClosedStatus } from "@/lib/hiring/format";
@@ -47,7 +48,8 @@ type AiOutputRow = Database["public"]["Tables"]["diagnosis_ai_outputs"]["Row"];
  * 美容師roleを完了していないユーザーがアクセスした場合は、サロン側へ
  * 決め打ちで飛ばすのではなく、美容師オンボーディングへ誘導する。
  */
-export default async function StylistMyPage() {
+export default async function StylistMyPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const emailPref = (await searchParams)?.email_pref;
   const guestNoticeReason = (await cookies()).get(GUEST_NOT_CARRIED_NOTICE_COOKIE)?.value;
   const guestNotCarried = !!guestNoticeReason;
   const perfStart = nowMs();
@@ -471,6 +473,7 @@ export default async function StylistMyPage() {
       {sections.showStudent && (
         <RetakeLink limit={retakeLimit} href="/stylist/diagnosis/student" hideBaseText hidePrimary={!canStartStudentDiagnosis(careerPhase)} secondary={{ href: "/stylist/diagnosis", label: "現役の美容師向けの診断を受ける" }} />
       )}
+      <EmailNotificationSetting back="/stylist/mypage" result={typeof emailPref === "string" ? emailPref : undefined} />
     </main>
   );
 }
