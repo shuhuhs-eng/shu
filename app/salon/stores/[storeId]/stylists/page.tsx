@@ -1,4 +1,5 @@
 import { fetchPublicStylistsForScout } from "@/lib/scouts/public-stylists";
+import { resolveCandidateLoad, CANDIDATE_LOAD_FAILED_MESSAGE, CANDIDATE_EMPTY_MESSAGE } from "@/lib/scouts/candidate-load";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -67,7 +68,9 @@ export default async function StoreStylistsPage({ params }: Props) {
   if (error) {
     console.error("[StoreStylistsPage] get_public_stylists_for_scout failed", { message: error.message, code: error.code });
   }
-  const stylists: PublicStylistForScout[] = stylistsData ?? [];
+  // 取得失敗は「0件」と区別する（失敗時は候補の相性取得・並べ替えを行わず、失敗の文言だけを出す）。
+  const candidateLoad = resolveCandidateLoad({ data: stylistsData, error });
+  const stylists: PublicStylistForScout[] = candidateLoad.ok ? candidateLoad.stylists : [];
 
   // プロフィール画像の署名付きURL（0070適用後のみavatar_pathが返る。公開美容師の「現在の画像1枚」だけ読める権限をDB側で付与）。
   const avatarUrlByStylist = new Map<string, string>();
@@ -136,8 +139,10 @@ export default async function StoreStylistsPage({ params }: Props) {
         <ScoutQuotaCard quota={quota} />
       </div>
 
-      {rankedStylists.length === 0 ? (
-        <p className="mt-8 text-center text-[13px] text-sub">現在、公開している美容師はいません。</p>
+      {!candidateLoad.ok ? (
+        <p role="alert" className="mt-8 rounded-lg bg-surface2 px-4 py-3 text-center text-[13px] text-charcoal">{CANDIDATE_LOAD_FAILED_MESSAGE}</p>
+      ) : rankedStylists.length === 0 ? (
+        <p className="mt-8 text-center text-[13px] text-sub">{CANDIDATE_EMPTY_MESSAGE}</p>
       ) : (
         <div className="mt-8 space-y-4">
           {rankedStylists.map(({ stylist, match }) => (
