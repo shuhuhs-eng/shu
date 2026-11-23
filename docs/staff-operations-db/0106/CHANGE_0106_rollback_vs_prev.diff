@@ -1,0 +1,2 @@
+13a14
+>   if exists (select 1 from public.admin_staff) then raise exception 'staff guard [巻き戻し前] スタッフ登録がある。美容師機能の遮断が外れるため中止（スタッフを停止して旧アプリへ戻し、DBは保持する。遮断を外す必要があるときはスタッフ0件が条件）' using errcode = 'P0001'; end if;
