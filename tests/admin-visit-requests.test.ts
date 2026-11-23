@@ -34,7 +34,13 @@ test("受付・更新の画面は請求・決済・スカウト消費のRPCを�
   assert.doesNotMatch(src, /admin_add_fee_line|admin_create_invoice|billing_|stripe|send_scout|notifications/);
   const rpcs = [...src.matchAll(/(?:rpc\()\s*"([a-z_]+)"|call<[^>]*>\(supabase, "([a-z_]+)"|rpc\("([a-z_]+)"/g)].map((m) => m[1] ?? m[2] ?? m[3]);
   assert.ok(rpcs.length >= 4);
-  for (const r of rpcs) assert.match(r, /^admin_(list|get|claim|update|record|assign)_visit/);
+  for (const r of rpcs) assert.match(r, /^admin_(list|get|claim|update|record|assign|create)_visit/);
+  // 相手向けの経路は『案件起点の連絡』だけ。宛先は案件からDBが確定し、呼び出しに宛先ID・会社・店舗の引数は無い。
+  const create = src.slice(src.indexOf("admin_create_visit_thread") - 40);
+  assert.doesNotMatch(create.split("\n")[0], /p_recipient|p_organization|p_store/);
+  assert.doesNotMatch(src, /admin_create_thread"/);
+  const schema = src.slice(src.indexOf("const threadSchema"), src.indexOf("export async function createVisitThread"));
+  assert.doesNotMatch(schema, /recipient|organization|store/i);
 });
 test("過去の返信（interested）は受付ボタンを出さない（画面の分岐を静的に確認）", () => {
   const page = readFileSync("app/admin/visit-requests/page.tsx", "utf8");

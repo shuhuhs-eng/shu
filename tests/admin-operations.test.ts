@@ -15,13 +15,12 @@ const fakeSupabase = {
 const orig = (Module as unknown as { _load: (...a: unknown[]) => unknown })._load;
 (Module as unknown as { _load: (...a: unknown[]) => unknown })._load = function (req: unknown, ...rest: unknown[]) {
   if (req === "server-only") return {};
-  if (typeof req === "string" && /lib\/admin\/guard$/.test(req)) {
-    return {
-      requireAdminPage: async (p: string) => {
-        if (state.guard !== "admin") { const e = new Error("NEXT_REDIRECT:/mypage"); (e as { digest?: string }).digest = "NEXT_REDIRECT"; throw e; }
-        void p; return { supabase: fakeSupabase, user: { id: "u" } };
-      },
+  if (typeof req === "string" && /lib\/admin\/(operator-)?guard$/.test(req)) {
+    const enter = async (p: string) => {
+      if (state.guard !== "admin") { const e = new Error("NEXT_REDIRECT:/mypage"); (e as { digest?: string }).digest = "NEXT_REDIRECT"; throw e; }
+      void p; return { supabase: fakeSupabase, user: { id: "u" }, state: "responsible" };
     };
+    return { requireAdminPage: enter, requireAdminOperator: enter };
   }
   return orig.call(this, req, ...rest);
 };
@@ -32,7 +31,7 @@ test.before(async () => { ops = await import("../lib/admin/operations"); });
 
 function client(rpc: Rpc) {
   const calls: Array<{ fn: string; args?: Record<string, unknown> }> = [];
-  return { calls, rpc: async (fn: string, args?: Record<string, unknown>) => { calls.push({ fn, args }); return fn === "is_platform_admin" ? { data: true, error: null } : rpc(fn, args); } };
+  return { calls, rpc: async (fn: string, args?: Record<string, unknown>) => { calls.push({ fn, args }); return fn === "is_admin_operator" ? { data: true, error: null } : rpc(fn, args); } };
 }
 const emptyHiring = { as_of: "2026-11-19T01:00:00Z", total: 0, rows: [] };
 
@@ -63,7 +62,7 @@ test("運営者でない: RPCを呼ばず forbidden", async () => {
   const c = { calls: [] as string[], rpc: async (fn: string) => { c.calls.push(fn); return { data: false, error: null }; } };
   const r = await ops.listHiringProcesses(c as never, { view: "all", status: "", period: ops.parsePeriod({}), page: 1 });
   assert.deepEqual(r, { ok: false, reason: "forbidden" });
-  assert.deepEqual(c.calls, ["is_platform_admin"]);
+  assert.deepEqual(c.calls, ["is_admin_operator"]);
 });
 test("DB側が 'admin access required' を返したら forbidden", async () => {
   const c = client(async () => ({ data: null, error: { message: "admin access required" } }));
@@ -124,7 +123,7 @@ const hiringRow = {
 
 test("面接一覧: 経過・結果未更新の行と、既存の連絡機能・詳細へのリンク。『実施済み』とは書かない", async () => {
   state.guard = "admin";
-  state.rpc = async (fn) => (fn === "is_platform_admin" ? { data: true, error: null } : { data: { as_of: "2026-11-19T01:00:00Z", total: 1, rows: [hiringRow] }, error: null });
+  state.rpc = async (fn) => (fn === "is_admin_operator" ? { data: true, error: null } : { data: { as_of: "2026-11-19T01:00:00Z", total: 1, rows: [hiringRow] }, error: null });
   const out = await render("../app/admin/interviews/page");
   assert.match(out, /さくら/);
   assert.match(out, /面接予定日時を過ぎて結果が未更新/);
@@ -136,14 +135,14 @@ test("面接一覧: 経過・結果未更新の行と、既存の連絡機能・
 });
 test("面接一覧: 0件・取得失敗・RPC不在・非管理者・期間の誤り・ページ送り", async () => {
   state.guard = "admin";
-  state.rpc = async (fn) => (fn === "is_platform_admin" ? { data: true, error: null } : { data: emptyHiring, error: null });
+  state.rpc = async (fn) => (fn === "is_admin_operator" ? { data: true, error: null } : { data: emptyHiring, error: null });
   let out = await render("../app/admin/interviews/page");
   assert.match(out, /条件に合う進捗はありません/);
   assert.ok(!/取得できませんでした/.test(out), "正常な0件を取得失敗とは言わない");
-  state.rpc = async (fn) => (fn === "is_platform_admin" ? { data: true, error: null } : { data: null, error: { message: "boom" } });
+  state.rpc = async (fn) => (fn === "is_admin_operator" ? { data: true, error: null } : { data: null, error: { message: "boom" } });
   out = await render("../app/admin/interviews/page");
   assert.match(out, /取得できませんでした/); assert.ok(!/条件に合う進捗はありません/.test(out));
-  state.rpc = async (fn) => (fn === "is_platform_admin" ? { data: true, error: null } : { data: null, error: { code: "PGRST202", message: "Could not find the function" } });
+  state.rpc = async (fn) => (fn === "is_admin_operator" ? { data: true, error: null } : { data: null, error: { code: "PGRST202", message: "Could not find the function" } });
   out = await render("../app/admin/interviews/page");
   assert.match(out, /取得できませんでした/); assert.match(out, /まだ使えない状態/); assert.ok(!/条件に合う進捗はありません/.test(out));
   // 期間の誤り: DBを呼ばず入力の誤りを表示（0件とも言わない）
@@ -158,7 +157,7 @@ test("面接一覧: 0件・取得失敗・RPC不在・非管理者・期間の�
   assert.equal(state.calls.length, 0);
   // ページ送り: 70件・2ページ目 → 前へ／次へ、期間は引き継ぐ
   state.guard = "admin";
-  state.rpc = async (fn) => (fn === "is_platform_admin" ? { data: true, error: null } : { data: { as_of: "2026-11-19T01:00:00Z", total: 70, rows: [hiringRow] }, error: null });
+  state.rpc = async (fn) => (fn === "is_admin_operator" ? { data: true, error: null } : { data: { as_of: "2026-11-19T01:00:00Z", total: 70, rows: [hiringRow] }, error: null });
   out = await render("../app/admin/interviews/page", { page: "2", from: "2026-11-01", to: "2026-11-30", view: "interview_scheduled" });
   assert.match(out, /70件中 2 \/ 3 ページ/);
   assert.match(out, /page=1/); assert.match(out, /page=3/);
@@ -168,16 +167,16 @@ test("関心一覧: 進捗未作成／作成済み。『返信済み』を使わ
   state.guard = "admin";
   const row = (id: string, ps: "created" | "not_created") => ({ interest_id: id, created_at: "2026-11-15T01:00:00Z", stylist_user_id: "u" + id, stylist_public_name: "名" + id, stylist_full_name: null,
     store_id: "s1", store_name: "渋谷店", organization_id: "o1", organization_name: "A社", progress_state: ps, process_id: ps === "created" ? "p" + id : null, process_status: ps === "created" ? "contacting" : null, process_source: ps === "created" ? "scout" : null });
-  state.rpc = async (fn) => (fn === "is_platform_admin" ? { data: true, error: null } : { data: { as_of: "x", total: 2, legacy_rows_without_store: 4, rows: [row("1", "not_created"), row("2", "created")] }, error: null });
+  state.rpc = async (fn) => (fn === "is_admin_operator" ? { data: true, error: null } : { data: { as_of: "x", total: 2, legacy_rows_without_store: 4, rows: [row("1", "not_created"), row("2", "created")] }, error: null });
   let out = await render("../app/admin/interests/page");
   assert.match(out, /進捗未作成/); assert.match(out, /進捗作成済み/); assert.ok(!/返信済み/.test(out));
   assert.match(out, /旧形式の直接希望が 4件/);
   assert.match(out, /スカウトへの返信/, "進捗の起点を表示（起点がスカウトでも作成済み）");
   assert.match(out, /\/admin\/messages\/new\?audience=stylist&amp;recipient=u1/);
-  state.rpc = async (fn) => (fn === "is_platform_admin" ? { data: true, error: null } : { data: { as_of: "x", total: 0, legacy_rows_without_store: 0, rows: [] }, error: null });
+  state.rpc = async (fn) => (fn === "is_admin_operator" ? { data: true, error: null } : { data: { as_of: "x", total: 0, legacy_rows_without_store: 0, rows: [] }, error: null });
   out = await render("../app/admin/interests/page");
   assert.match(out, /条件に合う直接希望はありません/);
-  state.rpc = async (fn) => (fn === "is_platform_admin" ? { data: true, error: null } : { data: null, error: { code: "PGRST202", message: "Could not find the function" } });
+  state.rpc = async (fn) => (fn === "is_admin_operator" ? { data: true, error: null } : { data: null, error: { code: "PGRST202", message: "Could not find the function" } });
   out = await render("../app/admin/interests/page");
   assert.match(out, /取得できませんでした/); assert.ok(!/条件に合う直接希望はありません/.test(out));
 });
@@ -190,7 +189,7 @@ test("診断状況: 状態の内訳・8項目と12項目を別に表示・数値
     { store_id: "s2", store_name: "S5店", organization_id: "o1", organization_name: "A社", visibility: "PUBLIC", culture_row_exists: true, culture_status: "completed", culture_updated_at: null, state: "completed_match_unready",
       match_axes: ax({ wrong_type_keys: ["education_support"], unusable_keys: ["education_support"] }), type_axes: ax({ wrong_type_keys: ["education_support"], unusable_keys: ["education_support"] }) },
   ];
-  state.rpc = async (fn) => (fn === "is_platform_admin" ? { data: true, error: null } : { data: { as_of: "x", total: 2, summary: { stores: 5, no_culture_row: 1, not_completed: 1, completed_match_unready: 1, completed_type_unready: 1, ready: 1 }, rows }, error: null });
+  state.rpc = async (fn) => (fn === "is_admin_operator" ? { data: true, error: null } : { data: { as_of: "x", total: 2, summary: { stores: 5, no_culture_row: 1, not_completed: 1, completed_match_unready: 1, completed_type_unready: 1, ready: 1 }, rows }, error: null });
   let out = await render("../app/admin/culture-readiness/page");
   assert.match(out, /対象の店舗 5店/);
   assert.match(out, /相性（8項目）: 問題なし/);
@@ -198,7 +197,7 @@ test("診断状況: 状態の内訳・8項目と12項目を別に表示・数値
   assert.match(out, /項目なし: 高付加価値志向/);
   assert.match(out, /数値でない値: 教育への支援/);
   assert.ok(!/premium_value|education_support/.test(out), "内部のキー名は出さない");
-  state.rpc = async (fn) => (fn === "is_platform_admin" ? { data: true, error: null } : { data: null, error: { message: "boom" } });
+  state.rpc = async (fn) => (fn === "is_admin_operator" ? { data: true, error: null } : { data: null, error: { message: "boom" } });
   out = await render("../app/admin/culture-readiness/page");
   assert.match(out, /取得できませんでした/); assert.ok(!/条件に合う店舗はありません/.test(out));
 });
@@ -216,7 +215,7 @@ const strip = (f: string) => readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g
 test("3画面は運営ガード付き・読み取り専用。連絡の送信・状態変更・通知を持たない", () => {
   for (const f of ["app/admin/interviews/page.tsx", "app/admin/interests/page.tsx", "app/admin/culture-readiness/page.tsx"]) {
     const s = strip(f);
-    assert.match(s, /requireAdminPage\(/, f);
+    assert.match(s, /requireAdmin(Page|Operator)\(/, f);
     assert.ok(!/["']use server["']/.test(s), f);
     assert.ok(!/createThreadAction|sendMessage|insert\(|update\(|delete\(|\.from\(/.test(s), f);
     assert.ok(!/返信済み/.test(s), f);

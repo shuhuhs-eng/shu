@@ -9,7 +9,7 @@ function fake(rpc: Rpc, roles: { data?: { role: string }[] | null; error?: unkno
   const calls: string[] = [];
   return {
     calls,
-    rpc: async (fn: string) => { calls.push(fn); return rpc(); },
+    rpc: async (fn: string) => { if (fn === "admin_my_operator_state") return { data: { state: "none" }, error: null }; calls.push(fn); return rpc(); },
     from: (t: string) => { calls.push(`from:${t}`); return { select: () => ({ eq: async () => { if (roles === "throw") throw new Error("net"); return { data: roles.data ?? null, error: roles.error ?? null }; } }) }; },
   };
 }

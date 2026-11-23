@@ -12,6 +12,8 @@ import { safeInternalPath } from "@/lib/auth/safe-path";
 import { checkSignupRateLimit, signupRateLimitMessage } from "@/lib/auth/signup-rate-limit";
 import { describeAuthError } from "@/lib/auth/errors";
 import { getAdminStatus } from "@/lib/admin/is-admin";
+import { getOperatorState } from "@/lib/admin/operator";
+import { isStaffState } from "@/lib/admin/operator-state";
 import { determineAdminEntryPath, determinePostAuthPath, determineRoleEntryPath } from "@/lib/auth/post-auth-redirect";
 import { claimPendingDiagnosisForNewAccount, discardGuestDiagnosisCookie } from "@/lib/diagnosis-handoff/claim";
 import {
@@ -300,6 +302,16 @@ export async function signInAction(
   if (adminStatus === "error") {
     await discardThisSession(supabase);
     return { error: "ログインを完了できませんでした。時間をおいて、もう一度お試しください。" };
+  }
+  // 運営スタッフ（招待中・有効・停止中）も運営ログインから入る（一般ログインからは美容師用の登録へ誘導されてしまうため）。
+  const staffState = await getOperatorState(supabase);
+  if (staffState === "error") {
+    await discardThisSession(supabase);
+    return { error: "ログインを完了できませんでした。時間をおいて、もう一度お試しください。" };
+  }
+  if (isStaffState(staffState)) {
+    await discardThisSession(supabase);
+    return { error: ADMIN_USE_ADMIN_LOGIN_MESSAGE };
   }
 
   // 保護ルートから弾かれてログインに来た場合は、元のURLへ戻す（安全なパスのみ）。

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAdminPage } from "@/lib/admin/guard";
 import { getOrganization, getStylist } from "@/lib/admin/directory";
 import { isUuid, requestIdFrom } from "@/lib/messages/shared";
-import { createThreadAction } from "@/lib/messages/actions";
+import { createThreadAction } from "@/lib/messages/thread-create-action";
 import { MessageForm } from "@/components/messages/message-form";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;

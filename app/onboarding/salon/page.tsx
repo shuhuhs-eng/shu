@@ -5,6 +5,8 @@ import { getSalonProfileFormInitialValues } from "@/lib/salon/get-initial-values
 import { SalonProfileForm } from "@/components/salon-profile/salon-profile-form";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { isPlatformAdmin } from "@/lib/admin/is-admin";
+import { getOperatorState } from "@/lib/admin/operator";
+import { isStaffState, operatorHomePath } from "@/lib/admin/operator-state";
 
 export default async function SalonOnboardingPage() {
   const supabase = await createClient();
@@ -20,6 +22,12 @@ export default async function SalonOnboardingPage() {
   // 運営者には、サロン名・店舗の登録（オンボーディング）を求めない。
   if (await isPlatformAdmin(supabase)) {
     redirect("/admin");
+  }
+
+  // 運営スタッフには美容師・サロンの登録を求めない（共通トリガーで既定プロフィールが付くため、ここへ来てしまう）。状態に応じた運営の画面へ。
+  {
+    const op = await getOperatorState(supabase);
+    if (isStaffState(op)) redirect(operatorHomePath(op) ?? "/mypage");
   }
 
   // ★バグ修正: サロンroleを完了済みのユーザーには絶対に登録フォームを見せない。

@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAdminStatus } from "@/lib/admin/is-admin";
 import { ADMIN_HOME_PATH } from "@/lib/auth/post-auth-redirect";
+import { getOperatorState } from "@/lib/admin/operator";
+import { isStaffState, operatorHomePath } from "@/lib/admin/operator-state";
 
 /**
  * サイト共通の「マイページ」の行き先を決める唯一の場所（/mypage とホームが使う）。
@@ -21,6 +23,10 @@ export async function resolveMypagePath(supabase: Supa, userId: string): Promise
   const admin = await getAdminStatus(supabase);
   if (admin === "admin") return { ok: true, path: ADMIN_HOME_PATH };
   if (admin === "error") return { ok: false, reason: "admin_check_failed" };
+  // スタッフは美容師・サロンのマイページ／登録画面ではなく、状態に応じた運営の画面へ（既定プロフィールがあっても）。
+  const op = await getOperatorState(supabase);
+  if (op === "error") return { ok: false, reason: "admin_check_failed" };
+  if (isStaffState(op)) return { ok: true, path: operatorHomePath(op) ?? "/" };
   try {
     const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", userId);
     if (error) return { ok: false, reason: "role_check_failed" };

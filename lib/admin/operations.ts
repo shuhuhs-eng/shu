@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isPlatformAdmin } from "@/lib/admin/is-admin";
+import { isAdminOperator } from "@/lib/admin/operator";
 
 /**
  * 運営の「面接・採用の進捗」店舗への直接希望（関心）「サロンらしさ診断の不足」の一覧（読み取り専用）。
@@ -25,7 +25,7 @@ export function isMissingFunctionError(e: { code?: unknown; message?: unknown } 
 }
 
 async function call<T>(supabase: Supa, fn: string, args: Record<string, unknown>, validate: (d: unknown) => d is T): Promise<OpsResult<T>> {
-  if (!(await isPlatformAdmin(supabase))) return { ok: false, reason: "forbidden" };
+  if (!(await isAdminOperator(supabase))) return { ok: false, reason: "forbidden" };
   try {
     const { data, error } = await supabase.rpc(fn, args);
     if (error) {

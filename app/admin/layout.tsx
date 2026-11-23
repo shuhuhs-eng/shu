@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getOperatorState } from "@/lib/admin/operator";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { NOINDEX_METADATA } from "@/lib/seo/metadata";
 
@@ -6,16 +7,17 @@ import { NOINDEX_METADATA } from "@/lib/seo/metadata";
 export const metadata = NOINDEX_METADATA;
 
 /**
- * 運営画面の共通レイアウト。ナビは運営者(is_platform_admin)にだけ表示する。
+ * 運営画面の共通レイアウト。ナビは責任者(is_platform_admin)と有効なスタッフにだけ表示する（スタッフには通常業務の画面だけ）。
  * ★各ページも自分で権限を確認する（ここは表示の出し分けだけで、権限の本体ではない）。
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const isAdmin = user ? (await supabase.rpc("is_platform_admin")).data === true : false;
+  const state = user ? await getOperatorState(supabase) : "none";
   return (
     <>
-      {isAdmin && <AdminNav />}
+      {state === "responsible" && <AdminNav />}
+      {state === "staff_active" && <AdminNav variant="staff" />}
       {children}
     </>
   );

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { inboxList } from "@/lib/messages/rpc";
-import { parsePage, PAGE_SIZE } from "@/lib/admin/directory";
+import { parsePage, PAGE_SIZE } from "@/lib/admin/page-params";
 import { BackToMypage } from "@/components/messages/back-to-mypage";
 import { InboxCard } from "@/components/messages/cards";
 import { ErrorBox, Pager } from "@/components/admin/directory-ui";

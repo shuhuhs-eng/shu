@@ -169,6 +169,7 @@ function fakeSupabase() {
     from: builder,
     rpc: async (name: string, args: any) => {
       if (name === "is_platform_admin") return { data: false, error: null };   // 一般ログイン（管理者ではない）
+      if (name === "admin_my_operator_state") return { data: { state: "none" }, error: null };   // 運営スタッフでもない
       const uid = env.sessionUserId;
       if (!uid) return { data: null, error: { message: "not authenticated" } };
       if (name === "start_pending_diagnosis_claim") {

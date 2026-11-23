@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { assignVisitRequest, recordVisitConfirmation, updateVisitRequest } from "@/lib/admin/visit-requests-actions";
+import { assignVisitRequest, createVisitThread, recordVisitConfirmation, updateVisitRequest } from "@/lib/admin/visit-requests-actions";
 import { CLOSED_REASON_LABELS, CONFIRM_LABELS, NEXT_STATUSES, STATUS_LABELS, type VisitDetail } from "@/lib/admin/visit-requests-shared";
 
 const sel = "min-h-[44px] w-full rounded-xl border border-line bg-surface px-3 text-[13px]";
 const btn = "min-h-[44px] rounded-full bg-ink px-5 text-[13px] font-semibold text-white disabled:opacity-50";
 
 /** 状態の更新・実施後の確認記録（運営のみ）。画面の選択肢は目安で、最終判断はDB。更新時刻が違えば「他の担当者が先に更新」と表示して上書きしない。 */
-export function VisitRequestPanel({ d, mergeCandidates, meId }: { d: VisitDetail; mergeCandidates: { id: string; label: string }[]; meId: string }) {
+export function VisitRequestPanel({ d, mergeCandidates, meId, assignees }: { d: VisitDetail; mergeCandidates: { id: string; label: string }[]; meId: string; assignees: { id: string; label: string }[] | null }) {
   const router = useRouter();
   const nexts = NEXT_STATUSES[d.status] ?? [];
   const [status, setStatus] = useState(nexts[0] ?? "");
@@ -23,12 +23,17 @@ export function VisitRequestPanel({ d, mergeCandidates, meId }: { d: VisitDetail
   const [result, setResult] = useState<"held" | "not_held">("held");
   const [channel, setChannel] = useState<"message" | "phone" | "other">("message");
   const [cnote, setCnote] = useState("");
-  const [assignee, setAssignee] = useState<"me" | "none">(d.assigned_admin_id === meId ? "me" : "none");
+  const [assignee, setAssignee] = useState<string>(d.assigned_admin_id ?? "none");
+  const [tAud, setTAud] = useState<"stylist" | "salon">("stylist");
+  const [tSubject, setTSubject] = useState("");
+  const [tBody, setTBody] = useState("");
+  const [tRid] = useState(() => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : ""));
+  const [tDone, setTDone] = useState<string | null>(null);
 
   async function assign() {
     if (busy) return;
     setBusy(true); setMsg(null);
-    const r = await assignVisitRequest({ id: d.id, adminId: assignee === "me" ? meId : null, expectedUpdatedAt: d.updated_at });
+    const r = await assignVisitRequest({ id: d.id, adminId: assignee === "none" ? null : assignee, expectedUpdatedAt: d.updated_at });
     setBusy(false);
     if (r.success) router.refresh(); else setMsg(r.error);
   }
@@ -43,6 +48,13 @@ export function VisitRequestPanel({ d, mergeCandidates, meId }: { d: VisitDetail
     });
     setBusy(false);
     if (r.success) router.refresh(); else setMsg(r.error);
+  }
+  async function sendThread() {
+    if (busy || !tRid) return;
+    setBusy(true); setMsg(null);
+    const r = await createVisitThread({ requestId: tRid, visitRequestId: d.id, audience: tAud, subject: tSubject, body: tBody });
+    setBusy(false);
+    if (r.success) { setTDone(r.id ?? ""); setTSubject(""); setTBody(""); } else setMsg(r.error);
   }
   async function confirm() {
     if (busy) return;
@@ -91,14 +103,31 @@ export function VisitRequestPanel({ d, mergeCandidates, meId }: { d: VisitDetail
       {nexts.length > 0 && (
         <section className="rounded-2xl border border-line bg-surface p-4">
           <h2 className="text-[13px] font-bold text-ink">担当を変更する</h2>
-          <p className="mt-1 text-[11.5px] text-sub">現在の担当: {d.assigned_admin_id ? (d.assigned_admin_id === meId ? "自分" : "他の運営者") : "未割当"}</p>
+          <p className="mt-1 text-[11.5px] text-sub">現在の担当: {d.assigned_admin_id ? (assignees?.find((a) => a.id === d.assigned_admin_id)?.label ?? (d.assigned_admin_id === meId ? "自分" : "不明な担当者")) : "未割当"}</p>
           <div className="mt-3 grid gap-3">
-            <select value={assignee} onChange={(e) => setAssignee(e.target.value as "me" | "none")} className={sel} aria-label="担当">
-              <option value="me">自分が担当する</option>
-              <option value="none">担当を外す（未割当）</option>
-            </select>
-            <button type="button" disabled={busy} onClick={() => void assign()} className={btn}>担当を変更する</button>
+            {assignees === null ? <p role="alert" className="text-[12px] text-[#8A2E2E]">担当者の一覧を取得できませんでした。開き直してください。</p> : (
+              <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className={sel} aria-label="担当">
+                {assignees.map((a) => <option key={a.id} value={a.id}>{a.id === meId ? `${a.label}（自分）` : a.label}</option>)}
+                <option value="none">担当を外す（未割当）</option>
+              </select>)}
+            <button type="button" disabled={busy || assignees === null} onClick={() => void assign()} className={btn}>担当を変更する</button>
           </div>
+        </section>
+      )}
+
+      {!d.merged_into_request_id && (
+        <section className="rounded-2xl border border-line bg-surface p-4">
+          <h2 className="text-[13px] font-bold text-ink">この受付の連絡を作る</h2>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-sub">宛先はこの受付の本人（美容師）または対象サロンに自動で決まります。ほかの宛先へは送れません。通知メールは送信されません。</p>
+          {tDone !== null ? (
+            <p role="status" className="mt-3 text-[12.5px] text-charcoal">連絡を作成しました。{tDone && <a className="underline" href={`/admin/messages/${tDone}`}>連絡を開く</a>}</p>
+          ) : (
+            <div className="mt-3 grid gap-3">
+              <select value={tAud} onChange={(e) => setTAud(e.target.value as "stylist" | "salon")} className={sel} aria-label="連絡先"><option value="stylist">本人（美容師）へ</option><option value="salon">対象サロンへ</option></select>
+              <input value={tSubject} onChange={(e) => setTSubject(e.target.value)} maxLength={120} placeholder="件名" aria-label="件名" className={sel} />
+              <textarea value={tBody} onChange={(e) => setTBody(e.target.value)} maxLength={4000} placeholder="本文" aria-label="本文" className="min-h-24 w-full rounded-xl border border-line bg-surface px-3 py-2 text-[13px]" />
+              <button type="button" disabled={busy || !tSubject.trim() || !tBody.trim()} onClick={() => void sendThread()} className={btn}>連絡を作成する</button>
+            </div>)}
         </section>
       )}
 

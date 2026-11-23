@@ -59,3 +59,15 @@ export async function assignVisitRequest(input: z.infer<typeof assignSchema>): P
   revalidatePath("/admin/visit-requests"); revalidatePath(`/admin/visit-requests/${p.data.id}`);
   return { success: true };
 }
+
+const threadSchema = z.object({ requestId: uuid, visitRequestId: uuid, audience: z.enum(["stylist", "salon"]), subject: z.string().trim().min(1).max(120), body: z.string().trim().min(1).max(4000) });
+/** 受付案件から連絡を作る。宛先（美容師・店舗・会社）は案件からDBが確定する。ここでは案件IDと宛先の種類だけを渡し、任意の宛先IDは受け取らない。 */
+export async function createVisitThread(input: z.infer<typeof threadSchema>): Promise<Result> {
+  const p = threadSchema.safeParse(input);
+  if (!p.success) return { success: false, error: "入力を確認してください（件名120字・本文4000字まで）。" };
+  const supabase = (await createClient()) as unknown as Pick<SupabaseClient, "rpc">;
+  const { data, error } = await supabase.rpc("admin_create_visit_thread", { p_request_id: p.data.requestId, p_visit_request_id: p.data.visitRequestId, p_audience: p.data.audience, p_subject: p.data.subject, p_body: p.data.body });
+  if (error) { console.error("[createVisitThread]", { code: error.code }); return { success: false, error: visitErrorMessage(error.message) }; }
+  revalidatePath("/admin/messages"); revalidatePath(`/admin/visit-requests/${p.data.visitRequestId}`);
+  return { success: true, id: typeof data === "string" ? data : undefined };
+}

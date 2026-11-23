@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isPlatformAdmin } from "@/lib/admin/is-admin";
+import { isAdminOperator } from "@/lib/admin/operator";
 import { isMissingFunctionError, type OpsResult } from "@/lib/admin/operations";
 import {
   VISIT_ENTRANCES, VISIT_KINDS, VISIT_LIST_STATUSES, isVisitList, isVisitDetail,
@@ -28,7 +28,7 @@ export function parseVisitFilters(sp: Sp) {
 }
 
 async function call<T>(supabase: Supa, fn: string, args: Record<string, unknown>, validate: (d: unknown) => d is T): Promise<OpsResult<T>> {
-  if (!(await isPlatformAdmin(supabase))) return { ok: false, reason: "forbidden" };
+  if (!(await isAdminOperator(supabase))) return { ok: false, reason: "forbidden" };
   try {
     const { data, error } = await supabase.rpc(fn, args);
     if (error) {

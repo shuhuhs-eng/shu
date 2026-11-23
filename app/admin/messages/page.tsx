@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { requireAdminPage } from "@/lib/admin/guard";
+import { requireAdminOperator } from "@/lib/admin/operator-guard";
 import { adminListThreads } from "@/lib/messages/rpc";
 import { STATUS_LABEL } from "@/lib/messages/shared";
-import { PAGE_SIZE, parsePage } from "@/lib/admin/directory";
+import { PAGE_SIZE, parsePage } from "@/lib/admin/page-params";
 import { isUuid } from "@/lib/messages/shared";
 import { AdminThreadCard } from "@/components/messages/cards";
 import { ErrorBox, Pager } from "@/components/admin/directory-ui";
@@ -11,7 +11,7 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 
 /** 運営: 連絡の一覧。権限が外れた担当者宛・通知失敗のスレッドは印を付ける（運営は引き続き閲覧・完了・再開できる）。 */
 export default async function AdminMessagesPage({ searchParams }: { searchParams: SP }) {
-  const { supabase } = await requireAdminPage("/admin/messages");
+  const { supabase } = await requireAdminOperator("/admin/messages");
   const sp = await searchParams;
   const st = typeof sp.status === "string" && sp.status in STATUS_LABEL ? sp.status : "";
   const page = parsePage(sp);

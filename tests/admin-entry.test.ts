@@ -7,9 +7,9 @@ import { PREFECTURES } from "../lib/validation/profile-options";
 import { REGION_BLOCKS, REGION_PREFECTURES, regionOf, displayPrefecture, prefecturesMentionedIn } from "../lib/admin/regions";
 
 // is_platform_admin だけを持つ最小の偽クライアント。roles/profile は「運営者でない場合」の既存挙動の確認用。
-function fake(rpc: () => Promise<{ data: unknown; error: unknown }> | never, roles: string[] = []) {
+function fake(rpc: () => Promise<{ data: unknown; error: unknown }> | never, roles: string[] = [], opState = "none") {
   return {
-    rpc: async () => rpc(),
+    rpc: async (fn?: string) => (fn === "admin_my_operator_state" ? { data: { state: opState }, error: null } : rpc()),
     from: (t: string) => ({
       select: () => ({
         eq: () => ({

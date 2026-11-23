@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { INTEREST_KIND_SHORT, normalizeInterestKind } from "@/lib/interests/kinds";
-import { requireAdminPage } from "@/lib/admin/guard";
+import { requireAdminOperator } from "@/lib/admin/operator-guard";
 import { listStoreInterests, parseInterestProgress, parseOpsPage, parsePeriod } from "@/lib/admin/operations";
 import { HIRING_SOURCE_LABELS, HIRING_STATUS_LABELS } from "@/lib/hiring/format";
 import { contactSalonHref, contactStylistHref, fmtJst, linkCls, OpsEmpty, OpsError, OpsPager, PageHead, PeriodFields, stylistLabel } from "@/components/admin/operations-ui";
@@ -13,7 +13,7 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
  * ★関心から進捗を作る操作でスカウトは消費されない（既存仕様。ここでは何も操作しない）。
  */
 export default async function AdminInterestsPage({ searchParams }: { searchParams: SP }) {
-  const { supabase } = await requireAdminPage("/admin/interests");
+  const { supabase } = await requireAdminOperator("/admin/interests");
   const sp = await searchParams;
   const progress = parseInterestProgress(sp), period = parsePeriod(sp), page = parseOpsPage(sp);
   const res = period.invalid ? null : await listStoreInterests(supabase, { progress, period, page });

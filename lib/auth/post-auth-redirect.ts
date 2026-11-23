@@ -3,6 +3,8 @@ import type { Database } from "@/types/database";
 import { isOnboardingComplete } from "@/lib/auth/onboarding";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { getAdminStatus, isPlatformAdmin } from "@/lib/admin/is-admin";
+import { getOperatorState } from "@/lib/admin/operator";
+import { isStaffState, operatorHomePath } from "@/lib/admin/operator-state";
 
 /** 運営者のログイン後の行き先。サロン名・店舗登録（オンボーディング）へは進ませない。 */
 export const ADMIN_HOME_PATH = "/admin";
@@ -26,6 +28,9 @@ export async function determinePostAuthPath(
   userId: string,
 ): Promise<string> {
   if (await isPlatformAdmin(supabase)) return ADMIN_HOME_PATH;
+  // ★スタッフには共通トリガーで美容師用の既定プロフィールが付くため、オンボーディングへ送ると美容師登録に誘導してしまう。状態に応じた運営の画面へ送る。
+  const op = await getOperatorState(supabase);
+  if (isStaffState(op)) return operatorHomePath(op) ?? "/";
   const { data: profile } = await supabase
     .from("profiles")
     .select("*")
@@ -62,6 +67,8 @@ export async function determineRoleEntryPath(
   role: "stylist" | "salon",
 ): Promise<string> {
   if (await isPlatformAdmin(supabase)) return ADMIN_HOME_PATH;
+  const op = await getOperatorState(supabase);
+  if (isStaffState(op)) return operatorHomePath(op) ?? "/";
   const has = await hasCompletedRole(supabase, userId, role);
   if (role === "stylist") {
     return has ? "/stylist/mypage" : "/onboarding";
@@ -72,6 +79,7 @@ export async function determineRoleEntryPath(
 /**
  * 管理者専用ログイン入口（/admin/login）の遷移先決定。権限は is_platform_admin()（getAdminStatus）で確認する。
  *   管理者        → /admin（next が /admin 配下の安全なパスならそこへ）
+ *   スタッフ      → 状態に応じた運営の画面（有効=/admin/staff、招待中=承諾画面、停止中=停止画面）
  *   管理者でない  → not_admin（呼び出し側がセッションを破棄して案内する。管理画面へは進ませない）
  *   確認できない  → check_failed（再試行できるエラー）
  * ★メールアドレスの文字列では判定しない。この入口以外からログインした管理者の権限は、これによって変わらない。
@@ -86,5 +94,16 @@ export async function determineAdminEntryPath(
     const safe = next && (next === ADMIN_HOME_PATH || next.startsWith(`${ADMIN_HOME_PATH}/`)) ? next : ADMIN_HOME_PATH;
     return { ok: true, path: safe };
   }
-  return { ok: false, reason: status === "not_admin" ? "not_admin" : "check_failed" };
+  if (status === "error") return { ok: false, reason: "check_failed" };
+  // 責任者でない: スタッフ（招待中・停止中・有効）なら状態に応じた運営の画面へ（有効なスタッフは行き先のnextが運営の画面なら尊重）。
+  const op = await getOperatorState(supabase);
+  if (op === "error") return { ok: false, reason: "check_failed" };
+  const home = operatorHomePath(op);
+  // 運営ログインで作った新しいセッションなら staff_active になる。それでも再ログイン待ちのままなら、確認できなかった扱い（輪を作らない）。
+  if (op === "staff_relogin") return { ok: false, reason: "check_failed" };
+  if (isStaffState(op) && home) {
+    if (op === "staff_active" && next && next.startsWith(`${ADMIN_HOME_PATH}/`)) return { ok: true, path: next };
+    return { ok: true, path: home };
+  }
+  return { ok: false, reason: "not_admin" };
 }

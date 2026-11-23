@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAdminPage } from "@/lib/admin/guard";
+import { requireAdminOperator } from "@/lib/admin/operator-guard";
 import {
   HIRING_STATUSES, listHiringProcesses, parseHiringStatus, parseHiringView, parseOpsPage, parsePeriod, type HiringView,
 } from "@/lib/admin/operations";
@@ -22,7 +22,7 @@ const VIEW_LABEL: Record<HiringView, string> = {
  * ★自動の通知・督促は行わない。連絡は既存の連絡機能へのリンクだけを用意する（ここでは送信しない）。
  */
 export default async function AdminInterviewsPage({ searchParams }: { searchParams: SP }) {
-  const { supabase } = await requireAdminPage("/admin/interviews");
+  const { supabase } = await requireAdminOperator("/admin/interviews");
   const sp = await searchParams;
   const view = parseHiringView(sp), status = parseHiringStatus(sp), period = parsePeriod(sp), page = parseOpsPage(sp);
   const res = period.invalid ? null : await listHiringProcesses(supabase, { view, status, period, page });

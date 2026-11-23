@@ -9,7 +9,8 @@ import { REGION_PREFECTURES, isRegionBlock, isPrefecture, type RegionBlock } fro
  * ★取得に失敗した場合は 0件 ではなく ok:false を返し、画面は「取得できませんでした」と表示する。
  */
 type Supa = Pick<SupabaseClient, "rpc">;
-export const PAGE_SIZE = 30;
+import { PAGE_SIZE, one, parsePage } from "@/lib/admin/page-params";
+export { PAGE_SIZE, parsePage };
 
 export type DirectoryResult<T> = { ok: true; data: T } | { ok: false; reason: "forbidden" | "error" | "not_found" };
 
@@ -29,38 +30,11 @@ async function call<T>(supabase: Supa, fn: string, args: Record<string, unknown>
   }
 }
 
-export type Person = { user_id: string; role: string; name: string | null; email: string; since?: string };
-export type OrgRow = {
-  id: string; name: string; status: string; created_at: string; store_count: number;
-  /** 絞り込み条件（所在地・公開状態・利用状態）を【1店舗で】すべて満たした店舗の数。絞り込みが無いときは 0。 */
-  matched_store_count: number;
-  stores: { id: string; name: string; prefecture: string | null; city: string | null; visibility: string | null; usage_status: string; matches_filter: boolean; matches_query: boolean }[];
-  members: Person[];
-};
-export type OrgDetail = {
-  organization: { id: string; name: string; status: string; created_at: string };
-  stores: { id: string; name: string; status: string; usage_status: string; visibility: string | null; prefecture: string | null; city: string | null; address_source: "profile" | "store" | null; members: Person[] }[];
-  members: Person[];
-  hiring_process_count: number;
-};
-export type RegistrationState = "completed" | "in_progress" | "no_profile";
-export const REGISTRATION_STATES: RegistrationState[] = ["completed", "in_progress", "no_profile"];
-export type SalonRegistrant = { user_id: string; email: string; name: string | null; email_confirmed: boolean; onboarding_step: number; created_at: string; has_salon_profile: boolean };
-export type StylistRow = {
-  registration_state: RegistrationState; onboarding_step: number;
-  user_id: string; public_name: string | null; full_name: string | null; email: string; visibility: string;
-  residence_prefecture: string | null; desired_work_location: string | null; experience_years: number | null;
-  job_change_intent: string | null; created_at: string; diagnosis_type: string | null;
-};
-export type StylistDetail = StylistRow & {
-  updated_at: string; current_position: string | null; specialties: string[]; employment_type: string | null; bio: string | null;
-  diagnosis: { type_id: string; type_name: string; diagnosed_at: string } | null;
-  preference_status: string | null; evidence: Record<string, number>;
-  hiring_processes: { id: string; store_id: string; store_name: string; organization_name: string; status: string; source: string; updated_at: string }[];
-};
-
+export type { Person, OrgRow, OrgDetail, RegistrationState, SalonRegistrant, StylistRow, StylistDetail } from "@/lib/admin/directory-types";
+import { REGISTRATION_STATES } from "@/lib/admin/directory-types";
+import type { Person, OrgRow, OrgDetail, RegistrationState, SalonRegistrant, StylistRow, StylistDetail } from "@/lib/admin/directory-types";
+export { REGISTRATION_STATES };
 type Sp = Record<string, string | string[] | undefined>;
-const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
 /** 絞り込み指定（URLの検索条件）。都道府県の指定が優先、無ければ地域ブロックを都道府県へ展開する。 */
 export type AreaFilter = { prefectures: string[] | null; includeUnset: boolean; region: RegionBlock | ""; prefecture: string };
@@ -71,10 +45,6 @@ export function parseArea(sp: Sp, prefKey = "pref", regionKey = "region"): AreaF
   if (isPrefecture(pref)) return { prefectures: [pref], includeUnset: false, region: "", prefecture: pref };
   if (isRegionBlock(region)) return { prefectures: [...REGION_PREFECTURES[region]], includeUnset: false, region, prefecture: "" };
   return { prefectures: null, includeUnset: false, region: "", prefecture: "" };
-}
-export function parsePage(sp: Sp): number {
-  const n = Number.parseInt(one(sp.page), 10);
-  return Number.isFinite(n) && n >= 1 && n <= 1000 ? n : 1;
 }
 export const parseQ = (sp: Sp) => one(sp.q).trim().slice(0, 100);
 

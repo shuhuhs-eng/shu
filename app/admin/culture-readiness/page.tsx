@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAdminPage } from "@/lib/admin/guard";
+import { requireAdminOperator } from "@/lib/admin/operator-guard";
 import { CULTURE_STATES, listCultureReadiness, parseCultureState, parseCultureVisibility, parseOpsPage, type AxisProblems, type CultureState } from "@/lib/admin/operations";
 import { fmtJst, linkCls, OpsEmpty, OpsError, OpsPager, PageHead, contactSalonHref } from "@/components/admin/operations-ui";
 
@@ -41,7 +41,7 @@ function Problems({ title, p }: { title: string; p: AxisProblems }) {
  * ★相性（8項目）と店舗タイプ（12項目）は別々に判定する。診断の数値そのものは表示しない。
  */
 export default async function AdminCultureReadinessPage({ searchParams }: { searchParams: SP }) {
-  const { supabase } = await requireAdminPage("/admin/culture-readiness");
+  const { supabase } = await requireAdminOperator("/admin/culture-readiness");
   const sp = await searchParams;
   const state = parseCultureState(sp), vis = parseCultureVisibility(sp), page = parseOpsPage(sp);
   const res = await listCultureReadiness(supabase, { state, visibility: vis, page });

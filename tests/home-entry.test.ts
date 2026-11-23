@@ -5,7 +5,7 @@ import { determineAdminEntryPath } from "../lib/auth/post-auth-redirect";
 
 const src = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/^\s*\/\/.*$/gm, "");
-const rpcClient = (r: { data?: unknown; error?: unknown } | "throw") => ({ rpc: async () => { if (r === "throw") throw new Error("net"); return { data: r.data ?? null, error: r.error ?? null }; } }) as never;
+const rpcClient = (r: { data?: unknown; error?: unknown } | "throw") => ({ rpc: async (fn?: string) => { if (fn === "admin_my_operator_state") return { data: { state: "none" }, error: null }; if (r === "throw") throw new Error("net"); return { data: r.data ?? null, error: r.error ?? null }; } }) as never;
 
 test("管理者入口: 管理者だけ /admin へ。next は /admin 配下のみ許可。メールでは判定しない", async () => {
   assert.deepEqual(await determineAdminEntryPath(rpcClient({ data: true }), null), { ok: true, path: "/admin" });

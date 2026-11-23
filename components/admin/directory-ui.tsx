@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { displayPrefecture } from "@/lib/admin/regions";
-import { PAGE_SIZE, type Person, type OrgRow, type StylistRow, type RegistrationState } from "@/lib/admin/directory";
+import { PAGE_SIZE } from "@/lib/admin/page-params";
+import type { Person, OrgRow, StylistRow, RegistrationState } from "@/lib/admin/directory-types";
 
 export const ROLE_LABEL: Record<string, string> = {
   company_owner: "会社オーナー", company_admin: "会社管理者", recruiting_admin: "採用管理者", area_manager: "エリア担当",

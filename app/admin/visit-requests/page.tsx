@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAdminPage } from "@/lib/admin/guard";
+import { requireAdminOperator } from "@/lib/admin/operator-guard";
 import { parseOpsPage } from "@/lib/admin/operations";
 import { listVisitRequests, parseVisitFilters } from "@/lib/admin/visit-requests";
 import { ENTRANCE_LABELS, KIND_LABELS, STATUS_LABELS, CONFIRM_LABELS, SOURCE_CANCELLED_TEXT, VISIT_ENTRANCES, VISIT_KINDS, VISIT_LIST_STATUSES } from "@/lib/admin/visit-requests-shared";
@@ -15,7 +15,7 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
  * ★受付・状態変更は請求・決済・スカウト消費を作らない。
  */
 export default async function AdminVisitRequestsPage({ searchParams }: { searchParams: SP }) {
-  const { supabase } = await requireAdminPage("/admin/visit-requests");
+  const { supabase } = await requireAdminOperator("/admin/visit-requests");
   const sp = await searchParams;
   const f = parseVisitFilters(sp), page = parseOpsPage(sp);
   const res = await listVisitRequests(supabase, { ...f, page });

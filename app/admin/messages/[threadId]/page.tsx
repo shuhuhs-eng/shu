@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAdminPage } from "@/lib/admin/guard";
+import { requireAdminOperator } from "@/lib/admin/operator-guard";
 import { adminGetThread } from "@/lib/messages/rpc";
 import { STATUS_LABEL, REOPEN_STATUSES, requestIdFrom } from "@/lib/messages/shared";
 import { postAdminMessageAction, setThreadStatusAction } from "@/lib/messages/actions";
@@ -12,7 +12,7 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 /** 運営: 連絡の詳細。宛先の担当者が権限を失っていても、運営は閲覧・投稿・完了・再開できる（相手側は閲覧・返信できなくなる）。 */
 export default async function AdminThreadPage({ params, searchParams }: { params: Promise<{ threadId: string }>; searchParams: SP }) {
   const { threadId } = await params;
-  const { supabase } = await requireAdminPage(`/admin/messages/${threadId}`);
+  const { supabase } = await requireAdminOperator(`/admin/messages/${threadId}`);
   const sp = await searchParams;
   const res = await adminGetThread(supabase, threadId);
   if (!res.ok) return <main className="mx-auto max-w-[900px] px-5 py-10"><Link href="/admin/messages" className="text-[13px] font-semibold text-sub underline">← 連絡</Link><ErrorBox reason={res.reason} /></main>;

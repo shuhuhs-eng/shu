@@ -61,11 +61,11 @@ test("取得失敗は0件ではなく失敗として返す／存在しない・�
 });
 
 test("サーバー処理: 送信IDをDBへ渡し、失敗は結果として返す（画面が入力と送信IDを保持できる）", () => {
-  const a = src("lib/messages/actions.ts");
+  const a = src("lib/messages/actions.ts") + src("lib/messages/thread-create-action.ts");
   for (const fn of ["admin_create_thread", "admin_post_message", "inbox_reply"]) assert.ok(a.includes(`"${fn}"`));
   assert.equal((a.match(/p_request_id: rid/g) ?? []).length, 3);
   assert.equal((a.match(/Promise<ActionResult>/g) ?? []).length, 3);
-  assert.doesNotMatch(a.slice(a.indexOf("export async function createThreadAction"), a.indexOf("export async function setThreadStatusAction")), /redirect\(/);
+  assert.doesNotMatch(src("lib/messages/thread-create-action.ts"), /redirect\(/);
   assert.match(a, /isUuid\(rid\)/);
 });
 
@@ -89,15 +89,18 @@ test("通知メールは送らない（連絡機能のコードにメール送�
 test("相手側の画面は相手側RPCだけを使い、運営内部の種別・運営用RPCに触れない", () => {
   for (const f of ["app/messages/page.tsx", "app/messages/[threadId]/page.tsx"]) {
     const s = src(f);
-    assert.doesNotMatch(s.replace(/\/\*[\s\S]*?\*\//g, ""), /internal_note|offline_log|adminGetThread|adminListThreads|requireAdminPage/, f);
+    assert.doesNotMatch(s.replace(/\/\*[\s\S]*?\*\//g, ""), /internal_note|offline_log|adminGetThread|adminListThreads|requireAdmin(Page|Operator)/, f);
   }
   assert.match(src("app/messages/[threadId]/page.tsx"), /inboxGet/);
 });
 
 test("運営の画面は入口で運営者を確認し、操作はサーバー処理でも運営者を確認する", () => {
-  for (const f of ["app/admin/messages/page.tsx", "app/admin/messages/[threadId]/page.tsx", "app/admin/messages/new/page.tsx"]) assert.match(src(f), /requireAdminPage/, f);
+  for (const f of ["app/admin/messages/page.tsx", "app/admin/messages/[threadId]/page.tsx"]) assert.match(src(f), /requireAdminOperator/, f);
+  assert.match(src("app/admin/messages/new/page.tsx"), /requireAdminPage/);   // 新規作成は責任者のみ（個人情報の閲覧範囲が未決）
   const a = src("lib/messages/actions.ts");
-  assert.equal((a.match(/isPlatformAdmin\(supabase\)/g) ?? []).length, 3);
+  assert.equal((a.match(/isAdminOperator\(supabase\)/g) ?? []).length, 2);   // 投稿・状態変更: 運営（責任者＋有効なスタッフ）
+  assert.equal((a.match(/isPlatformAdmin\(supabase\)/g) ?? []).length, 0);
+  assert.equal((src("lib/messages/thread-create-action.ts").match(/isPlatformAdmin\(supabase\)/g) ?? []).length, 1);   // 新規作成: 責任者のみ
 });
 
 test("宛先が権限を失った場合も運営は閲覧でき、表示で区別する", () => {

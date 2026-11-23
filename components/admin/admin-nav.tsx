@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { STAFF_MENU } from "@/lib/admin/staff-menu";
 
 const ITEMS = [
   // 一般向けサイトのホーム（エラー画面の「管理画面へ戻る」→/admin とは行き先を分けている）。スマホでも先頭で見えるよう最初に置く。
@@ -20,14 +21,18 @@ const ITEMS = [
   { href: "/admin/integrity", label: "整合性チェック" },
   { href: "/admin/evidence", label: "実績資料" },
   { href: "/admin/legal", label: "規約・同意" },
+  { href: "/admin/staff-members", label: "スタッフ管理" },
 ] as const;
 
-/** 運営画面の共通ナビ（運営者だけに表示。layoutで権限を確認している）。 */
-export function AdminNav() {
+const STAFF_ITEMS = [{ href: "/", label: "HOME" }, { href: "/admin/staff", label: "運営TOP" }, ...STAFF_MENU.map((m) => ({ href: m.href, label: m.label }))] as const;
+
+/** 運営画面の共通ナビ（運営者だけに表示。layoutで権限を確認している）。スタッフには通常業務の画面だけを出す（権限の本体はDB）。 */
+export function AdminNav({ variant = "responsible" }: { variant?: "responsible" | "staff" }) {
+  const items = variant === "staff" ? STAFF_ITEMS : ITEMS;
   return (
     <nav className="border-b border-line bg-surface" aria-label="運営メニュー">
       <ul className="mx-auto flex max-w-[900px] gap-1 overflow-x-auto px-5 py-2 text-[12px] font-semibold">
-        {ITEMS.map((i) => (
+        {items.map((i) => (
           <li key={i.href} className="shrink-0">
             <Link href={i.href} className="inline-flex min-h-[44px] items-center rounded-full px-3 text-charcoal hover:bg-surface2">{i.label}</Link>
           </li>
