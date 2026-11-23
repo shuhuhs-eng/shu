@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { capArrayInput } from "@/lib/validation/bounded-array";
 
 const markReadSchema = z.object({ notificationId: z.string().uuid() });
 
@@ -34,7 +35,9 @@ export async function markAllNotificationsRead(): Promise<
   return { success: true, count: data ?? 0 };
 }
 
-const entitiesSchema = z.array(z.object({ type: z.string().min(1), id: z.string().uuid() })).min(1);
+// 1カード分の通知の組。正規の画面が送る件数より十分大きい上限を、要素の検証前に確認する（巨大配列によるメモリ枯渇の防止）。
+const MAX_NOTIFICATION_ENTITIES = 200;
+const entitiesSchema = capArrayInput(MAX_NOTIFICATION_ENTITIES, z.array(z.object({ type: z.string().min(1), id: z.string().uuid() })).min(1).max(MAX_NOTIFICATION_ENTITIES));
 
 // カード単位の既読化（例: サロンカード1枚だけ既読にする）。他社/他の美容師の
 // 未読には一切触れない（mark_notifications_read_by_entities側でauth.uid()と

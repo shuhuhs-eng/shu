@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SPECIALTY_OPTIONS } from "./profile-options";
+import { capArrayInput } from "./bounded-array";
 
 const visibilityEnum = z.enum(["PRIVATE", "LIMITED", "PUBLIC"]);
 
@@ -37,9 +38,10 @@ export const salonProfileFormSchema = z.object({
   // employee_size_code は employee_size_master を参照する動的なコードのため、
   // 固定enumでは検証しない（実在確認はDB外部キー制約とRPC側に委ねる）。
   employeeSizeCode: z.string().trim().max(50, "不正な値です").optional().or(z.literal("")),
-  targetSpecialties: z
-    .array(z.enum(SPECIALTY_OPTIONS))
-    .min(1, "採用したい得意技術を1つ以上選択してください"),
+  targetSpecialties: capArrayInput(
+    SPECIALTY_OPTIONS.length,
+    z.array(z.enum(SPECIALTY_OPTIONS)).min(1, "採用したい得意技術を1つ以上選択してください"),
+  ),
   instagramHandle: z
     .string()
     .trim()

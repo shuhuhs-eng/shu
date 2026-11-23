@@ -3,13 +3,14 @@
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { CAREER_GOALS } from "@/lib/match-profile/options";
+import { capArrayInput } from "@/lib/validation/bounded-array";
 import type { Database } from "@/types/database";
 
 const goalCodes = CAREER_GOALS.map((goal) => goal.code) as [string, ...string[]];
 const optionalInt = z.number().int().nonnegative().nullable();
 const inputSchema = z.object({
   primaryGoal: z.enum(goalCodes),
-  secondaryGoals: z.array(z.enum(goalCodes)).max(2),
+  secondaryGoals: capArrayInput(2, z.array(z.enum(goalCodes)).max(2)),
   careerStage: z.enum(["results_stylist", "growing_stylist", "assistant_newcomer"]),
   wantsPerformanceOffer: z.boolean(),
   evidencePeriodMonths: z.union([z.literal(3), z.literal(6), z.literal(12)]).nullable(),

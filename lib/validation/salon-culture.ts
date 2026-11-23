@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { capArrayInput } from "./bounded-array";
 
 /**
  * 「サロンらしさ」入力の検証。全12問、5段階（1〜5）のクリック回答に統一する
@@ -28,7 +29,7 @@ export const salonCultureStepSchema = z.object({
   respondentRole: z.enum(["owner_representative", "store_manager", "recruiter_hr", "other"]).nullable(),
   currentStep: z.number().int().min(0).max(14),
   answers: salonCultureAnswersSchema,
-  valuePriorities: z.array(z.string()).max(3),
+  valuePriorities: capArrayInput(3, z.array(z.string()).max(3)),
   comment: z.string().max(500).optional().or(z.literal("")),
 });
 
@@ -50,7 +51,7 @@ export const salonCultureCompletedSchema = salonCultureStepSchema.extend({
     q11_relationship_distance: fivePoint,
     q12_hierarchy_flatness: fivePoint,
   }),
-  valuePriorities: z.array(z.string()).length(3, "重要な項目を3つ選択してください"),
+  valuePriorities: capArrayInput(3, z.array(z.string()).length(3, "重要な項目を3つ選択してください")),
 });
 
 export type SalonCultureStepInput = z.infer<typeof salonCultureStepSchema>;

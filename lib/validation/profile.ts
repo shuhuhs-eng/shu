@@ -2,6 +2,7 @@ import { z } from "zod";
 import { parseExperienceYears } from "@/lib/profile/experience-years";
 import { validateBirthDate } from "@/lib/profile/birth-date";
 import { SPECIALTY_OPTIONS, VALUE_PRIORITY_OPTIONS, SNS_PLATFORMS } from "./profile-options";
+import { capArrayInput } from "./bounded-array";
 import { SPECIALTIES_REQUIRED_MESSAGE } from "@/lib/profile/specialties-rule";
 
 const ageBandEnum = z.enum([
@@ -39,7 +40,7 @@ const snsLinkSchema = z.object({
  */
 function specialtiesSchema(required: boolean) {
   const base = z.array(z.enum(SPECIALTY_OPTIONS));
-  return required ? base.min(1, SPECIALTIES_REQUIRED_MESSAGE) : base;
+  return capArrayInput(SPECIALTY_OPTIONS.length, required ? base.min(1, SPECIALTIES_REQUIRED_MESSAGE) : base);
 }
 
 function buildProfileFormSchema(specialties: ReturnType<typeof specialtiesSchema>) {
@@ -106,10 +107,13 @@ function buildProfileFormSchema(specialties: ReturnType<typeof specialtiesSchema
 
   // --- 働き方・価値観（stylist_profiles.value_priorities） ---
   // 候補約12項目から、重要な3つを優先順位付きで選択する（ちょうど3件必須）。
-  valuePriorities: z
-    .array(z.enum(VALUE_PRIORITY_CODES))
-    .length(3, "重要な項目を3つ選択してください")
-    .refine((arr) => new Set(arr).size === arr.length, "同じ項目を重複して選択できません"),
+  valuePriorities: capArrayInput(
+    VALUE_PRIORITY_CODES.length,
+    z
+      .array(z.enum(VALUE_PRIORITY_CODES))
+      .length(3, "重要な項目を3つ選択してください")
+      .refine((arr) => new Set(arr).size === arr.length, "同じ項目を重複して選択できません"),
+  ),
 
   // --- 設定（user_settings / stylist_profiles.visibility） ---
   visibility: visibilityEnum,
