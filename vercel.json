@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/cleanup-pending-diagnoses",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/send-notification-emails",
+      "schedule": "* * * * *"
     }
   ]
 }
