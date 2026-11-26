@@ -5,7 +5,7 @@ import { getStoreScoutQuota, getStoreScouts } from "@/lib/store-activity/actions
 import { areaSearchV2Enabled } from "@/lib/area/feature-flag";
 import { getStoreHiringProcesses } from "@/lib/hiring/actions";
 import { countPendingPositiveScouts } from "@/lib/hiring/pending";
-import { ScoutQuotaCard } from "@/components/store-activity/scout-quota-card";
+import { ScoutAllowance } from "@/components/store-activity/scout-allowance";
 
 type Props = {
   params: Promise<{ storeId: string }>;
@@ -69,7 +69,7 @@ export default async function StoreWorkspacePage({ params }: Props) {
       </p>
 
       <div className="mt-6">
-        <ScoutQuotaCard quota={quota} />
+        <ScoutAllowance storeId={storeId} quota={quota} />
       </div>
 
       {pendingScouts > 0 && (

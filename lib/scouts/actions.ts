@@ -1,9 +1,12 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { RECRUITING_PAUSED_MESSAGE, isRecruitingPausedError } from "@/lib/contracts/recruiting-access";
+import { scoutLedgerEnabled } from "@/lib/billing/hire-flags";
+import { ledgerSendErrorMessage, nextSendMode } from "@/lib/billing/scout-send-rules";
 import { cardGateErrorMessage, salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 const sendStoreScoutSchema = z.object({
@@ -11,6 +14,8 @@ const sendStoreScoutSchema = z.object({
   stylistUserId: z.string().uuid(),
   message: z.string().trim().min(1).max(1000),
   templateType: z.enum(["casual", "concrete"]).nullable(),
+  /** 台帳方式の再試行キー（SCOUT_LEDGER_ENABLED=1 のときだけ使う。無ければサーバーで新規に作る）。 */
+  requestId: z.string().uuid().optional(),
 });
 
 /**
@@ -28,12 +33,29 @@ export async function sendStoreScout(
   const supabase = await createClient();
   const cardBlock = await salonCardBlockMessage(supabase);
   if (cardBlock) return { success: false, error: cardBlock };
-  const { error } = await supabase.rpc("send_scout_v2", {
+  // ★SCOUT_LEDGER_ENABLED=1（既定オフ）のときだけ、DBの送信方式スイッチ（scout_send_mode）を読み、台帳方式なら送信と台帳の消費を同じDBトランザクションで行う関数を使う。
+  //   オフの間は従来どおり send_scout_v2（旧の月次枠）のまま。DBとアプリの切替の途中でも送信不能にならないよう、方式の食い違いを示すエラーのときだけ逆の方式で1回やり直す。
+  const flagOn = scoutLedgerEnabled();
+  const args = {
     p_store_id: parsed.data.storeId,
     p_stylist_user_id: parsed.data.stylistUserId,
     p_message: parsed.data.message,
     p_template_type: parsed.data.templateType,
-  });
+  };
+  const requestId = parsed.data.requestId ?? randomUUID();
+  const send = (ledgerMode: boolean) => ledgerMode
+    ? supabase.rpc("send_scout_with_ledger" as never, { ...args, p_request_id: requestId } as never)
+    : supabase.rpc("send_scout_v2", args);
+  let ledger = false;
+  if (flagOn) {
+    const { data: mode } = await supabase.rpc("scout_send_mode" as never);
+    ledger = mode === "ledger";
+  }
+  let { error } = await send(ledger);
+  if (error && flagOn) {
+    const flip = nextSendMode(error.message, ledger);
+    if (flip !== null) { ledger = flip; ({ error } = await send(ledger)); }
+  }
   if (error) {
     console.error("[sendStoreScout] RPC failed", { message: error.message, code: error.code });
     if (isRecruitingPausedError(error.message)) {
@@ -41,6 +63,8 @@ export async function sendStoreScout(
     }
     const cardMsg = cardGateErrorMessage(error.message);
     if (cardMsg) return { success: false, error: cardMsg };
+    const ledgerMsg = ledgerSendErrorMessage(error.message);
+    if (ledgerMsg) return { success: false, error: ledgerMsg };
     if (error.message.includes("monthly scout limit reached")) {
       return { success: false, error: "今月のスカウト枠を使い切りました。追加スカウト購入機能は準備中です。" };
     }

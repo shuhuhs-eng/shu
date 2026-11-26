@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { makeRequestIdHolder } from "@/lib/billing/scout-send-rules";
 import { sendStoreScout } from "@/lib/scouts/actions";
 import { RECRUITING_PAUSED_MESSAGE } from "@/lib/contracts/recruiting-access";
 import { SCOUT_TEMPLATES, SCOUT_RESPONSE_LABELS, type ScoutTemplateType } from "@/lib/scouts/options";
@@ -59,10 +60,13 @@ export function StoreStylistCard({ storeId, stylist, match, latestScout, recruit
     setMessage(SCOUT_TEMPLATES[type].text);
   }
 
+  const requestIds = useRef(makeRequestIdHolder());
+
   async function doSend() {
     setBusy(true);
     setResult(null);
-    const r = await sendStoreScout({ storeId, stylistUserId: stylist.stylist_user_id, message: message.trim(), templateType });
+    const r = await sendStoreScout({ storeId, stylistUserId: stylist.stylist_user_id, message: message.trim(), templateType, requestId: requestIds.current.get(`${stylist.stylist_user_id}|${templateType}|${message.trim()}`) });
+    if (r.success) requestIds.current.reset();
     setBusy(false);
     setStep("compose");
     setResult(r.success ? "スカウトを送信しました。" : r.error);
