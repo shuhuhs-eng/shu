@@ -134,7 +134,7 @@ export function VisitRequestPanel({ d, mergeCandidates, meId, assignees }: { d: 
       {d.status === "post_visit_check" && (
         <section className="rounded-2xl border border-line bg-surface p-4">
           <h2 className="text-[13px] font-bold text-ink">実施後の確認を記録する</h2>
-          <p className="mt-1 text-[11.5px] leading-relaxed text-sub">サロンと本人の両方が「実施された」と確認できたら、状態を「実施済み」にできます。確認の方法（メッセージ・電話など）を記録します。</p>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-sub">サロンと本人の両方が「実施された」と確認できたら、状態を「実施済み」にできます（実施済みにすると見学料の請求記録が未払いで作られます。カード請求はされません）。確認の方法（メッセージ・電話など）を記録します。</p>
           <div className="mt-3 grid gap-3">
             <select value={party} onChange={(e) => setParty(e.target.value as never)} className={sel} aria-label="確認した相手"><option value="salon">サロン</option><option value="stylist">本人（美容師）</option></select>
             <select value={result} onChange={(e) => setResult(e.target.value as never)} className={sel} aria-label="結果">{Object.entries(CONFIRM_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>

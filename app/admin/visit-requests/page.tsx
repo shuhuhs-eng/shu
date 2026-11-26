@@ -12,7 +12,7 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
  * 運営: 見学・体験入店の受付一覧（0087 草案の RPC を使う）。
  * 入口（スカウト返信／美容師から店舗への直接の希望）と希望種別（見学／体験入店）を区別して表示する。
  * 過去の「話を聞いてみたい」は見学・体験入店に読み替えず、「過去の返信」の絞り込みでだけ読み取り表示（受付はできない）。
- * ★受付・状態変更は請求・決済・スカウト消費を作らない。
+ * ★受付・状態変更はカード請求・決済・スカウト消費を行わない。「実施済み」遷移時のみ0108のトリガで見学料の請求記録（未払い）が作られる（支払いの確定ではない）。
  */
 export default async function AdminVisitRequestsPage({ searchParams }: { searchParams: SP }) {
   const { supabase } = await requireAdminOperator("/admin/visit-requests");
@@ -29,7 +29,7 @@ export default async function AdminVisitRequestsPage({ searchParams }: { searchP
     <main className="mx-auto max-w-[900px] px-5 py-10">
       <PageHead
         title="見学・体験入店の受付"
-        lead={<>スカウトへの返信と、美容師から店舗への直接希望（見学・体験入店）を、入口と希望種別を分けて確認します。<b>受付しても日程や参加は確定しません</b>。請求・決済は作られません（見学料は実施後に双方へ確認し、運営が別途手動で扱います）。連絡は既存の連絡機能で行います。</>}
+        lead={<>スカウトへの返信と、美容師から店舗への直接希望（見学・体験入店）を、入口と希望種別を分けて確認します。<b>受付しても日程や参加は確定しません</b>。カード請求・決済は行われません。双方の実施確認の記録後に「実施済み」にすると見学料の請求記録（未払い）が自動で作られます（利用者への通知なし）。実際の支払いは実施後に双方へ確認し、運営が別途手動で記録します。連絡は既存の連絡機能で行います。</>}
       />
       <form method="get" className="mt-5 grid gap-3 rounded-2xl border border-line bg-surface p-4">
         <select name="entrance" defaultValue={f.entrance} className={sel} aria-label="入口">

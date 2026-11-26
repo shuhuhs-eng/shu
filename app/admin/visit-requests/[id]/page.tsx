@@ -40,7 +40,7 @@ export default async function AdminVisitRequestDetail({ params }: Props) {
   return (
     <main className="mx-auto max-w-[900px] px-5 py-10">
       <Link href="/admin/visit-requests" className="text-[12px] text-sub underline">受付一覧へ</Link>
-      <PageHead title={`${KIND_LABELS[d.kind] ?? d.kind}の受付`} lead={<>入口: {ENTRANCE_LABELS[d.source_kind] ?? d.source_kind}。状態: <b>{STATUS_LABELS[d.status] ?? d.status}</b>。受付や状態の変更で請求・決済は作られません。</>} />
+      <PageHead title={`${KIND_LABELS[d.kind] ?? d.kind}の受付`} lead={<>入口: {ENTRANCE_LABELS[d.source_kind] ?? d.source_kind}。状態: <b>{STATUS_LABELS[d.status] ?? d.status}</b>。受付や状態の変更でカード請求・決済は行われません。ただしサロンと本人の双方の「実施された」確認が記録された後に状態を「実施済み」にすると、見学料の請求記録（未払い）が自動で作られます（利用者への通知は送られません）。実際の支払いは運営が別途記録するまで確定しません。</>} />
       <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-2xl border border-line bg-surface p-4 text-[12.5px] text-sub">
         {d.source_cancelled && (<><dt>入口の希望</dt><dd className="font-semibold text-[#8A2E2E]">{SOURCE_CANCELLED_TEXT}</dd></>)}
         <dt>現在の担当</dt><dd className="text-charcoal">{!opsRes.ok ? "取得できませんでした" : d.assigned_admin_id ? nameOf(d.assigned_admin_id, ops) : "未割当"}</dd>
