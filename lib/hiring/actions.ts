@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { hiredStatusBlockedReason } from "@/lib/billing/hire-guard";
 import { RECRUITING_PAUSED_MESSAGE, isRecruitingPausedError } from "@/lib/contracts/recruiting-access";
 import { isInterviewType, jstPartsToIso } from "@/lib/hiring/format";
 import type {
@@ -11,6 +12,7 @@ import type {
   MyHiringProcess,
   StoreHiringProcess,
 } from "@/lib/hiring/types";
+import { cardGateErrorMessage, salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 /**
  * 採用進捗（0037）のRPCの薄いラッパー。権限チェック（salon role・
@@ -26,6 +28,8 @@ const GENERIC_ERROR = "保存できませんでした。時間をおいて再度
 function friendlyError(message: string | undefined): string {
   const m = message ?? "";
   if (isRecruitingPausedError(m)) return RECRUITING_PAUSED_MESSAGE;
+  const cardMsg = cardGateErrorMessage(m);
+  if (cardMsg) return cardMsg;
   if (m.includes("candidate already exists")) return "すでに採用進捗に追加されています";
   if (m.includes("no engagement")) return "この美容師とはまだ接点がないため、採用進捗に追加できません";
   if (m.includes("not found or not accessible") || m.includes("caller is not")) {
@@ -90,6 +94,8 @@ export async function addHiringCandidateAction(storeId: string, stylistUserId: s
   if (!store.success || !stylist.success) return { success: false, error: GENERIC_ERROR };
 
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false, error: cardBlock };
   const { error } = await supabase.rpc("add_hiring_candidate", {
     p_store_id: store.data,
     p_stylist_user_id: stylist.data,
@@ -126,6 +132,8 @@ export async function scheduleHiringInterviewAction(
   if (!iso) return { success: false, error: "面談の日付と時刻を正しく入力してください" };
 
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false, error: cardBlock };
   const { error } = await supabase.rpc("schedule_hiring_interview", {
     p_process_id: v.processId,
     p_interview_at: iso,
@@ -161,6 +169,14 @@ export async function updateHiringStatusAction(input: z.input<typeof statusSchem
   }
   const v = parsed.data;
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false, error: cardBlock };
+  // 採用契約（新機能）が有効な間は、旧方式の「採用にする」で確定させない（二重の請求予定を作らない）。
+  // 契約情報を取得できない場合も「契約なし」とは扱わず、止めて再読み込みを案内する（画面の出し分けだけに頼らない）。
+  if (v.toStatus === "hired") {
+    const blocked = await hiredStatusBlockedReason(supabase, v.processId);
+    if (blocked) return { success: false, error: blocked };
+  }
   const { error } = await supabase.rpc("update_hiring_status", {
     p_process_id: v.processId,
     p_to_status: v.toStatus,
@@ -190,6 +206,8 @@ export async function updateHiringInternalNoteAction(input: z.input<typeof noteS
   }
   const v = parsed.data;
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false, error: cardBlock };
   const { error } = await supabase.rpc("update_hiring_internal_note", {
     p_process_id: v.processId,
     p_internal_note: v.note.trim() || null,
@@ -210,6 +228,8 @@ export async function declineHiringProcessAction(processId: string, note: string
   if (note.length > 1000) return { success: false, error: "メッセージは1000文字以内で入力してください" };
 
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false, error: cardBlock };
   const { error } = await supabase.rpc("decline_hiring_process", {
     p_process_id: parsed.data,
     p_public_note: note.trim() || null,

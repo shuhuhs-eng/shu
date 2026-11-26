@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SALON_PHOTO_SIGNED_URL_EXPIRES_IN } from "@/lib/salon-photos/constants";
 import type { Database, SalonPhotoCategory } from "@/types/database";
 import { logError } from "@/lib/security/log";
+import { salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 type SalonPhotoRow = Database["public"]["Tables"]["salon_photos"]["Row"];
 
@@ -108,6 +109,8 @@ export async function addSalonPhotoAction(
   storagePath: string,
 ): Promise<AddSalonPhotoResult> {
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false, error: cardBlock };
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -168,6 +171,8 @@ export async function deleteSalonPhotoAction(
   storagePath: string,
 ): Promise<DeleteSalonPhotoResult> {
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false, error: cardBlock };
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -8,6 +8,7 @@ import { addSalonLinkSchema } from "@/lib/validation/salon-links";
 import { STORE_ASSET_BUCKET, STORE_ASSET_SIGNED_URL_EXPIRES_IN, STORE_PHOTO_FOLDER } from "@/lib/store-assets/constants";
 import { mapStoreAssetError, type StoreAssetLink, type StoreAssetPhoto } from "@/lib/store-assets/parse";
 import { addStorePhoto, deleteStorePhoto, replaceStorePhoto, setStoreLogo, type StoreAssetDeps } from "@/lib/store-assets/service";
+import { salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 /**
  * 店舗別のロゴ・写真・リンクの保存・削除（0081 の RPC の薄いラッパー）。
@@ -45,6 +46,7 @@ export async function setStoreLogoAction(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: NOT_LOGGED_IN };
+  { const cardBlock = await salonCardBlockMessage(supabase); if (cardBlock) return { success: false, error: cardBlock }; }
   if (!uuid.safeParse(storeId).success) return { success: false, error: "店舗を特定できませんでした。" };
   if (storagePath !== null && !logoPath(storeId).test(storagePath)) return { success: false, error: "画像の登録に失敗しました。もう一度アップロードしてください。" };
   return setStoreLogo(depsFor(supabase), storeId, storagePath);
@@ -57,6 +59,7 @@ export async function addStorePhotoAction(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: NOT_LOGGED_IN };
+  { const cardBlock = await salonCardBlockMessage(supabase); if (cardBlock) return { success: false, error: cardBlock }; }
   if (!uuid.safeParse(storeId).success || !photoPath(storeId).test(storagePath)) {
     return { success: false, error: "画像の登録に失敗しました。もう一度アップロードしてください。" };
   }
@@ -71,6 +74,7 @@ export async function replaceStorePhotoAction(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: NOT_LOGGED_IN };
+  { const cardBlock = await salonCardBlockMessage(supabase); if (cardBlock) return { success: false, error: cardBlock }; }
   if (!uuid.safeParse(storeId).success || !uuid.safeParse(photoId).success || !photoPath(storeId).test(storagePath)) {
     return { success: false, error: "画像の登録に失敗しました。もう一度アップロードしてください。" };
   }
@@ -81,6 +85,7 @@ export async function deleteStorePhotoAction(photoId: string): Promise<{ success
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: NOT_LOGGED_IN };
+  { const cardBlock = await salonCardBlockMessage(supabase); if (cardBlock) return { success: false, error: cardBlock }; }
   if (!uuid.safeParse(photoId).success) return { success: false, error: "画像を特定できませんでした。" };
   return deleteStorePhoto(depsFor(supabase), photoId);
 }
@@ -94,6 +99,7 @@ export async function addStoreLinkAction(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: NOT_LOGGED_IN };
+  { const cardBlock = await salonCardBlockMessage(supabase); if (cardBlock) return { success: false, error: cardBlock }; }
   if (!uuid.safeParse(storeId).success) return { success: false, error: "店舗を特定できませんでした。" };
   const v = parsed.data;
   const { data: row, error } = await looseRpc(supabase).rpc("add_store_link", { p_store_id: storeId, p_link_type: v.linkType, p_label: v.label || null, p_url: v.url });
@@ -109,6 +115,7 @@ export async function deleteStoreLinkAction(linkId: string): Promise<{ success: 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: NOT_LOGGED_IN };
+  { const cardBlock = await salonCardBlockMessage(supabase); if (cardBlock) return { success: false, error: cardBlock }; }
   if (!uuid.safeParse(linkId).success) return { success: false, error: "リンクを特定できませんでした。" };
   const { error } = await looseRpc(supabase).rpc("delete_store_link", { p_link_id: linkId });
   if (error) {

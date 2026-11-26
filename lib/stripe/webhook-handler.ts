@@ -19,7 +19,7 @@ export type ApplyFnName =
   | "apply_payment_method_setup" | "set_payment_method_state" | "apply_subscription_checkout_completed"
   | "apply_stripe_subscription_snapshot" | "apply_stripe_invoice_result" | "mark_stripe_checkout_expired"
   | "apply_success_fee_card_payment" | "apply_scout_credit_payment" | "record_stripe_refund_or_dispute"
-  | "record_subscription_invoice_payment";
+  | "record_subscription_invoice_payment" | "service_hire_fee_apply_notification";
 
 export type CallRpc = <T extends ApplyFnName>(fn: T, args: Functions[T]["Args"]) => Promise<Functions[T]["Returns"]>;
 
@@ -56,6 +56,8 @@ export const HANDLED_EVENT_TYPES = [
   "payment_method.detached",
   "charge.refunded",
   "charge.dispute.created",
+  "payment_intent.succeeded",
+  "payment_intent.payment_failed",
 ] as const;
 
 export function idOf(v: string | { id: string } | null | undefined): string | null {
@@ -176,6 +178,23 @@ export async function processStripeEvent(event: Stripe.Event, deps: HandlerDeps)
       if (!pi) return { result: "ignored" };
       const r = await deps.callRpc("record_stripe_refund_or_dispute", { p_payment_intent_id: pi, p_event_id: event.id, p_kind: "dispute" });
       return { result: r.result === "recorded" ? "integrity_issue" : "ignored" };
+    }
+
+    case "payment_intent.succeeded":
+    case "payment_intent.payment_failed": {
+      // 採用料の自動請求（保存済みカードへのオフセッション請求）の結果通知。請求ジョブが付けた metadata の試行IDがあるものだけを扱う。
+      const pi = event.data.object;
+      const attemptId = pi.metadata?.hire_fee_attempt_id;
+      if (!attemptId) return { result: "ignored", note: "not_hire_fee" };
+      const ok = event.type === "payment_intent.succeeded";
+      const r = await deps.callRpc("service_hire_fee_apply_notification", {
+        p_attempt_id: attemptId, p_result: ok ? "succeeded" : "failed", p_payment_intent_id: pi.id, p_event_id: event.id,
+        // 請求の内容との照合（金額・通貨・顧客・モード・請求予定）はDB側で行い、不一致なら反映せず確認記録を残す。
+        p_amount: pi.amount, p_currency: pi.currency, p_customer_id: idOf(pi.customer), p_livemode: pi.livemode,
+        p_schedule_id: pi.metadata?.hire_fee_schedule_id ?? "", p_source: "stripe_webhook",
+      });
+      if (r === "mismatch" || r === "conflict") return { result: "integrity_issue", note: `hire_fee_${r}` };
+      return { result: r === "ignored" ? "ignored" : "processed", note: String(r) };
     }
 
     default:

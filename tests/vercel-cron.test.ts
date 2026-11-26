@@ -13,7 +13,8 @@ test("vercel.json: 既存の定期処理を残し、通知メールを1分間隔
   assert.deepEqual(cleanup, { path: "/api/cron/cleanup-pending-diagnoses", schedule: "0 18 * * *" }, "既存は不変");
   const mail = vercel.crons.find((c) => c.path === "/api/cron/send-notification-emails");
   assert.deepEqual(mail, { path: "/api/cron/send-notification-emails", schedule: "* * * * *" });
-  assert.equal(vercel.crons.length, 2);
+  assert.deepEqual(vercel.crons.find((c) => c.path === "/api/cron/hire-fee-charge"), { path: "/api/cron/hire-fee-charge", schedule: "0 * * * *" }, "採用料の自動請求は1時間ごと（復旧・取りこぼしの再処理のため。HIRE_BILLING_ENABLED と auto_charge_enabled が両方有効の間だけ請求）");
+  assert.equal(vercel.crons.length, 3);
   assert.equal(new Set(vercel.crons.map((c) => c.path)).size, vercel.crons.length);
   for (const c of vercel.crons) { assert.match(c.schedule, /^\S+ \S+ \S+ \S+ \S+$/); assert.ok(existsSync(`app${c.path}/route.ts`), c.path); }
 });
@@ -24,6 +25,12 @@ test("ルートの形: GET(Vercel Cronが使う)とPOSTが同じ認証つきハ�
   assert.ok(src.indexOf("verifyCronAuth(") < src.indexOf("createMailProvider(") && src.indexOf("createMailProvider(") < src.indexOf("createServiceClient()"));
   const dur = Number(/maxDuration = (\d+)/.exec(src)?.[1]); const budget = Number(/DEFAULT_BUDGET_MS = ([\d_]+)/.exec(readFileSync("lib/email/worker.ts", "utf8"))?.[1].replace(/_/g, ""));
   assert.ok(dur * 1000 > budget, `maxDuration ${dur}s > 予算 ${budget}ms`);
+});
+
+test("採用料の請求ジョブのルート: 認証が先・無効の間は何もしない・Stripeとサービスクライアントは認証と有効確認の後", () => {
+  const src = readFileSync("app/api/cron/hire-fee-charge/route.ts", "utf8");
+  assert.match(src, /export const GET = run;/); assert.match(src, /export const POST = run;/);
+  assert.ok(src.indexOf("verifyCronAuth(") < src.indexOf('!hireBillingEnabled()') && src.indexOf('!hireBillingEnabled()') < src.indexOf("createServiceClient()") && src.indexOf("createServiceClient()") < src.indexOf("getStripe()"));
 });
 
 const calls: string[] = [];

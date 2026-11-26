@@ -1729,6 +1729,7 @@ export type Database = {
         Returns: Array<{ fee_id: string; fee_status: string; can_pay_by_card: boolean; card_checkout_in_progress: boolean; payment_method: "card" | "bank_transfer" | null }>;
       };
       // webhook適用（service_roleのみ）。
+      service_hire_fee_apply_notification: { Args: { p_attempt_id: string; p_result: string; p_payment_intent_id: string; p_event_id: string; p_amount: number; p_currency: string; p_customer_id: string | null; p_livemode: boolean; p_schedule_id: string; p_source: string }; Returns: string };
       claim_stripe_webhook_event: { Args: { p_event_id: string; p_event_type: string; p_livemode: boolean }; Returns: string };
       complete_stripe_webhook_event: { Args: { p_event_id: string; p_result: string; p_error_code?: string | null }; Returns: undefined };
       apply_payment_method_setup: {

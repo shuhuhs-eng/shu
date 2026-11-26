@@ -6,6 +6,7 @@ import { salonStoreProfileFormSchema } from "@/lib/validation/salon-store-profil
 import type { AuthActionState } from "@/lib/auth/types";
 import { logError } from "@/lib/security/log";
 import { saveStoreProfile } from "@/lib/salon/store-profile-save";
+import { salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 /**
  * 店舗単位プロフィール保存（法人・複数店舗対応 Phase 3B）。
@@ -48,6 +49,8 @@ export async function saveSalonStoreProfileAction(
   }
 
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { error: cardBlock };
   const result = await saveStoreProfile(
     { rpc: (fn, args) => supabase.rpc(fn as never, args as never) as never, log: (where, error) => logError(where, error) },
     storeId,

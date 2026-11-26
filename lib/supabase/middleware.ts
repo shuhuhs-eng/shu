@@ -1,3 +1,4 @@
+import { cardRequiredPath, getSalonCardGate, isCardGatedPath } from "@/lib/billing/salon-card-gate";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
@@ -242,6 +243,21 @@ export async function updateSession(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = "/stylist/mypage";
       url.search = "";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // ★サロンのカード必須（決定済み。DBの設定 salon_card_required が true のときだけ有効（判定はDBのRPC））。カード未登録の会社に所属する担当者は、
+  // 業務機能のパスから、カード登録（オーナー/管理者）または案内（それ以外）へ移す。登録・更新・請求先・契約・ログインは対象外。
+  // 確認できないとき（RPC失敗）は止める（fail-closed）。サーバー側の書き込みは server action 側でも同じ判定で拒否する。
+  if (user && isCardGatedPath(pathname)) {
+    const gate = await getSalonCardGate(supabase);
+    if (gate.blocked) {
+      const target = cardRequiredPath(gate);
+      const url = request.nextUrl.clone();
+      const [path, query] = target.split("?");
+      url.pathname = path;
+      url.search = query ? `?${query}` : "";
       return NextResponse.redirect(url);
     }
   }

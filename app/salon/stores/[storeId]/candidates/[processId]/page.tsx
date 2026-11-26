@@ -24,6 +24,10 @@ import { HiringStatusBadge } from "@/components/hiring/status-badge";
 import { InterviewForm } from "@/components/hiring/interview-form";
 import { getStoreRecruitingAccess } from "@/lib/contracts/recruiting-access-actions";
 import { StatusPanel } from "@/components/hiring/status-panel";
+import { HireConfirmCard } from "@/components/hiring/hire-confirm-card";
+import { hireBillingEnabled } from "@/lib/billing/hire-flags";
+import { getSalonAgreement } from "@/lib/billing/hire-loader";
+import { isOpenAgreement } from "@/lib/billing/hire-agreement";
 import { InternalNoteForm } from "@/components/hiring/internal-note-form";
 
 type Props = {
@@ -79,6 +83,8 @@ export default async function CandidateDetailPage({ params }: Props) {
   if (!p) notFound();
 
   const events = await getHiringProcessEvents(processId);
+  // 採用契約（0109・提案・未適用）。機能フラグが有効で、運営が契約を開いており、権限のある場合だけ表示する。取得失敗は「契約なし」にしない。
+  const hireAgreement = hireBillingEnabled() && canManage ? await getSalonAgreement(supabase, processId) : null;
   const interviewUrl = p.interview_type === "online" ? asSafeHttpUrl(p.interview_location) : null;
 
   return (
@@ -204,9 +210,12 @@ export default async function CandidateDetailPage({ params }: Props) {
         <InternalNoteForm storeId={storeId} processId={processId} initialNote={p.internal_note} canManage={canManage} />
       </section>
 
+      {hireAgreement && !hireAgreement.ok && <p role="alert" className="mt-4 text-[12.5px] font-semibold text-[#8A2E2E]">入社の確認の情報を取得できませんでした。読み込み直してください（「契約なし」ではありません）。</p>}
+      {hireAgreement?.ok && hireAgreement.data && <HireConfirmCard v={hireAgreement.data} />}
+
       {canManage ? (
         <div className="mt-4">
-          <StatusPanel storeId={storeId} processId={processId} currentStatus={p.status} recruitingPaused={recruitingPaused} />
+          <StatusPanel storeId={storeId} processId={processId} currentStatus={p.status} recruitingPaused={recruitingPaused} hireAgreementUnknown={hireAgreement != null && !hireAgreement.ok} hireAgreementLive={hireAgreement?.ok === true && hireAgreement.data != null && isOpenAgreement(hireAgreement.data.status)} />
         </div>
       ) : (
         <p className="mt-4 rounded-lg bg-surface2 px-3 py-2 text-[11px] leading-relaxed text-sub">

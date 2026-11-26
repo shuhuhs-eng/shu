@@ -19,6 +19,10 @@ type Props = {
   currentStatus: string;
   /** 新しい採用活動を受け付けていない店舗か（辞退・不採用からの選考再開だけを止める）。 */
   recruitingPaused?: boolean;
+  /** 新しい採用契約（0109・提案）が開かれている（辞退・取消でない）採用か。true のとき、旧方式の「採用にする」は出さない（採用確定は内定カードの操作で行う。二重請求の防止）。 */
+  hireAgreementLive?: boolean;
+  /** 新機能が有効なのに契約情報を取得できなかった。「契約なし」と同じに扱わず、採用確定の操作を止めて再取得を案内する。 */
+  hireAgreementUnknown?: boolean;
 };
 
 // 面談予定は面談フォーム側、「内定」(offered)は廃止のため、ここでは選べない。
@@ -29,13 +33,13 @@ type TargetStatus = Exclude<HiringStatus, "interview_scheduled" | "offered">;
  * （面談予定への変更は日時が要るため、面談フォーム側で行う）。
  * 採用確定(hired)後は候補が空になり、何も表示しない。
  */
-export function StatusPanel({ storeId, processId, currentStatus, recruitingPaused = false }: Props) {
+export function StatusPanel({ storeId, processId, currentStatus, recruitingPaused = false, hireAgreementLive = false, hireAgreementUnknown = false }: Props) {
   const router = useRouter();
   // 辞退・不採用から連絡調整中へ戻す再開は「新しい採用活動の再開」なので、停止中の店舗では出さない
   // （DBのguardと同じ。面談・選考・採用・辞退・不採用などの既存の進行は止めない）。
   const isReopenBlocked = recruitingPaused && (currentStatus === "declined" || currentStatus === "rejected");
   const targets = allowedNextStatuses(currentStatus).filter(
-    (s): s is TargetStatus => s !== "interview_scheduled" && s !== "offered" && !(isReopenBlocked && s === "contacting"),
+    (s): s is TargetStatus => s !== "interview_scheduled" && s !== "offered" && !(isReopenBlocked && s === "contacting") && !((hireAgreementLive || hireAgreementUnknown) && s === "hired"),
   );
   const [selected, setSelected] = useState<TargetStatus | null>(null);
   const [publicNote, setPublicNote] = useState("");
@@ -46,6 +50,18 @@ export function StatusPanel({ storeId, processId, currentStatus, recruitingPause
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const unknownNote = hireAgreementUnknown && !hireAgreementLive ? (
+    <p data-testid="hire-unknown-note" role="alert" className="mt-3 rounded-lg bg-surface2 px-3 py-2 text-[11px] leading-relaxed text-[#8A2E2E]">
+      入社の確認（採用契約）の情報を取得できなかったため、<b>採用の確定は一時的に止めています</b>。画面を読み込み直してください（「契約なし」と判断したわけではありません）。
+    </p>
+  ) : null;
+  const liveNote = hireAgreementLive ? (
+    <p data-testid="hire-live-note" className="mt-3 rounded-lg bg-surface2 px-3 py-2 text-[11px] leading-relaxed text-sub">
+      この採用には採用契約（入社の確認・採用料の請求予定）が開かれています。<b>採用の確定は、上の「入社の確認」の操作で行います</b>（ここで「採用にする」を行うと、旧方式の成功報酬と二重になるため表示していません）。辞退・不採用にした場合は、運営が契約を辞退・取消に整理するまで、採用料の自動請求は開始されません。
+    </p>
+  ) : null;
+  if (targets.length === 0 && hireAgreementUnknown && !hireAgreementLive) return <div className="rounded-xl border border-line bg-surface p-4"><p className="text-[12px] font-bold text-ink">ステータスを変更</p>{unknownNote}</div>;
+  if (targets.length === 0 && hireAgreementLive) return <div className="rounded-xl border border-line bg-surface p-4"><p className="text-[12px] font-bold text-ink">ステータスを変更</p>{liveNote}</div>;
   if (targets.length === 0) {
     return isReopenBlocked ? (
       <p className="rounded-lg bg-surface2 px-3 py-2 text-[11px] leading-relaxed text-sub">
@@ -92,6 +108,7 @@ export function StatusPanel({ storeId, processId, currentStatus, recruitingPause
     <div className="rounded-xl border border-line bg-surface p-4">
       <p className="text-[12px] font-bold text-ink">ステータスを変更</p>
 
+      {liveNote}{unknownNote}
       <div className="mt-3 flex flex-wrap gap-2">
         {targets.map((target) => (
           <button

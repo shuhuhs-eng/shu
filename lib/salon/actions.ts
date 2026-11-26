@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { salonProfileFormSchema } from "@/lib/validation/salon-profile";
 import { salonLogoFormSchema } from "@/lib/validation/salon-logo";
 import type { AuthActionState } from "@/lib/auth/types";
+import { cardGateErrorMessage, salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 /**
  * サロンプロフィール保存。lib/profile/actions.ts の saveProfileAction と対称構造。
@@ -52,6 +53,8 @@ export async function saveSalonProfileAction(
 
   const v = parsed.data;
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { error: cardBlock };
 
   const {
     data: { user },
@@ -89,7 +92,8 @@ export async function saveSalonProfileAction(
   if (error) {
     // 固定パス方式のため、失敗時にStorage側を削除する補償処理は行わない
     // （削除すると既存の正常なアバターを消してしまう可能性があるため）。
-    return { error: "保存に失敗しました。しばらくしてから再度お試しください。" };
+    // 判定の後にDBがカード必須で拒否した場合は、案内文にそろえる。初回の登録（会社の作成）はDBが通すため、ここには来ない。
+    return { error: cardGateErrorMessage(error.message) ?? "保存に失敗しました。しばらくしてから再度お試しください。" };
   }
 
   // 保存成功後にのみ、不要になった旧画像を削除する。
@@ -127,6 +131,8 @@ export async function saveSalonLogoAction(
   }
 
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { error: cardBlock };
   const {
     data: { user },
   } = await supabase.auth.getUser();

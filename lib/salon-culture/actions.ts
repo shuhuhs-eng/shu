@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { runSalonCultureAiGenerationJob } from "@/lib/salon-culture/run-culture-ai-job";
 import { runSalonAiRetry, type SalonAiRetryResult } from "@/lib/salon-culture/ai-retry";
 import { checkSharedRateLimit } from "@/lib/rate-limit/shared-rate-limiter";
+import { salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 /**
  * 回答済み（completed）なのにAI紹介文が無いサロンが、画面のボタンから紹介文を作り直す。
@@ -14,6 +15,8 @@ import { checkSharedRateLimit } from "@/lib/rate-limit/shared-rate-limiter";
  */
 export async function generateSalonCultureAiAction(): Promise<SalonAiRetryResult | { status: "unauthenticated" }> {
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { status: "failed" as const, error: cardBlock };
   const {
     data: { user },
   } = await supabase.auth.getUser();

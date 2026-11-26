@@ -6,6 +6,9 @@ import { CLOSED_REASON_LABELS, CONFIRM_LABELS, ENTRANCE_LABELS, KIND_LABELS, SOU
 import { fmtJst, linkCls, OpsError, PageHead } from "@/components/admin/operations-ui";
 import { VisitRequestPanel } from "@/components/admin/visit-request-panel";
 import { WorkLogList } from "@/components/admin/work-log-list";
+import { VisitFeePanel, type FeeView } from "@/components/admin/visit-fee-panel";
+import { visitFeeEnabled } from "@/lib/billing/visit-fee-flag";
+import { isPlatformAdmin } from "@/lib/admin/is-admin";
 import { loadOperators, loadWorkRecords } from "@/lib/admin/work-log-loader";
 import { assigneeOptions, buildWorkLog, nameOf } from "@/lib/admin/work-log";
 
@@ -28,6 +31,12 @@ export default async function AdminVisitRequestDetail({ params }: Props) {
     ? all.data.rows.filter((r) => r.request_id && r.request_id !== d.id && r.stylist_user_id === d.stylist_user_id && r.store_id === d.store_id && r.status !== "closed")
         .map((r) => ({ id: r.request_id as string, label: `${ENTRANCE_LABELS[r.entrance]} / ${STATUS_LABELS[r.status]}${r.scheduled_on ? ` / ${r.scheduled_on}` : ""}` }))
     : [];
+  // 料金（責任者のみ・機能フラグ有効時のみ。0108適用前は呼ばない）。取得に失敗したら「0件」ではなく取得失敗を表示する。
+  let fee: FeeView | null = null; let feeError = false;
+  if (visitFeeEnabled() && d.occurrence_id && d.status === "attended" && (await isPlatformAdmin(supabase))) {
+    const r = await (supabase as unknown as { rpc: (f: string, a: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }> }).rpc("admin_visit_fee_get", { p_occurrence_id: d.occurrence_id });
+    if (r.error) feeError = true; else fee = (r.data as FeeView | null) ?? null;
+  }
   return (
     <main className="mx-auto max-w-[900px] px-5 py-10">
       <Link href="/admin/visit-requests" className="text-[12px] text-sub underline">受付一覧へ</Link>
@@ -44,6 +53,8 @@ export default async function AdminVisitRequestDetail({ params }: Props) {
         <Link href={`/admin/stylists/${d.stylist_user_id}`} className={linkCls}>美容師の詳細</Link>
       </div>
       <VisitRequestPanel key={d.updated_at} d={d} mergeCandidates={mergeCandidates} meId={user.id} assignees={opsRes.ok ? assigneeOptions(ops, d.assigned_admin_id) : null} />
+      {fee && <VisitFeePanel fee={fee} />}
+      {feeError && <p role="alert" className="mt-4 text-[12.5px] font-semibold text-[#8A2E2E]">料金情報を取得できませんでした。読み込み直してください（「料金なし」ではありません）。</p>}
       <WorkLogList log={log} loaded={recRes.ok} />
     </main>
   );

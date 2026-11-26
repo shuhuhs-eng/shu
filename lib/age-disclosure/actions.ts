@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { RECRUITING_PAUSED_MESSAGE, isRecruitingPausedError } from "@/lib/contracts/recruiting-access";
 import type { AgeDisplayMode, AgeRequestDecision, AgeRequestStatus } from "@/types/database";
+import { cardGateErrorMessage, salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 const requestSchema = z.object({ storeId: z.string().uuid(), stylistUserId: z.string().uuid() });
 const respondSchema = z.object({ requestId: z.string().uuid(), approve: z.boolean() });
@@ -23,6 +24,8 @@ export async function requestAgeDisclosure(input: z.infer<typeof requestSchema>)
   const parsed = requestSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "不正なリクエストです。" };
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false, error: cardBlock };
   const { data, error } = await supabase.rpc("request_stylist_age_disclosure", {
     p_store_id: parsed.data.storeId,
     p_stylist_user_id: parsed.data.stylistUserId,
@@ -31,6 +34,8 @@ export async function requestAgeDisclosure(input: z.infer<typeof requestSchema>)
     console.error("[requestAgeDisclosure] RPC failed", { message: error?.message, code: error?.code });
     const m = error?.message ?? "";
     if (isRecruitingPausedError(m)) return { success: false, error: RECRUITING_PAUSED_MESSAGE };
+    const cardMsg = cardGateErrorMessage(m);
+    if (cardMsg) return { success: false, error: cardMsg };
     if (m.includes("not allowed to request")) return { success: false, error: "この店舗で開示を依頼する権限がありません。" };
     if (m.includes("not needed")) return { success: false, error: "この美容師は実年齢を表示しています。依頼は不要です。" };
     return { success: false, error: "この美容師には依頼できません。" };

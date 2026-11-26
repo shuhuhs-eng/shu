@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { addSalonLinkSchema } from "@/lib/validation/salon-links";
 import type { Database, SalonLinkType } from "@/types/database";
 import { logError } from "@/lib/security/log";
+import { salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 export type SalonLinkRow = Database["public"]["Tables"]["salon_links"]["Row"];
 
@@ -52,6 +53,8 @@ export async function addSalonLinkAction(input: {
   }
 
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false, error: cardBlock };
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -102,6 +105,8 @@ export type DeleteSalonLinkResult = { success: true } | { success: false; error:
 /** 外部リンクを1件削除する（RLSのdelete_ownにより本人の行のみ削除可能）。 */
 export async function deleteSalonLinkAction(linkId: string): Promise<DeleteSalonLinkResult> {
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false, error: cardBlock };
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -5,7 +5,7 @@ import { HANDLED_EVENT_TYPES } from "../lib/stripe/webhook-handler";
 
 const goodEnv = { STRIPE_SECRET_KEY: "sk_test_abc", STRIPE_WEBHOOK_SECRET: "whsec_x", NEXT_PUBLIC_SITE_URL: "https://example.com" };
 
-test("handled events are the 11 expected", () => { assert.equal(new Set(HANDLED_EVENT_TYPES).size, 11); });
+test("handled events are the 13 expected", () => { assert.equal(new Set(HANDLED_EVENT_TYPES).size, 13); });
 test("env ok", () => { assert.equal(hasFailure(checkEnvReadiness(goodEnv)), false); });
 test("env missing values fail", () => { assert.equal(checkEnvReadiness({}).filter((c) => c.level === "fail").length, 3); });
 test("live key and allow-live fail", () => {

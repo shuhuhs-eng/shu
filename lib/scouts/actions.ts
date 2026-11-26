@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { RECRUITING_PAUSED_MESSAGE, isRecruitingPausedError } from "@/lib/contracts/recruiting-access";
+import { cardGateErrorMessage, salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 const sendStoreScoutSchema = z.object({
   storeId: z.string().uuid(),
@@ -25,6 +26,8 @@ export async function sendStoreScout(
   const parsed = sendStoreScoutSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "スカウト内容を確認してください。" };
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false, error: cardBlock };
   const { error } = await supabase.rpc("send_scout_v2", {
     p_store_id: parsed.data.storeId,
     p_stylist_user_id: parsed.data.stylistUserId,
@@ -36,6 +39,8 @@ export async function sendStoreScout(
     if (isRecruitingPausedError(error.message)) {
       return { success: false, error: RECRUITING_PAUSED_MESSAGE };
     }
+    const cardMsg = cardGateErrorMessage(error.message);
+    if (cardMsg) return { success: false, error: cardMsg };
     if (error.message.includes("monthly scout limit reached")) {
       return { success: false, error: "今月のスカウト枠を使い切りました。追加スカウト購入機能は準備中です。" };
     }

@@ -13,7 +13,7 @@
 ```
 set -a; source .env.local; set +a; npm run verify:stripe
 ```
-env・webhook購読11イベント・Customer Portal設定・Stripe Taxを確認（Stripe側は変更せず、秘密値も出力しない）。
+env・webhook購読13イベント・Customer Portal設定・Stripe Taxを確認（Stripe側は変更せず、秘密値も出力しない）。
 
 ## 2. Stripe側の設定（Test環境）
 - Customer Portal：支払い方法の更新 ON／請求履歴 ON／プラン変更 OFF／サブスク解約 OFF
@@ -21,7 +21,7 @@ env・webhook購読11イベント・Customer Portal設定・Stripe Taxを確認�
 - 商品・Priceに税率を付けない
 
 ## 3. Webhook（`/api/stripe/webhook`、署名検証必須）
-購読は次の11イベントだけ：`checkout.session.completed` / `checkout.session.async_payment_succeeded` / `checkout.session.expired` / `customer.subscription.created` / `customer.subscription.updated` / `customer.subscription.deleted` / `invoice.paid` / `invoice.payment_failed` / `payment_method.detached` / `charge.refunded` / `charge.dispute.created`
+購読は次の13イベントだけ：`checkout.session.completed` / `checkout.session.async_payment_succeeded` / `checkout.session.expired` / `customer.subscription.created` / `customer.subscription.updated` / `customer.subscription.deleted` / `invoice.paid` / `invoice.payment_failed` / `payment_method.detached` / `charge.refunded` / `charge.dispute.created` / `payment_intent.succeeded` / `payment_intent.payment_failed`（後ろ2件は採用料の自動請求の結果通知）
 
 **Stripe CLI（ローカル）**
 ```
@@ -30,7 +30,7 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook \
   --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.expired,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed,payment_method.detached,charge.refunded,charge.dispute.created
 # 表示された whsec_… を STRIPE_WEBHOOK_SECRET に設定
 ```
-**Dashboard**：開発者 → Webhooks → エンドポイント追加 → URL と上記11イベント → 署名シークレットを `STRIPE_WEBHOOK_SECRET` へ。
+**Dashboard**：開発者 → Webhooks → エンドポイント追加 → URL と上記13イベント → 署名シークレットを `STRIPE_WEBHOOK_SECRET` へ。
 
 注意：`stripe trigger` のフィクスチャはBeauty Reachのmetadataを持たないため `not_monthly_subscription` として無視される。月額の検証は実際のCheckout経由で行う。「翌月の継続invoice」は、Checkout完了後に
 `stripe subscriptions update <sub_id> --billing_cycle_anchor=now --proration_behavior=none` で次回請求を即時発生させて再現する。

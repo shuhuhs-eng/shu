@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdminOperator } from "@/lib/admin/operator";
 import { rpc } from "@/lib/messages/rpc";
 import { REOPEN_STATUSES, isUuid, parseBody, parseSubject } from "@/lib/messages/shared";
+import { salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 /**
  * 連絡のサーバー処理。★通知メールは送らない（送信設定・送信先の確認後に別途）。
@@ -34,6 +35,8 @@ export async function inboxReplyAction(fd: FormData): Promise<ActionResult> {
   if (!isUuid(rid) || !isUuid(thread)) return fail("画面を開き直してください。");
   const body = parseBody(s(fd, "body")); if (!body.ok) return fail(body.error);
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return fail(cardBlock);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return fail("ログインし直してください。");
   const res = await rpc<unknown>(supabase, "inbox_reply", { p_request_id: rid, p_thread_id: thread, p_body: body.value });

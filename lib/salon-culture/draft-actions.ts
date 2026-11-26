@@ -14,6 +14,7 @@ import { mapLimitError, type LimitErrorCode } from "@/lib/diagnosis-limit/messag
 import { fromPayload, fromPublished, toPayload, type DraftState } from "@/lib/salon-culture/draft";
 import { expectedBaseSchema } from "@/lib/validation/salon-culture-analysis";
 import { extractBaseAnswers, extractSupplementAnswers } from "@/lib/salon-culture/analysis/v1";
+import { salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 /**
  * サロンらしさ（本人用: storeId=null／店舗用: storeId=店舗）の「下書き保存」「確定」「破棄」。
@@ -57,6 +58,8 @@ export async function saveCultureDraftAction(
   if (!storeId.success || !rev.success || !step.success || !extra.success || !partial.success) return INVALID;
 
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false as const, code: "invalid" as const, error: cardBlock };
   const { data, error } = await looseRpc(supabase).rpc("save_salon_culture_draft", {
     p_store_id: storeId.data,
     p_payload: toPayload({ ...state, extra: extra.data as DraftState["extra"], extraPartial: partial.data as DraftState["extraPartial"] }, ANALYSIS_VERSION),
@@ -90,6 +93,8 @@ export async function confirmCultureAction(
   if (!storeId.success || !requestId.success || !rev.success) return INVALID;
 
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false as const, code: "invalid" as const, error: cardBlock };
   const { data, error } = await looseRpc(supabase).rpc("confirm_salon_culture_diagnosis", {
     p_store_id: storeId.data,
     p_request_id: requestId.data,
@@ -144,6 +149,8 @@ export async function saveExtraAndConfirmAction(
   if (!storeId.success || !requestId.success || !extra.success || !expectedBase.success) return INVALID;
 
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false as const, code: "invalid" as const, error: cardBlock };
   const {
     data: { user },
   } = await supabase.auth.getUser();

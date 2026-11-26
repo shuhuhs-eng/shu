@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { isSalaryOfferPresentationPaused, SALARY_OFFER_PAUSED_MESSAGE } from "@/lib/salary-offers/pause";
 import { RECRUITING_PAUSED_MESSAGE, isRecruitingPausedError } from "@/lib/contracts/recruiting-access";
+import { cardGateErrorMessage, salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 const offerFields = {
   stylistUserId: z.string().uuid(),
@@ -44,6 +45,8 @@ export async function createStoreSalaryOffer(input: z.infer<typeof storeOfferSch
   const parsed = storeOfferSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "提示条件を確認してください。" };
   const supabase = await createClient();
+  const cardBlock = await salonCardBlockMessage(supabase);
+  if (cardBlock) return { success: false, error: cardBlock };
   const { error } = await supabase.rpc("create_salary_offer_v2", {
     p_store_id: parsed.data.storeId,
     p_stylist_user_id: parsed.data.stylistUserId,
@@ -56,6 +59,8 @@ export async function createStoreSalaryOffer(input: z.infer<typeof storeOfferSch
   if (error) {
     console.error("[createStoreSalaryOffer] RPC failed", { message: error.message, code: error.code });
     if (isRecruitingPausedError(error.message)) return { success: false, error: RECRUITING_PAUSED_MESSAGE };
+    const cardMsg = cardGateErrorMessage(error.message);
+    if (cardMsg) return { success: false, error: cardMsg };
     if (error.message.includes("interest required")) {
       return { success: false, error: "この美容師から見学・体験入店の希望が届いていないため、条件を提示できません。" };
     }

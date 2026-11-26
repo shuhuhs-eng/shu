@@ -32,7 +32,7 @@ function fmtDate(iso: string | null): string {
  * ★運営者メモは取得もしない（RPCが返さない）。金額が未確定(null)の場合は0円ではなく「未確定」。
  * ★会社側からの金額変更・状態変更・免除・取消はできない（操作UIも作らない）。
  */
-export default async function CompanyBillingPage({ searchParams }: { searchParams: Promise<{ stripe?: string; kind?: string }> }) {
+export default async function CompanyBillingPage({ searchParams }: { searchParams: Promise<{ stripe?: string; kind?: string; card?: string }> }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login?next=/salon/company/billing");
@@ -41,7 +41,9 @@ export default async function CompanyBillingPage({ searchParams }: { searchParam
 
   // Stripe決済（Phase 48）。カード決済は追加手段で、銀行振込・請求書は従来どおり。
   const stripeReady = checkStripeEnv(process.env).ok;
-  const returned = parseReturn(await searchParams);
+  const sp = await searchParams;
+  const returned = parseReturn(sp);
+  const cardRequiredNotice = sp.card === "required";
   const orgIds = await getBillingOrganizationIds(supabase, user.id);
   const organizationId = orgIds[0] ?? null;
   const overview = organizationId ? await getCompanyPaymentOverview(supabase, organizationId) : null;
@@ -67,6 +69,12 @@ export default async function CompanyBillingPage({ searchParams }: { searchParam
       <p className="mt-3 text-[13px] leading-relaxed text-charcoal">
         採用が成立した件ごとの請求状況です。内容は運営が確認のうえ確定します。この画面から内容を変更することはできません。
       </p>
+
+      {cardRequiredNotice && (
+        <p role="alert" className="mt-4 rounded-lg border border-[#C24545]/30 bg-[#C24545]/10 px-3 py-2 text-[12.5px] leading-relaxed text-[#8A2E2E]">
+          サロンのご利用には、クレジットカードの登録が必要です。下の「カード」から登録してください。登録が完了すると、採用・メッセージなどの機能が使えるようになります。
+        </p>
+      )}
 
       {returned && (
         <p role="status" className="mt-4 rounded-lg bg-surface2 px-3 py-2 text-[12px] leading-relaxed text-charcoal">
