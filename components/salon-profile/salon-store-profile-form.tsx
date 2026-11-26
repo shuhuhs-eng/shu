@@ -8,9 +8,8 @@ import { SalonVisibilityField } from "@/components/salon-profile/salon-visibilit
 import { FormErrorBanner, FormSuccessBanner } from "@/components/auth/form-messages";
 import { TextField } from "@/components/auth/text-field";
 import { SelectField } from "@/components/profile/select-field";
-import { CheckboxGroupField } from "@/components/profile/checkbox-group-field";
 import { TextareaField } from "@/components/profile/textarea-field";
-import { PREFECTURES, SPECIALTY_OPTIONS } from "@/lib/validation/profile-options";
+import { PREFECTURES } from "@/lib/validation/profile-options";
 import type { SalonVisibilityChoice } from "@/lib/salon/store-visibility";
 import { StoreIntroField } from "@/components/salon-profile/store-intro-field";
 import { STORE_INTRO_MAX } from "@/lib/validation/salon-store-profile";
@@ -135,13 +134,6 @@ export function SalonStoreProfileForm({ storeId, initialValues, employeeSizeOpti
               defaultValue={initialValues.employeeSizeCode}
               options={employeeSizeOptions.map((e) => ({ value: e.code, label: e.label }))}
               errors={state.fieldErrors?.employeeSizeCode}
-            />
-            <CheckboxGroupField
-              name="targetSpecialties"
-              label="採用したい得意技術"
-              options={SPECIALTY_OPTIONS}
-              defaultValues={initialValues.targetSpecialties}
-              errors={state.fieldErrors?.targetSpecialties}
             />
             <TextField
               id="hotpepperUrl"

@@ -40,7 +40,7 @@ export const salonProfileFormSchema = z.object({
   employeeSizeCode: z.string().trim().max(50, "不正な値です").optional().or(z.literal("")),
   targetSpecialties: capArrayInput(
     SPECIALTY_OPTIONS.length,
-    z.array(z.enum(SPECIALTY_OPTIONS)).min(1, "採用したい得意技術を1つ以上選択してください"),
+    z.array(z.enum(SPECIALTY_OPTIONS)),
   ),
   instagramHandle: z
     .string()

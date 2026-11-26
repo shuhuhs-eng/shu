@@ -38,7 +38,7 @@ export const salonStoreProfileFormSchema = z.object({
   employeeSizeCode: z.string().trim().max(50, "不正な値です").optional().or(z.literal("")),
   targetSpecialties: capArrayInput(
     SPECIALTY_OPTIONS.length,
-    z.array(z.enum(SPECIALTY_OPTIONS)).min(1, "採用したい得意技術を1つ以上選択してください"),
+    z.array(z.enum(SPECIALTY_OPTIONS)),
   ),
   // 店舗紹介（旧「店舗のカルチャー・文化」の自由記述もここへ統合する）。上限は3,000字（DBも同じ。自動で切り詰めない）。
   bio: z

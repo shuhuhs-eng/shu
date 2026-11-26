@@ -44,7 +44,7 @@ type Call = { name: string; args: Record<string, unknown> };
 const env: { required: boolean; registered: boolean; stateFails: boolean; staleState: boolean; noCompany: boolean; calls: Call[] } = { required: true, registered: false, stateFails: false, staleState: false, noCompany: false, calls: [] };
 const fake = {
   auth: { getUser: async () => ({ data: { user: { id: "u1" } }, error: null }) },
-  from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: null, error: null }) }) }) }),
+  from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: null, error: null }), maybeSingle: async () => ({ data: null, error: null }) }) }) }),
   storage: { from: () => ({ remove: async () => ({ error: null }) }) },
   rpc: async (name: string, args: Record<string, unknown>) => {
     if (name === "get_my_salon_card_state") {

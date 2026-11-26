@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { salonStoreProfileFormSchema } from "@/lib/validation/salon-store-profile";
 import type { AuthActionState } from "@/lib/auth/types";
 import { logError } from "@/lib/security/log";
+import { resolveStoredSpecialties } from "@/lib/salon/preserve-specialties";
 import { saveStoreProfile } from "@/lib/salon/store-profile-save";
 import { salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
@@ -32,7 +33,7 @@ export async function saveSalonStoreProfileAction(
     city: formData.get("city"),
     streetAddress: formData.get("streetAddress"),
     employeeSizeCode: formData.get("employeeSizeCode"),
-    targetSpecialties: formData.getAll("targetSpecialties"),
+    targetSpecialties: [], // 得意技術は画面から外した。保存直前にDBの現在値を読み直す（下記）。
     bio: formData.get("bio"),
     visibility: formData.get("visibility"),
     hotpepperUrl: formData.get("hotpepperUrl"),
@@ -51,10 +52,14 @@ export async function saveSalonStoreProfileAction(
   const supabase = await createClient();
   const cardBlock = await salonCardBlockMessage(supabase);
   if (cardBlock) return { error: cardBlock };
+  const stored = await resolveStoredSpecialties(() =>
+    supabase.from("salon_store_profiles").select("target_specialties").eq("store_id", storeId).maybeSingle(),
+  );
+  if (!stored.ok) return { error: "保存に失敗しました。しばらくしてから再度お試しください。" };
   const result = await saveStoreProfile(
     { rpc: (fn, args) => supabase.rpc(fn as never, args as never) as never, log: (where, error) => logError(where, error) },
     storeId,
-    parsed.data,
+    { ...parsed.data, targetSpecialties: stored.value as typeof parsed.data.targetSpecialties },
   );
   // 保存に失敗した（または結果を確認できない）ときは、成功を表示しない。
   if (!result.success) return { error: result.error };

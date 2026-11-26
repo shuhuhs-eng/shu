@@ -10,14 +10,13 @@ import { PendingFieldset } from "@/components/auth/pending-fieldset";
 import { FormErrorBanner, FormSuccessBanner } from "@/components/auth/form-messages";
 import { TextField } from "@/components/auth/text-field";
 import { SelectField } from "@/components/profile/select-field";
-import { CheckboxGroupField } from "@/components/profile/checkbox-group-field";
 import { TextareaField } from "@/components/profile/textarea-field";
 import { AvatarUploader } from "@/components/profile/avatar-uploader";
 import { SalonPhotoUploader } from "@/components/salon-profile/salon-photo-uploader";
 import { SalonLinksEditor } from "@/components/salon-profile/salon-links-editor";
 import type { SalonPhotoWithUrl } from "@/lib/salon-photos/actions";
 import type { SalonLinkRow } from "@/lib/salon-links/actions";
-import { PREFECTURES, SPECIALTY_OPTIONS } from "@/lib/validation/profile-options";
+import { PREFECTURES } from "@/lib/validation/profile-options";
 import { SalonVisibilityField } from "@/components/salon-profile/salon-visibility-field";
 import { SALON_VISIBILITY_NEW_DEFAULT } from "@/lib/salon/store-visibility";
 import type { ProfileVisibility } from "@/types/database";
@@ -57,7 +56,7 @@ type Props = {
 /**
  * サロンプロフィールフォーム。components/profile/profile-form.tsx（stylist側）と対称構造。
  * 個人情報セクション（stylist_privateに相当するもの）・スカウト受信設定
- * （user_settingsに相当するもの）は無い。得意技術のかわりに「採用したい得意技術」を使う。
+ * （user_settingsに相当するもの）は無い。（旧・採用技術の選択欄は画面から削除済み。保存値はDBの現在値を保存直前に読み直して維持する）。
  * 従業員数はenumではなくemployee_size_masterから取得した選択肢を使う点のみ、
  * stylist側と構造が異なる（マスタテーブル参照のため）。
  */
@@ -136,13 +135,6 @@ export function SalonProfileForm({ mode, userId, initialValues, employeeSizeOpti
               defaultValue={initialValues.employeeSizeCode}
               options={employeeSizeOptions.map((e) => ({ value: e.code, label: e.label }))}
               errors={state.fieldErrors?.employeeSizeCode}
-            />
-            <CheckboxGroupField
-              name="targetSpecialties"
-              label="採用したい得意技術"
-              options={SPECIALTY_OPTIONS}
-              defaultValues={initialValues.targetSpecialties}
-              errors={state.fieldErrors?.targetSpecialties}
             />
             <TextareaField
               id="cultureDescription"

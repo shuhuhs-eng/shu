@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { salonProfileFormSchema } from "@/lib/validation/salon-profile";
 import { salonLogoFormSchema } from "@/lib/validation/salon-logo";
 import type { AuthActionState } from "@/lib/auth/types";
+import { resolveStoredSpecialties } from "@/lib/salon/preserve-specialties";
 import { cardGateErrorMessage, salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 /**
@@ -35,7 +36,8 @@ export async function saveSalonProfileAction(
     streetAddress: formData.get("streetAddress"),
     cultureDescription: formData.get("cultureDescription"),
     employeeSizeCode: formData.get("employeeSizeCode"),
-    targetSpecialties: formData.getAll("targetSpecialties"),
+    // 得意技術は画面から外した。フォームの値は使わず、保存直前にDBの現在値を読み直す（下記）。
+    targetSpecialties: [],
     instagramHandle: formData.get("instagramHandle"),
     bio: formData.get("bio"),
     avatarPath: formData.get("avatarPath"),
@@ -64,6 +66,11 @@ export async function saveSalonProfileAction(
     return { error: "セッションが切れています。再度ログインしてください。" };
   }
 
+  const stored = await resolveStoredSpecialties(() =>
+    supabase.from("salon_profiles").select("target_specialties").eq("user_id", user.id).maybeSingle(),
+  );
+  if (!stored.ok) return { error: "保存に失敗しました。しばらくしてから再度お試しください。" };
+
   const newAvatarPath = v.avatarPath || null;
 
   // 旧画像削除の判定に使うため、RPC呼び出し前の現在の avatar_path を取得しておく。
@@ -81,7 +88,7 @@ export async function saveSalonProfileAction(
     p_street_address: v.streetAddress || null,
     p_culture_description: v.cultureDescription || null,
     p_employee_size_code: v.employeeSizeCode || null,
-    p_target_specialties: v.targetSpecialties,
+    p_target_specialties: stored.value,
     p_instagram_handle: v.instagramHandle || null,
     p_bio: v.bio || null,
     p_visibility: v.visibility,
