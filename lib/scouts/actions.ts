@@ -6,7 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { RECRUITING_PAUSED_MESSAGE, isRecruitingPausedError } from "@/lib/contracts/recruiting-access";
 import { scoutLedgerEnabled } from "@/lib/billing/hire-flags";
-import { ledgerSendErrorMessage, nextSendMode } from "@/lib/billing/scout-send-rules";
+import { ledgerSendErrorMessage, nextSendMode, isUnknownOutcome, UNKNOWN_OUTCOME_MESSAGE, type SendRpcError } from "@/lib/billing/scout-send-rules";
 import { cardGateErrorMessage, salonCardBlockMessage } from "@/lib/billing/salon-card-gate";
 
 const sendStoreScoutSchema = z.object({
@@ -51,10 +51,21 @@ export async function sendStoreScout(
     const { data: mode } = await supabase.rpc("scout_send_mode" as never);
     ledger = mode === "ledger";
   }
-  let { error } = await send(ledger);
+  // 送信の結果。例外（通信切れ等）は thrown。結果が分からないときは別の方式で送り直さず、台帳方式なら同じ操作のキーで結果を照合する。
+  const attempt = async (ledgerMode: boolean): Promise<{ error: SendRpcError; thrown: boolean }> => {
+    try { const r = await send(ledgerMode); return { error: r.error, thrown: false }; } catch { return { error: null, thrown: true }; }
+  };
+  let { error, thrown } = await attempt(ledger);
   if (error && flagOn) {
-    const flip = nextSendMode(error.message, ledger);
-    if (flip !== null) { ledger = flip; ({ error } = await send(ledger)); }
+    const flip = nextSendMode(error, ledger);   // DBが「何もしていない」と明示したときだけ
+    if (flip !== null) { ledger = flip; ({ error, thrown } = await attempt(ledger)); }
+  }
+  if (isUnknownOutcome(error, thrown)) {
+    if (ledger) {
+      const { data: found } = await supabase.rpc("scout_send_result" as never, { p_request_id: requestId } as never);
+      if (found && typeof found === "object" && (found as { found?: boolean }).found === true) { error = null; thrown = false; }
+      else return { success: false, error: UNKNOWN_OUTCOME_MESSAGE };
+    } else return { success: false, error: UNKNOWN_OUTCOME_MESSAGE };
   }
   if (error) {
     console.error("[sendStoreScout] RPC failed", { message: error.message, code: error.code });

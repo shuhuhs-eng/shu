@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { ledgerSendErrorMessage, makeRequestIdHolder, nextSendMode } from "../lib/billing/scout-send-rules";
+import { ledgerSendErrorMessage, makeRequestIdHolder, nextSendMode, isUnknownOutcome, NOTHING_DONE_HINT } from "../lib/billing/scout-send-rules";
 
 test("残高不足などを利用者向けの文言にする（内部名は出さない）", () => {
   assert.equal(ledgerSendErrorMessage("ERROR: insufficient scout balance"), "スカウトの残数が足りません。");
@@ -24,17 +24,28 @@ test("送信処理: フラグ'1'のときだけ台帳方式。既定は従来の
   assert.match(c, /requestId: requestIds\.current\.get\(/);
 });
 
-test("切替の途中で方式が食い違ったときだけ、逆の方式で1回やり直す", () => {
-  assert.equal(nextSendMode("legacy scout sending is closed", false), true);
-  assert.equal(nextSendMode("ledger scout sending is not active", true), false);
-  assert.equal(nextSendMode("legacy scout sending is closed", true), null);
-  assert.equal(nextSendMode("insufficient scout balance", true), null);
-  assert.ok(ledgerSendErrorMessage("legacy scout sending is closed"));
+test("方式の食い違いは、DBが『何もしていない』と明示したときだけ逆の方式でやり直す", () => {
+  const hint = NOTHING_DONE_HINT;
+  assert.equal(nextSendMode({ message: "legacy scout sending is closed", code: "P0001", hint }, false), true);
+  assert.equal(nextSendMode({ message: "ledger scout sending is not active", code: "P0001", hint }, true), false);
+  assert.equal(nextSendMode({ message: "legacy scout sending is closed", code: "P0001", hint }, true), null);
+  assert.equal(nextSendMode({ message: "legacy scout sending is closed", code: "P0001", hint: null }, false), null);   // 印が無ければやり直さない
+  assert.equal(nextSendMode({ message: "legacy scout sending is closed" }, false), null);
+  assert.equal(nextSendMode({ message: "insufficient scout balance", code: "P0001", hint }, true), null);
+  assert.equal(nextSendMode({ message: "scout sending is paused", code: "P0001", hint }, true), null);   // 一時停止は別の方式でも送らない
+  assert.ok(ledgerSendErrorMessage("legacy scout sending is closed")); assert.ok(ledgerSendErrorMessage("scout sending is paused"));
+});
+test("結果が分からない失敗（通信切れ・タイムアウト）は別の方式で送り直さない", () => {
+  assert.equal(isUnknownOutcome({ message: "fetch failed" }, false), true);          // DBのコード無し
+  assert.equal(isUnknownOutcome(null, true), true);                                  // 例外
+  assert.equal(isUnknownOutcome({ message: "insufficient scout balance", code: "P0001" }, false), false);   // DBが「できなかった」と返した
+  assert.equal(isUnknownOutcome(null, false), false);
+  assert.equal(nextSendMode({ message: "fetch failed" }, false), null);
 });
 test("送信前にDBの送信方式を読む（フラグ'1'のときだけ）・残数表示は共通部品", () => {
   const a = readFileSync("lib/scouts/actions.ts", "utf8");
   assert.match(a, /if \(flagOn\) \{\s*const \{ data: mode \} = await supabase\.rpc\("scout_send_mode"/);
-  assert.match(a, /nextSendMode\(error\.message, ledger\)/);
+  assert.match(a, /nextSendMode\(error, ledger\)/); assert.match(a, /scout_send_result/);
   const c = readFileSync("components/store-activity/scout-allowance.tsx", "utf8");
   assert.match(c, /scoutLedgerEnabled\(\)/); assert.match(c, /mode !== "ledger"/); assert.match(c, /scout_ledger_balance_for_store/);
   assert.match(readFileSync("app/salon/stores/[storeId]/page.tsx", "utf8"), /<ScoutAllowance storeId=\{storeId\}/);
