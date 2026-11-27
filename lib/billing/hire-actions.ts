@@ -26,6 +26,17 @@ async function call(fn: string, args: Record<string, unknown>, paths: string[], 
   return { success: true, data };
 }
 const ADMIN = ["/admin/hire-agreements"];
+/**
+ * 採用料の登録区分ルール（hire_fee_role_source）を決定済みにする。責任者のみ（DBが再確認）。
+ * ★固定の1操作だけ。項目名・値を画面から受け取らない。自動請求・カード必須化は変更しない（DBが前後で値の変化を検知すると全体を戻す）。履歴はDBが記録する。
+ * DB 0112 が未適用ならこの関数が無く、失敗する（履歴が残らない変更は行わない）。
+ */
+export async function decideHireRoleRule(input: { understood: boolean }): Promise<Result> {
+  if (!z.object({ understood: z.literal(true) }).safeParse(input).success) return { success: false, error: "内容を確認したことにチェックしてください。" };
+  const r = await call("admin_billing_hire_role_rule_decide", {}, ADMIN);
+  if (!r.success && r.error.includes("処理を完了できませんでした")) return { success: false, error: "決定を記録できませんでした。変更履歴の機能（DB 0112）が未適用か、責任者の権限がありません。何も変更されていません。" };
+  return r;
+}
 const bad: Result = { success: false, error: "入力を確認してください。" };
 
 export async function openHireAgreement(input: { hiringProcessId: string }): Promise<Result> {

@@ -50,6 +50,15 @@ export const INTEGRITY_LABELS: Record<IntegrityItem["kind"], string> = {
   attempt_stuck: "請求の試行が長く進行中・結果不明のまま残っています。自動の復旧（Stripe照合）で確定しない場合は、Stripe管理画面で入金を確認して記録してください（結果不明のまま新しい試行は作られません）",
   legacy_placeholder: "金額のない旧成功報酬の自動作成行が併存しています（請求ではありません。旧方式の確認操作をしないでください）",
 };
+/** 課金設定の変更履歴（DB 0112。責任者のみ取得できる）。 */
+export type BillingSettingChange = { id: number; setting_key: string; old_value: string | null; old_status: "decided" | "undecided"; new_value: string | null; new_status: "decided" | "undecided"; changed_by: string | null; note: string | null; changed_at: string };
+/** 課金設定の表示名。ここにない項目は項目名のまま表示する。画面から変更できるのは hire_fee_role_source（採用料の登録区分ルール）だけ。 */
+export const BILLING_SETTING_LABELS: Record<string, string> = {
+  hire_fee_role_source: "採用料の登録区分ルール", auto_charge_enabled: "採用料の自動請求", salon_card_required: "サロンのカード必須化",
+  hire_fee_stylist_excl_tax: "採用料（スタイリスト・税抜）", hire_fee_assistant_excl_tax: "採用料（アシスタント・税抜）", tax_percent: "消費税率（%）",
+  auto_charge_retry_policy: "自動請求の再試行方針", auto_charge_card_missing_policy: "カード未登録時の扱い", hire_proxy_wait_days: "代理操作までの日数", scout_refund_balance_policy: "スカウト購入の返金時の残高の扱い",
+};
+export const HIRE_ROLE_RULE_VALUE_LABEL = "運営が本人に確認した登録区分";
 export type BillingSetting = { key: string; value: string | null; status: "decided" | "undecided"; note: string | null; updated_at: string };
 export type SalonAgreementView = {
   agreement_id: string; status: AgreementStatus; fee_role: FeeRole | null; start_date: string | null; stylist_intent_confirmed_at: string | null; salon_confirmed_at: string | null;
@@ -76,7 +85,7 @@ export function agreementActions(status: AgreementStatus, isResponsible: boolean
 
 /** 設定のうち、画面で必ず明示する未決定項目。 */
 export const UNDECIDED_NOTES: Record<string, string> = {
-  hire_fee_role_source: "採用料の区分は、運営が本人に確認した登録区分を入力します（2026-11-27決定・自動判定はしません）。設定の記録がまだ更新されていないため「未決定」と表示されています。この設定が決定済みになるまで、自動請求は有効にできません。",
+  hire_fee_role_source: "採用料の区分は、運営が本人に確認した登録区分を入力します（2026-11-27決定・自動判定はしません）。設定の記録がまだ更新されていないため「未決定」と表示されています。この設定が決定済みになるまで、自動請求は有効にできません。責任者は、この画面の「課金設定」から決定を記録できます。",
 };
 
 export function hireErrorMessage(m: string | undefined | null): string {
@@ -101,6 +110,8 @@ export function hireErrorMessage(m: string | undefined | null): string {
     ["agreement not found", "契約が見つかりません。"],
     ["hiring process not found", "採用の情報が見つかりません。"],
     ["stale agreement revision", "画面の内容が古くなっています（他の方が先に変更・確定しました）。読み込み直して最新の内容を確認してから、もう一度操作してください。"],
+    ["hire role rule already decided", "採用料の登録区分ルールはすでに決定済みです。画面を読み込み直してください。"],
+    ["auto charge or card requirement changed unexpectedly", "自動請求・カード必須化の設定が変わる異常を検知したため、全体を取り消しました。何も変更されていません。"],
     ["confirmed terms do not match", "画面の入社予定日・登録区分が現在の内容と違います。読み込み直して最新の内容を確認してください。"],
     ["confirmed amount does not match", "採用料の金額が変わりました。読み込み直して最新の金額を確認してから、もう一度操作してください。"],
     ["fee settings are not decided", "採用料の設定が未確定のため、確定できません。"],

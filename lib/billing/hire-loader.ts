@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AgreementDetail, AgreementRow, BillingSetting, IntegrityItem, SalonAgreementView } from "@/lib/billing/hire-agreement";
+import type { AgreementDetail, AgreementRow, BillingSetting, BillingSettingChange, IntegrityItem, SalonAgreementView } from "@/lib/billing/hire-agreement";
 
 /** 取得の失敗を「0件」にしない。forbidden=権限なし／unavailable=DBの機能が未適用／error=その他。 */
 export type Loaded<T> = { ok: true; data: T } | { ok: false; reason: "forbidden" | "unavailable" | "error" };
@@ -29,6 +29,10 @@ export function getAgreement(supabase: Rpc, id: string) {
 }
 export function listSettings(supabase: Rpc) {
   return rpc<BillingSetting[]>(supabase, "admin_billing_settings_list", {}, (v): v is BillingSetting[] => Array.isArray(v));
+}
+/** 課金設定の変更履歴（責任者のみ。DB 0112 が未適用なら unavailable）。 */
+export function listSettingChanges(supabase: Rpc, limit = 30) {
+  return rpc<BillingSettingChange[]>(supabase, "admin_billing_setting_changes_list", { p_limit: limit }, (v): v is BillingSettingChange[] => Array.isArray(v));
 }
 /** サロン側。契約が開かれていなければ data=null。 */
 export function getSalonAgreement(supabase: Rpc, hiringProcessId: string) {
