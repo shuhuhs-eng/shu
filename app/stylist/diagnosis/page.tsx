@@ -9,8 +9,8 @@ import Link from "next/link";
 import { publicPageMetadata } from "@/lib/seo/metadata";
 
 export const metadata = publicPageMetadata({
-  title: "美容師のタイプ診断 | Beauty Reach",
-  description: "質問に答えて、あなたの美容師としてのタイプを診断。相性の合うサロンと出会うための最初のステップです。",
+  title: "美容師タイプ診断（30問）｜Beauty Reach",
+  description: "30問の診断で、美容師としてのタイプがわかります。会員登録して結果を保存すると、診断結果を、相性の合うサロン探しに活かせます。診断は会員登録なしで始められます。",
   path: "/stylist/diagnosis",
 });
 
@@ -57,6 +57,16 @@ export default async function StylistDiagnosisPage() {
   // 入口は共通の30問だけ。1問目で「新卒・これから美容師として働く」を選ぶと新卒向けの質問になる。立場（プロフィール）は診断では変えない。
   return (
     <>
+      {/* 初めての人向けの短い案内（未ログインのときだけ）。診断で分かることと、登録が要るタイミングを先に伝える。 */}
+      {!user && (
+        <section aria-labelledby="diagnosis-intro" className="mx-auto max-w-[520px] px-5 pt-6">
+          <h2 id="diagnosis-intro" className="font-serif text-[18px] font-bold leading-snug text-ink">美容師タイプ診断（30問）</h2>
+          <p className="mt-2 text-[13px] leading-relaxed text-charcoal">
+            30問の回答から、美容師としてのタイプ（8タイプ）がわかります。会員登録して結果を保存すると、診断結果を、相性の合うサロン探しに活かせます。
+          </p>
+          <p className="mt-1.5 text-[12px] leading-relaxed text-sub">診断は会員登録なしで始められます。結果を保存するときに登録します。</p>
+        </section>
+      )}
       <DiagnosisQuiz mode="stylist" isLoggedIn={!!user} limitStatus={limitStatus} newgradEnabled={isNewgradEntryEnabled()} />
     </>
   );

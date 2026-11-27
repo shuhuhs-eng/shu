@@ -11,8 +11,8 @@ import { getUnreadNotificationCount } from "@/lib/notifications/get-notification
 import { publicPageMetadata } from "@/lib/seo/metadata";
 
 export const metadata = publicPageMetadata({
-  title: "Beauty Reach — 才能を、多彩に評価する。",
-  description: "美容師の才能を診断し、相性の合うサロンと出会う。Beauty Reachは、美容師とサロンの相性を診断でつなぐサービスです。",
+  title: "美容師のタイプ診断・サロンとの相性｜Beauty Reach",
+  description: "30問の診断で、美容師としてのタイプがわかります。会員登録して結果を保存すると、診断結果を、相性の合うサロン探しに活かせます。",
   path: "/",
 });
 

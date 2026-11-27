@@ -81,3 +81,31 @@ test("noindexレイアウト: 管理・認証・ログイン入口", () => {
     assert.match(read(f), /export const metadata = NOINDEX_METADATA/, f);
   }
 });
+
+test("トップ・診断の説明文: 診断で分かることを初見の人に伝え、未公開機能を載せない", () => {
+  const home = read("app/page.tsx");
+  const diag = read("app/stylist/diagnosis/page.tsx");
+  const pick = (src: string, key: "title" | "description") => (src.match(new RegExp(`${key}: "([^"]+)"`)) ?? [])[1] ?? "";
+  // トップの検索向けタイトルに、対象とサービス内容を明記する
+  assert.equal(pick(home, "title"), "美容師のタイプ診断・サロンとの相性｜Beauty Reach");
+  for (const src of [home, diag]) {
+    const d = pick(src, "description");
+    assert.ok(d.length <= 120, `説明文の長さ ${d.length}`);
+    assert.match(d, /30問/);
+    assert.match(d, /タイプ/);
+    assert.doesNotMatch(d, /約[35]分/);
+    // 公開前の機能（地域検索・スカウト台帳・採用料/見学料・新卒入口）は載せない
+    assert.doesNotMatch(d, /地域|エリア|台帳|採用料|見学料|新卒|学生|スカウト/);
+  }
+  assert.ok(pick(diag, "title").length <= 40);
+  assert.equal(pick(diag, "title"), "美容師タイプ診断（30問）｜Beauty Reach");
+  // 説明文は、診断直後（タイプ）と登録後（相性は「店舗を探す」画面で自分で確認する導線）の実際の表示に揃え、トップと診断で同じ文を使う
+  const common = "30問の診断で、美容師としてのタイプがわかります。会員登録して結果を保存すると、診断結果を、相性の合うサロン探しに活かせます。";
+  assert.equal(pick(home, "description"), common);
+  assert.equal(pick(diag, "description"), common + "診断は会員登録なしで始められます。");
+  assert.doesNotMatch(pick(home, "description") + pick(diag, "description"), /市場価値|年収/);
+  // 診断ページの案内は未ログインだけに出し、登録のタイミングを明記
+  assert.match(diag, /\{!user && \(/);
+  assert.match(diag, /会員登録なしで始められます/);
+  assert.doesNotMatch(diag.slice(diag.indexOf('id="diagnosis-intro"'), diag.indexOf("<DiagnosisQuiz")), /新卒|地域|台帳/);
+});
