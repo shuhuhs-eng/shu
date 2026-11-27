@@ -50,7 +50,7 @@ export const INTEGRITY_LABELS: Record<IntegrityItem["kind"], string> = {
   attempt_stuck: "請求の試行が長く進行中・結果不明のまま残っています。自動の復旧（Stripe照合）で確定しない場合は、Stripe管理画面で入金を確認して記録してください（結果不明のまま新しい試行は作られません）",
   legacy_placeholder: "金額のない旧成功報酬の自動作成行が併存しています（請求ではありません。旧方式の確認操作をしないでください）",
 };
-/** 課金設定の変更履歴（DB 0112。責任者のみ取得できる）。 */
+/** 課金設定の変更履歴（DB 0113。責任者のみ取得できる）。 */
 export type BillingSettingChange = { id: number; setting_key: string; old_value: string | null; old_status: "decided" | "undecided"; new_value: string | null; new_status: "decided" | "undecided"; changed_by: string | null; note: string | null; changed_at: string };
 /** 課金設定の表示名。ここにない項目は項目名のまま表示する。画面から変更できるのは hire_fee_role_source（採用料の登録区分ルール）だけ。 */
 export const BILLING_SETTING_LABELS: Record<string, string> = {
@@ -111,7 +111,8 @@ export function hireErrorMessage(m: string | undefined | null): string {
     ["hiring process not found", "採用の情報が見つかりません。"],
     ["stale agreement revision", "画面の内容が古くなっています（他の方が先に変更・確定しました）。読み込み直して最新の内容を確認してから、もう一度操作してください。"],
     ["hire role rule already decided", "採用料の登録区分ルールはすでに決定済みです。画面を読み込み直してください。"],
-    ["auto charge or card requirement changed unexpectedly", "自動請求・カード必須化の設定が変わる異常を検知したため、全体を取り消しました。何も変更されていません。"],
+    ["auto charge and card requirement must be off before", "自動請求またはカード必須化がOFFではないため、決定は記録できません。何も変更されていません。"],
+    ["auto charge and card requirement must be off after", "決定の前後で自動請求またはカード必須化がOFFではなくなる異常を検知したため、全体を取り消しました。何も変更されていません。"],
     ["confirmed terms do not match", "画面の入社予定日・登録区分が現在の内容と違います。読み込み直して最新の内容を確認してください。"],
     ["confirmed amount does not match", "採用料の金額が変わりました。読み込み直して最新の金額を確認してから、もう一度操作してください。"],
     ["fee settings are not decided", "採用料の設定が未確定のため、確定できません。"],

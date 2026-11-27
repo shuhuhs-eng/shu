@@ -39,10 +39,13 @@ test("課金設定の画面: 変更履歴・決定ボタンは責任者だけ。
   const panel = src("components/admin/billing-settings-panel.tsx");
   assert.ok(panel.includes("disabled={busy || !ok}") && panel.includes("変更されません（OFFのまま）"));
 });
-test("DB草案0112: 履歴は追記専用・直接参照不可・責任者のみ。決定操作は自動請求とカード必須化の前後の値を照合する", () => {
-  const sql = src("docs/hire-fee-role-db/0112_billing_setting_history.DRAFT_NOT_APPLIED.sql");
+test("DB草案0113: 履歴は追記専用・直接参照不可・責任者のみ。決定操作は自動請求とカード必須化の前後の値を照合する", () => {
+  const sql = src("docs/hire-fee-role-db/0113_billing_setting_history.DRAFT_NOT_APPLIED.sql");
   assert.ok(sql.includes("append-only") && sql.includes("revoke all on public.billing_setting_changes from public, anon, authenticated, service_role"));
-  assert.ok(sql.includes("_billing_responsible_guard()") && sql.includes("auto charge or card requirement changed unexpectedly"));
+  assert.ok(sql.includes("_billing_responsible_guard()") && sql.includes("must be off before this decision") && sql.includes("must be off after this decision"));
+  const rb = src("docs/hire-fee-role-db/0113_billing_setting_history.rollback.DRAFT.sql");
+  assert.ok(!/drop table[^;]*billing_setting_changes/i.test(rb) && !/delete from[^;]*billing_setting_changes|truncate/i.test(rb), "巻き戻しは変更履歴を削除しない");
+  assert.ok(hireErrorMessage("auto charge and card requirement must be off before this decision").includes("OFFではない"));
   assert.ok(!/admin_billing_setting_set\('(auto_charge_enabled|salon_card_required)'/.test(sql));
   assert.ok(hireErrorMessage("hire role rule already decided").includes("決定済み"));
 });

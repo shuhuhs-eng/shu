@@ -45,8 +45,8 @@ export default async function HireAgreementsPage({ searchParams }: Props) {
         <p className="mt-2 text-[12px] text-sub">自動請求とカード必須化は、この画面からは変更できません（現在の値の表示のみ）。</p>
         {roleRule?.status === "undecided" && (!responsible ? <p className="mt-2 text-[12px] text-sub">採用料の登録区分ルールの決定は、責任者のみ記録できます。</p>
           : changes?.ok ? <HireRoleRuleDecision />
-          : <p role="alert" className="mt-2 text-[12px] font-semibold text-[#8A2E2E]">変更履歴の機能（DB 0112）が使えない状態のため、決定は記録できません（履歴が残らない変更は行いません）。</p>)}
-        {responsible && (changes && !changes.ok ? <p className="mt-2 text-[12px] text-sub">変更履歴は、DB 0112 の適用後に表示されます（取得できませんでした）。</p> : changes?.ok && (
+          : <p role="alert" className="mt-2 text-[12px] font-semibold text-[#8A2E2E]">変更履歴の機能（DB 0113）が使えない状態のため、決定は記録できません（履歴が残らない変更は行いません）。</p>)}
+        {responsible && (changes && !changes.ok ? <p className="mt-2 text-[12px] text-sub">変更履歴は、DB 0113 の適用後に表示されます（取得できませんでした）。</p> : changes?.ok && (
           <div className="mt-3"><h3 className="text-[12.5px] font-semibold">変更履歴（新しい順）</h3>
             {changes.data.length === 0 ? <p className="mt-1 text-[12px] text-sub">履歴はまだありません。</p> : <ul className="mt-1 space-y-1 text-[12px] text-sub">{changes.data.map((c) => (
               <li key={c.id}>{fmtJst(c.changed_at)} ／ {BILLING_SETTING_LABELS[c.setting_key] ?? c.setting_key}: {c.old_status === "undecided" ? "未決定" : settingValueLabel(c.setting_key, c.old_value)} → {c.new_status === "undecided" ? "未決定" : settingValueLabel(c.setting_key, c.new_value)}{c.note ? `（${c.note}）` : ""}</li>))}</ul>}
