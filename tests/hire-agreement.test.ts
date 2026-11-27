@@ -37,8 +37,8 @@ test("DBのエラーを利用者向けの文言に直す（内部の語を出さ
   assert.equal(hireErrorMessage("some internal error xyz"), "処理を完了できませんでした。時間をおいて再度お試しください。");
   assert.ok(hireErrorMessage(null).includes("処理を完了できませんでした"));
 });
-test("役職の判定元などの未決定事項を明示する文言がある", () => {
-  assert.ok(UNDECIDED_NOTES.hire_fee_role_source.includes("未決定"));
+test("設定の記録が未更新の間は「未決定」と明示し、決定済みの規則を併記する", () => {
+  assert.ok(UNDECIDED_NOTES.hire_fee_role_source.includes("未決定") && UNDECIDED_NOTES.hire_fee_role_source.includes("2026-11-27決定"));
   assert.equal(AGREEMENT_STATUS_LABELS.not_opened, "契約未作成");
 });
 test("機能フラグは既定オフ・'1'のときだけオン", () => {

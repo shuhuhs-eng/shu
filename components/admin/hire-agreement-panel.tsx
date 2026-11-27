@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { changeHirePlan, closeHireAgreement, openHireAgreement, proxyConfirmHire, recordStylistIntent, switchHireToLegacyRoute } from "@/lib/billing/hire-actions";
-import { agreementActions, FEE_ROLE_LABELS, yen, type AgreementDetail, type FeeRole } from "@/lib/billing/hire-agreement";
+import { agreementActions, FEE_ROLE_FIELD_LABEL, FEE_ROLE_GUIDE, FEE_ROLE_LABELS, FEE_ROLE_UNCONFIRMED_GUIDE, yen, type AgreementDetail, type FeeRole } from "@/lib/billing/hire-agreement";
 
 const btn = "min-h-[44px] rounded-full bg-ink px-5 text-[13px] font-semibold text-white disabled:opacity-50";
 const btnLine = "min-h-[44px] rounded-full border border-line px-5 text-[13px] font-semibold disabled:opacity-50";
@@ -36,23 +36,27 @@ export function OpenAgreementButton({ hiringProcessId }: { hiringProcessId: stri
 }
 
 /** 責任者・運営の操作。★請求は実行されない（自動請求は無効）。操作の可否の最終判断はDB。 */
-export function HireAgreementPanel({ d, isResponsible }: { d: AgreementDetail; isResponsible: boolean }) {
+export function HireAgreementPanel({ d, isResponsible, positionRef = null }: { d: AgreementDetail; isResponsible: boolean; positionRef?: string | null }) {
   const a = d.agreement; const act = agreementActions(a.status, isResponsible, d.proxy_available, d.schedule?.status ?? null, a.legacy_route_released_at != null);
   const { busy, msg, run } = useRun();
   const [date, setDate] = useState(a.start_date ?? ""); const [role, setRole] = useState<FeeRole | "">(a.fee_role ?? "");
-  const [reason, setReason] = useState(""); const [kind, setKind] = useState<"declined" | "cancelled">("declined"); const [closeReason, setCloseReason] = useState(""); const [switchReason, setSwitchReason] = useState("");
+  const [roleConfirmed, setRoleConfirmed] = useState(false); const [reason, setReason] = useState(""); const [kind, setKind] = useState<"declined" | "cancelled">("declined"); const [closeReason, setCloseReason] = useState(""); const [switchReason, setSwitchReason] = useState("");
   return (
     <section className="mt-6 space-y-5 rounded-2xl border border-line bg-surface p-4" aria-label="契約の操作">
       {act.recordIntent && (
         <div>
           <h2 className="text-[14px] font-semibold">① 本人の入社意思確認を記録する</h2>
-          <p className="mt-1 text-[12px] text-sub">本人への確認は運営（エージェント）が必ず行います（代理・自動確定はありません）。確認できた入社予定日と役職を入力してください。</p>
+          <p className="mt-1 text-[12px] text-sub">本人への確認は運営（エージェント）が必ず行います（代理・自動確定はありません）。確認できた入社予定日と、本人に確認した登録区分を入力してください。</p>
+          <p className="mt-1 text-[12px] text-sub">{FEE_ROLE_GUIDE}</p>
+          <p className="mt-1 text-[12px] text-sub">{FEE_ROLE_UNCONFIRMED_GUIDE}</p>
+          <p className="mt-1 text-[12px] text-sub">参考（プロフィールの「現在の役職」・自由記入）: <b className="text-charcoal">{positionRef ? positionRef : "未設定"}</b>。参考表示のみで、採用料の区分には自動では使いません。</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <label className="text-[12px] font-semibold">入社予定日<input type="date" className={inp} value={date} onChange={(e) => setDate(e.target.value)} /></label>
-            <label className="text-[12px] font-semibold">役職（採用料の区分）
+            <label className="text-[12px] font-semibold">{FEE_ROLE_FIELD_LABEL}
               <select className={inp} value={role} onChange={(e) => setRole(e.target.value as FeeRole | "")}><option value="">選択してください</option><option value="stylist">スタイリスト</option><option value="assistant">アシスタント</option></select></label>
           </div>
-          <button className={`${btn} mt-3`} disabled={busy || !date || !role} onClick={() => run(() => recordStylistIntent({ agreementId: a.id, expectedRevision: a.revision, startDate: date, feeRole: role }))}>入社意思確認を記録する</button>
+          <label className="mt-2 flex min-h-[44px] items-start gap-2 text-[12.5px]"><input type="checkbox" className="mt-1 h-5 w-5" checked={roleConfirmed} onChange={(e) => setRoleConfirmed(e.target.checked)} />本人に登録区分を確認しました（担当業務ではなく、登録区分です）</label>
+          <button className={`${btn} mt-3`} disabled={busy || !date || !role || !roleConfirmed} onClick={() => run(() => recordStylistIntent({ agreementId: a.id, expectedRevision: a.revision, startDate: date, feeRole: role, roleConfirmedWithStylist: roleConfirmed }))}>入社意思確認を記録する</button>
         </div>)}
       {(a.status === "awaiting_salon" || (a.status === "confirmed" && a.needs_reconfirm)) && (
         <div>
@@ -68,13 +72,14 @@ export function HireAgreementPanel({ d, isResponsible }: { d: AgreementDetail; i
         </div>)}
       {act.changePlan && (
         <div>
-          <h2 className="text-[14px] font-semibold">入社予定日・役職の変更（責任者のみ）</h2>
-          <p className="mt-1 text-[12px] text-sub">確認済みの契約を変更すると、サロンが変更後の条件を確認し直すまで、請求予定は確認済みの条件のままで、請求へは進みません。請求開始後の変更は自動で動かさず、「要確認」になります。</p>
+          <h2 className="text-[14px] font-semibold">入社予定日・登録区分の変更（責任者のみ）</h2>
+          <p className="mt-1 text-[12px] text-sub">確認済みの契約を変更すると、サロンが変更後の条件を確認し直すまで、請求予定は確認済みの条件のままで、請求へは進みません。請求開始後の変更は自動で動かさず、「要確認」になります。登録区分の訂正は、本人に確認し直した結果だけで行い、担当業務の変更では行いません。</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <label className="text-[12px] font-semibold">入社予定日<input type="date" className={inp} value={date} onChange={(e) => setDate(e.target.value)} /></label>
-            <label className="text-[12px] font-semibold">役職<select className={inp} value={role} onChange={(e) => setRole(e.target.value as FeeRole | "")}><option value="stylist">スタイリスト</option><option value="assistant">アシスタント</option></select></label>
+            <label className="text-[12px] font-semibold">{FEE_ROLE_FIELD_LABEL}<select className={inp} value={role} onChange={(e) => setRole(e.target.value as FeeRole | "")}><option value="stylist">スタイリスト</option><option value="assistant">アシスタント</option></select></label>
           </div>
-          <button className={`${btnLine} mt-3`} disabled={busy || !date || !role} onClick={() => run(() => changeHirePlan({ agreementId: a.id, expectedRevision: a.revision, startDate: date, feeRole: role }), "変更しました。")}>変更する</button>
+          <label className="mt-2 flex min-h-[44px] items-start gap-2 text-[12.5px]"><input type="checkbox" className="mt-1 h-5 w-5" checked={roleConfirmed} onChange={(e) => setRoleConfirmed(e.target.checked)} />本人に登録区分を確認し直しました（担当業務の変更ではありません）</label>
+          <button className={`${btnLine} mt-3`} disabled={busy || !date || !role || !roleConfirmed} onClick={() => run(() => changeHirePlan({ agreementId: a.id, expectedRevision: a.revision, startDate: date, feeRole: role, roleConfirmedWithStylist: roleConfirmed }), "変更しました。")}>変更する</button>
         </div>)}
       {act.close && (
         <div>
@@ -97,7 +102,7 @@ export function HireAgreementPanel({ d, isResponsible }: { d: AgreementDetail; i
         </div>)}
       {!act.recordIntent && a.status !== "awaiting_salon" && !act.changePlan && !act.close && !act.switchToLegacy && <p className="text-[12.5px] text-sub">この状態で行える操作はありません。</p>}
       <Msg m={msg} />
-      <p className="text-[11.5px] text-sub">役職の表示: {a.fee_role ? FEE_ROLE_LABELS[a.fee_role] : "未入力"}</p>
+      <p className="text-[11.5px] text-sub">本人に確認した登録区分: {a.fee_role ? FEE_ROLE_LABELS[a.fee_role] : "未入力"}</p>
     </section>
   );
 }

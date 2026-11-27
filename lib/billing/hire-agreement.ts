@@ -11,6 +11,10 @@ export const AGREEMENT_STATUS_LABELS: Record<AgreementStatus, string> = {
   not_opened: "契約未作成", awaiting_intent: "本人の入社意思確認待ち", awaiting_salon: "サロンの内定操作待ち", confirmed: "採用確定", declined: "辞退", cancelled: "取消",
 };
 export const FEE_ROLE_LABELS: Record<FeeRole, string> = { stylist: "スタイリスト", assistant: "アシスタント" };
+/** 2026-11-27決定: 採用料の区分は「運営が本人に確認した登録区分」。入社先での担当業務では決めない。 */
+export const FEE_ROLE_FIELD_LABEL = "本人に確認した登録区分（採用料）";
+export const FEE_ROLE_GUIDE = "本人に確認した登録区分です。入社先で担当する業務（例: スタイリスト登録の人がアシスタント業務を担当）では決めません。スタイリスト登録は税抜550,000円、アシスタント登録は税抜450,000円です。";
+export const FEE_ROLE_UNCONFIRMED_GUIDE = "登録区分が空欄・不明・食い違うときは、本人に確認が取れるまで入力せず、記録しないでください（記録するまでサロンは内定を確定できません）。";
 export const SCHEDULE_STATUS_LABELS: Record<ScheduleStatus, string> = {
   scheduled: "請求予定（未請求）", charging: "請求中", charged: "請求済み", charge_unknown: "結果不明（要確認）", retry_wait: "請求失敗・再試行待ち", invoice_switch: "請求書払いへの切替案内", cancelled: "取消",
 };
@@ -72,7 +76,7 @@ export function agreementActions(status: AgreementStatus, isResponsible: boolean
 
 /** 設定のうち、画面で必ず明示する未決定項目。 */
 export const UNDECIDED_NOTES: Record<string, string> = {
-  hire_fee_role_source: "採用料の区分（スタイリスト／アシスタント）の判定元は未決定です。運営が入力した値を使います（自動判定はしません）。",
+  hire_fee_role_source: "採用料の区分は、運営が本人に確認した登録区分を入力します（2026-11-27決定・自動判定はしません）。設定の記録がまだ更新されていないため「未決定」と表示されています。この設定が決定済みになるまで、自動請求は有効にできません。",
 };
 
 export function hireErrorMessage(m: string | undefined | null): string {
@@ -84,8 +88,8 @@ export function hireErrorMessage(m: string | undefined | null): string {
     ["admin access required", "運営の権限がありません。"],
     ["insufficient permission", "この操作の権限がありません。"],
     ["start date required", "入社予定日を入力してください。"],
-    ["fee role required", "役職（スタイリスト／アシスタント）を選んでください。"],
-    ["start date and fee role required", "入社予定日と役職を入力してください。"],
+    ["fee role required", "本人に確認した登録区分（スタイリスト／アシスタント）を選んでください。"],
+    ["start date and fee role required", "入社予定日と、本人に確認した登録区分を入力してください。"],
     ["intent already recorded", "本人の入社意思確認は記録済みです。画面を読み込み直してください。"],
     ["salon confirmation is not available", "サロンの内定操作はできない状態です。画面を読み込み直してください。"],
     ["proxy confirmation is not available", "代理操作はできない状態です。画面を読み込み直してください。"],
@@ -97,7 +101,7 @@ export function hireErrorMessage(m: string | undefined | null): string {
     ["agreement not found", "契約が見つかりません。"],
     ["hiring process not found", "採用の情報が見つかりません。"],
     ["stale agreement revision", "画面の内容が古くなっています（他の方が先に変更・確定しました）。読み込み直して最新の内容を確認してから、もう一度操作してください。"],
-    ["confirmed terms do not match", "画面の入社予定日・役職が現在の内容と違います。読み込み直して最新の内容を確認してください。"],
+    ["confirmed terms do not match", "画面の入社予定日・登録区分が現在の内容と違います。読み込み直して最新の内容を確認してください。"],
     ["confirmed amount does not match", "採用料の金額が変わりました。読み込み直して最新の金額を確認してから、もう一度操作してください。"],
     ["fee settings are not decided", "採用料の設定が未確定のため、確定できません。"],
     ["intent is not recorded yet", "本人の入社意思確認が記録されていません。"],

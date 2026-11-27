@@ -42,10 +42,10 @@ export default async function HireAgreementsPage({ searchParams }: Props) {
                 <span className="rounded-full bg-surface2 px-3 py-1 text-[11.5px] font-semibold">{AGREEMENT_STATUS_LABELS[r.status] ?? r.status}</span>
               </div>
               <p className="mt-1 text-sub">
-                役職: {r.fee_role ? FEE_ROLE_LABELS[r.fee_role] : "未入力"} ／ 入社予定日: {r.start_date ?? "未入力"} ／ 更新: {fmtJst(r.updated_at)}
+                登録区分: {r.fee_role ? FEE_ROLE_LABELS[r.fee_role] : "未入力"} ／ 入社予定日: {r.start_date ?? "未入力"} ／ 更新: {fmtJst(r.updated_at)}
                 {r.schedule_status && <> ／ 請求予定: {SCHEDULE_STATUS_LABELS[r.schedule_status]}（{r.charge_on}・{r.total_amount != null ? yen(r.total_amount) : "—"}）</>}
               </p>
-              {r.needs_refund_review && <p role="alert" className="mt-1 font-semibold text-[#8A2E2E]">要確認: 請求が始まった後に辞退・取消、または役職の変更がありました。返金・請求の扱いを運営が確認してください（自動返金はしません）。</p>}
+              {r.needs_refund_review && <p role="alert" className="mt-1 font-semibold text-[#8A2E2E]">要確認: 請求が始まった後に辞退・取消、または登録区分の変更がありました。返金・請求の扱いを運営が確認してください（自動返金はしません）。</p>}
               {r.needs_reconfirm && <p role="alert" className="mt-1 font-semibold text-[#8A2E2E]">再確認待ち: 確認済みの条件が変更されました。再確認が済むまで請求へは進みません。</p>}
               {r.proxy_available && <p className="mt-1 font-semibold text-[#8A2E2E]">サロンが7日間未操作です。責任者は代理で内定を確定できます。</p>}
               <div className="mt-3">

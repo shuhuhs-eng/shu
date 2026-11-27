@@ -34,20 +34,21 @@ export async function openHireAgreement(input: { hiringProcessId: string }): Pro
 }
 const rev = z.number().int().min(1);
 const money = z.number().int().min(0);
-export async function recordStylistIntent(input: { agreementId: string; expectedRevision: number; startDate: string; feeRole: string }): Promise<Result> {
-  const p = z.object({ agreementId: uuid, expectedRevision: rev, startDate: date, feeRole: role }).safeParse(input);
-  if (!p.success) return { success: false, error: "入社予定日（実在する日付）と役職を入力してください。" };
+export async function recordStylistIntent(input: { agreementId: string; expectedRevision: number; startDate: string; feeRole: string; roleConfirmedWithStylist: boolean }): Promise<Result> {
+  // 本人への登録区分の確認は、画面のチェックだけに頼らず、サーバー側でも確認済みの申告（true）が無ければ記録しない。
+  const p = z.object({ agreementId: uuid, expectedRevision: rev, startDate: date, feeRole: role, roleConfirmedWithStylist: z.literal(true) }).safeParse(input);
+  if (!p.success) return { success: false, error: "入社予定日（実在する日付）と、本人に確認した登録区分を入力し、本人に確認したことをチェックしてください。" };
   return call("admin_hire_record_stylist_intent", { p_agreement_id: p.data.agreementId, p_expected_revision: p.data.expectedRevision, p_start_date: p.data.startDate, p_fee_role: p.data.feeRole }, ADMIN);
 }
 /** 代理操作（責任者のみ・サロン未操作7日後）。画面が見た版・入社予定日・役職・金額を送り、DBが現在の値と照合する。 */
 export async function proxyConfirmHire(input: { agreementId: string; reason: string; expectedRevision: number; startDate: string; feeRole: string; totalAmount: number }): Promise<Result> {
   const p = z.object({ agreementId: uuid, reason: z.string().trim().min(1).max(500), expectedRevision: rev, startDate: date, feeRole: role, totalAmount: money }).safeParse(input);
-  if (!p.success) return { success: false, error: "代理操作の理由と、確認する条件（入社予定日・役職・金額）を確認してください。" };
+  if (!p.success) return { success: false, error: "代理操作の理由と、確認する条件（入社予定日・登録区分・金額）を確認してください。" };
   return call("admin_hire_proxy_confirm", { p_agreement_id: p.data.agreementId, p_reason: p.data.reason, p_expected_revision: p.data.expectedRevision, p_start_date: p.data.startDate, p_fee_role: p.data.feeRole, p_total_amount: p.data.totalAmount }, ADMIN);
 }
-export async function changeHirePlan(input: { agreementId: string; expectedRevision: number; startDate: string; feeRole: string }): Promise<Result> {
-  const p = z.object({ agreementId: uuid, expectedRevision: rev, startDate: date, feeRole: role }).safeParse(input);
-  if (!p.success) return { success: false, error: "入社予定日（実在する日付）と役職を入力してください。" };
+export async function changeHirePlan(input: { agreementId: string; expectedRevision: number; startDate: string; feeRole: string; roleConfirmedWithStylist: boolean }): Promise<Result> {
+  const p = z.object({ agreementId: uuid, expectedRevision: rev, startDate: date, feeRole: role, roleConfirmedWithStylist: z.literal(true) }).safeParse(input);
+  if (!p.success) return { success: false, error: "入社予定日（実在する日付）と、本人に確認した登録区分を入力し、本人に確認し直したことをチェックしてください。" };
   return call("admin_hire_change_plan", { p_agreement_id: p.data.agreementId, p_expected_revision: p.data.expectedRevision, p_start_date: p.data.startDate, p_fee_role: p.data.feeRole }, ADMIN);
 }
 export async function closeHireAgreement(input: { agreementId: string; expectedRevision: number; kind: string; reason: string }): Promise<Result> {
