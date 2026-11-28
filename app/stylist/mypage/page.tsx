@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { GUEST_NOT_CARRIED_NOTICE_COOKIE } from "@/lib/diagnosis-handoff/constants";
 import { hasCompletedRole } from "@/lib/auth/user-roles";
+import { areaSearchV2Enabled } from "@/lib/area/feature-flag";
 import { DiagnosisSummary } from "@/components/mypage/diagnosis-summary";
 import { CareerPhaseSummary, StudentPastResultLink } from "@/components/student-diagnosis/career-phase-summary";
 import { StudentCurrentCard } from "@/components/student-diagnosis/student-current-card";
@@ -462,6 +463,11 @@ export default async function StylistMyPage({ searchParams }: { searchParams?: P
       >
         公開中の店舗を探す
       </Link>
+      {areaSearchV2Enabled() && (
+        <Link href="/stylist/preference/area" className="mt-3 block text-center text-[13px] font-semibold text-ink underline">
+          希望勤務地を設定する
+        </Link>
+      )}
 
       <Link href="/stylist/profile" className="mt-4 block text-center text-[13px] text-sub underline">
         プロフィール編集

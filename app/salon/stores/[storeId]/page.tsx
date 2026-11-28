@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getStoreScoutQuota, getStoreScouts } from "@/lib/store-activity/actions";
+import { areaSearchV2Enabled } from "@/lib/area/feature-flag";
 import { getStoreHiringProcesses } from "@/lib/hiring/actions";
 import { countPendingPositiveScouts } from "@/lib/hiring/pending";
 import { ScoutQuotaCard } from "@/components/store-activity/scout-quota-card";
@@ -100,6 +101,15 @@ export default async function StoreWorkspacePage({ params }: Props) {
           <span className="font-serif text-[15px] font-bold text-ink">美容師を探す</span>
           <span className="text-[12px] text-sub">スカウトを送る ›</span>
         </Link>
+        {areaSearchV2Enabled() && (
+          <Link
+            href={`/salon/stores/${storeId}/region`}
+            className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"
+          >
+            <span className="font-serif text-[15px] font-bold text-ink">店舗の所在地</span>
+            <span className="text-[12px] text-sub">近隣検索に使う ›</span>
+          </Link>
+        )}
         <Link
           href={`/salon/stores/${storeId}/interests`}
           className="flex items-center justify-between rounded-2xl border border-line bg-surface p-5"

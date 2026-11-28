@@ -5,6 +5,9 @@ import { hasCompletedRole } from "@/lib/auth/user-roles";
 import { calculateStylistStoreMatch, getOwnPreferenceAxes } from "@/lib/matching/actions";
 import { getPublicSalonStores } from "@/lib/store-activity/actions";
 import { StoreCard } from "@/components/stylist-salons/store-card";
+import { areaSearchV2Enabled } from "@/lib/area/feature-flag";
+import { parseCodesParam, parseModeParam } from "@/lib/area/query-params";
+import { AreaStoresBody } from "./area-stores";
 
 /**
  * 美容師専用の「公開中の店舗」一覧（法人・複数店舗対応 Phase 6）。
@@ -16,7 +19,8 @@ import { StoreCard } from "@/components/stylist-salons/store-card";
  * ★role guard: middlewareに加えて、このページ自体でもstylist roleの完了を
  * 確認する多重防御（既存パターン）。
  */
-export default async function StylistSalonsPage() {
+export default async function StylistSalonsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = (await searchParams) ?? {};
   const supabase = await createClient();
   const {
     data: { user },
@@ -28,6 +32,22 @@ export default async function StylistSalonsPage() {
 
   if (!(await hasCompletedRole(supabase, user.id, "stylist"))) {
     redirect("/onboarding");
+  }
+
+  if (areaSearchV2Enabled()) {
+    // 地域検索 v2（フラグ既定オフ）。店舗の取得・並び・相性はDBのget_public_stores_for_stylist_v2が決める。
+    const { data: sizeRows } = await supabase.from("employee_size_master").select("*");
+    const sizeLabels = Object.fromEntries((sizeRows ?? []).map((r) => [r.code, r.label]));
+    return (
+      <main className="mx-auto max-w-[640px] px-5 py-12">
+        <div className="mb-7 flex items-center gap-2.5"><span className="eyebrow">Beauty Reach</span><hr className="h-px flex-1 border-0 bg-line" /></div>
+        <p className="eyebrow mb-2">店舗を探す</p>
+        <h1 className="font-serif text-2xl font-bold text-ink">あなたらしさ × サロンらしさ</h1>
+        <p className="mt-3 text-[13px] leading-relaxed text-charcoal">公開中の店舗の中から、あなたの「働きたいサロン環境」との相性を確認できます。</p>
+        <AreaStoresBody supabase={supabase} mode={parseModeParam(sp.mode)} codes={parseCodesParam(sp.codes, 10)} sizeLabels={sizeLabels} />
+        <Link href="/stylist/mypage" className="mt-8 block text-center text-[13px] text-sub underline">マイページに戻る</Link>
+      </main>
+    );
   }
 
   const stores = await getPublicSalonStores();

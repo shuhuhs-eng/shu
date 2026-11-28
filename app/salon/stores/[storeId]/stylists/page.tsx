@@ -13,9 +13,13 @@ import { ScoutQuotaCard } from "@/components/store-activity/scout-quota-card";
 import { StoreStylistCard } from "@/components/scouts/store-stylist-card";
 import type { PublicStylistForScout } from "@/lib/scouts/types";
 import { AVATAR_SIGNED_URL_EXPIRES_IN } from "@/lib/storage/avatar";
+import { areaSearchV2Enabled } from "@/lib/area/feature-flag";
+import { parseCodesParam, parseModeParam } from "@/lib/area/query-params";
+import { AreaCandidatesBody } from "./area-candidates";
 
 type Props = {
   params: Promise<{ storeId: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
 /**
@@ -39,8 +43,9 @@ type Props = {
  * params.storeIdを使い、salon_user_id・salon_onboarding_assignmentsから
  * 推測しない（2店舗目でも同じ仕組みで成立する）。
  */
-export default async function StoreStylistsPage({ params }: Props) {
+export default async function StoreStylistsPage({ params, searchParams }: Props) {
   const { storeId } = await params;
+  const sp = (await searchParams) ?? {};
   const supabase = await createClient();
   const {
     data: { user },
@@ -62,6 +67,25 @@ export default async function StoreStylistsPage({ params }: Props) {
 
   if (storeError || !store) {
     redirect("/salon/company");
+  }
+
+  if (areaSearchV2Enabled()) {
+    // 地域検索 v2（フラグ既定オフ）。候補の取得・並び・相性はDBのget_scout_candidates_v2が決める。
+    const { paused } = await getStoreRecruitingAccess(storeId);
+    const manage = await canManageStoreHiringHint(supabase, user.id, storeId, store.organization_id);
+    const quotaV2 = await getStoreScoutQuota(storeId);
+    return (
+      <main className="mx-auto max-w-[640px] px-5 py-12">
+        <div className="mb-7 flex items-center gap-2.5"><span className="eyebrow">Beauty Reach</span><hr className="h-px flex-1 border-0 bg-line" /></div>
+        <Link href={`/salon/stores/${storeId}`} className="text-[13px] font-semibold text-sub underline">← {store.store_name} に戻る</Link>
+        <p className="eyebrow mb-2 mt-5">美容師を探す</p>
+        <h1 className="font-serif text-2xl font-bold text-ink">{store.store_name}</h1>
+        <p className="mt-3 text-[13px] leading-relaxed text-charcoal">公開している美容師の中から、この店舗との相性を確認してスカウトを送れます。</p>
+        {paused && <p role="status" className="mt-6 rounded-lg bg-surface2 px-4 py-3 text-[12.5px] leading-relaxed text-charcoal">{RECRUITING_PAUSED_MESSAGE}。スカウトの送信はできません。</p>}
+        <div className="mt-6"><ScoutQuotaCard quota={quotaV2} /></div>
+        <AreaCandidatesBody supabase={supabase} storeId={storeId} mode={parseModeParam(sp.mode)} codes={parseCodesParam(sp.codes, 10)} canManage={manage} recruitingPaused={paused} />
+      </main>
+    );
   }
 
   const { data: stylistsData, error } = await fetchPublicStylistsForScout(supabase, storeId);
