@@ -12,6 +12,7 @@ import { summarizeFees } from "@/lib/billing/summary";
 import { BaselineSummary } from "@/components/contracts/baseline-summary";
 import { InvoiceSummary } from "@/components/billing/invoice-summary";
 import { PaymentSettings } from "@/components/billing/payment-settings";
+import { scoutLedgerEnabled } from "@/lib/billing/hire-flags";
 import { FeePaymentBlock } from "@/components/billing/fee-payment-block";
 import { checkStripeEnv, parseReturn } from "@/lib/stripe/config";
 import { getDefaultCardDisplay } from "@/lib/stripe/checkout";
@@ -82,7 +83,7 @@ export default async function CompanyBillingPage({ searchParams }: { searchParam
         </p>
       )}
 
-      {organizationId && <PaymentSettings organizationId={organizationId} overview={overview} card={card} stripeReady={stripeReady} />}
+      {organizationId && <PaymentSettings organizationId={organizationId} overview={overview} card={card} stripeReady={stripeReady} scoutLedger={scoutLedgerEnabled()} />}
       {organizationId && <SubscriptionInvoiceHistory invoices={subInvoices} />}
 
       {fees === null || summary === null ? (

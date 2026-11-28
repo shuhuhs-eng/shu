@@ -14,7 +14,7 @@ test("vercel.json: 既存の定期処理を残し、通知メールを1分間隔
   const mail = vercel.crons.find((c) => c.path === "/api/cron/send-notification-emails");
   assert.deepEqual(mail, { path: "/api/cron/send-notification-emails", schedule: "* * * * *" });
   assert.deepEqual(vercel.crons.find((c) => c.path === "/api/cron/hire-fee-charge"), { path: "/api/cron/hire-fee-charge", schedule: "0 * * * *" }, "採用料の自動請求は1時間ごと（復旧・取りこぼしの再処理のため。HIRE_BILLING_ENABLED と auto_charge_enabled が両方有効の間だけ請求）");
-  assert.equal(vercel.crons.length, 3);
+  assert.equal(vercel.crons.length, 4); assert.deepEqual(vercel.crons.find((c) => c.path === "/api/cron/scout-expiry"), { path: "/api/cron/scout-expiry", schedule: "10 15 * * *" });
   assert.equal(new Set(vercel.crons.map((c) => c.path)).size, vercel.crons.length);
   for (const c of vercel.crons) { assert.match(c.schedule, /^\S+ \S+ \S+ \S+ \S+$/); assert.ok(existsSync(`app${c.path}/route.ts`), c.path); }
 });

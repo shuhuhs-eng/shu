@@ -34,6 +34,8 @@ const lineItemSchema = z.object({
   description: z.string(),
   store_name: z.string().nullable(),
   hired_date: z.string(),
+  /** 日付の見出し（手動請求の見学・体験料は「実施日」、採用料は「入社予定日」）。無ければ「採用成立日」。 */
+  transaction_label: z.string().max(20).nullish(),
   quantity: z.number(),
   unit: z.string(),
   amount: z.number(),

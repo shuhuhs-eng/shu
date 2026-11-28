@@ -1,6 +1,7 @@
 import type { CompanyPaymentOverview } from "@/types/database";
 import type { CardDisplay } from "@/lib/stripe/checkout";
 import { StripeStartButton } from "./stripe-start-button";
+import { PURCHASE_TERMS_NOTE } from "@/lib/billing/scout-credit-rules";
 import { cardBrandLabel, formatCardExpiry, SUBSCRIPTION_STATE_CLASSES, subscriptionStateLabel, type SubscriptionPaymentState } from "@/lib/stripe/labels";
 
 const yen = (n: number) => `${n.toLocaleString("ja-JP")}円`;
@@ -15,8 +16,8 @@ function fmtDate(iso: string | null): string {
  * ★Stripe技術ID（cus_/sub_等）は一切表示しない。
  * ★Stripe Customer Portalは補助。Beauty Reachの請求書が主で、ポータルに行かなくても状況が分かる。
  */
-export function PaymentSettings({ organizationId, overview, card, stripeReady }: {
-  organizationId: string; overview: CompanyPaymentOverview | null; card: CardDisplay | null; stripeReady: boolean;
+export function PaymentSettings({ organizationId, overview, card, stripeReady, scoutLedger = false }: {
+  organizationId: string; overview: CompanyPaymentOverview | null; card: CardDisplay | null; stripeReady: boolean; scoutLedger?: boolean;
 }) {
   if (overview === null) {
     return <p className="mt-6 rounded-lg bg-[#C24545]/10 px-3 py-2 text-[12px] text-[#8A2E2E]">お支払い設定を取得できませんでした。時間をおいて再度お試しください。</p>;
@@ -103,7 +104,7 @@ export function PaymentSettings({ organizationId, overview, card, stripeReady }:
             ))}
           </ul>
         )}
-        <p className="mt-2 text-[11px] text-sub">決済が確認できてから枠が追加されます。</p>
+        <p className="mt-2 text-[11px] text-sub">決済が確認できてから枠が追加されます。{scoutLedger ? PURCHASE_TERMS_NOTE : ""}</p>
       </article>
     </section>
   );

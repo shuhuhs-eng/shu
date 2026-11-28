@@ -52,7 +52,7 @@ test("画面: 失敗時は role=alert の失敗文言のみ（0件文言と分�
   assert.match(p, /!candidateLoad\.ok \? \([\s\S]*?role="alert"[\s\S]*?CANDIDATE_LOAD_FAILED_MESSAGE[\s\S]*?\) : rankedStylists\.length === 0 \? \([\s\S]*?CANDIDATE_EMPTY_MESSAGE/);
   assert.match(p, /const stylists: PublicStylistForScout\[\] = candidateLoad\.ok \? candidateLoad\.stylists : \[\]/);
   // 維持: スカウト枠・募集停止の案内・並び替え（相性降順→元の順）・取得のフォールバック
-  assert.match(p, /<ScoutQuotaCard quota=\{quota\}/); assert.match(p, /RECRUITING_PAUSED_MESSAGE/);
+  assert.match(p, /<ScoutAllowance storeId=\{storeId\} quota=\{quota\}/); assert.match(p, /RECRUITING_PAUSED_MESSAGE/);
   assert.match(p, /bScore - aScore \|\| a\.originalIndex - b\.originalIndex/);
   assert.match(p, /console\.error\("\[StoreStylistsPage\] get_public_stylists_for_scout failed", \{ message: error\.message, code: error\.code \}\)/);
 });

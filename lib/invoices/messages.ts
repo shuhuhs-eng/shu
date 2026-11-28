@@ -17,6 +17,7 @@ const MISSING_LABELS: Record<string, string> = {
   issuer_bank_account_number_missing: "振込先口座番号が未登録です",
   issuer_bank_account_holder_missing: "振込先の口座名義が未登録です",
   recipient_legal_name: "請求先情報が未登録です",
+  invoice_not_open: "この請求は入金済み・取消済みのため、請求書を新規に発行できません",
 };
 
 export function missingLabel(code: string): string {

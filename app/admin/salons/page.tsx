@@ -25,6 +25,7 @@ export default async function AdminSalonsPage({ searchParams }: { searchParams: 
 
   return (
     <main className="mx-auto max-w-[900px] px-5 py-10">
+      <p className="mb-3 text-[12.5px] font-semibold"><Link href="/admin/salons/issue" className="inline-flex min-h-[44px] items-center underline">サロンアカウントを発行する（本部・責任者）</Link></p>
       <div className="mb-6 flex items-center gap-2.5"><span className="eyebrow">Beauty Reach Admin</span><hr className="h-px flex-1 border-0 bg-line" /></div>
       <h1 className="font-serif text-2xl font-bold text-ink">会社・店舗</h1>
       <p className="mt-2 text-[12.5px] leading-relaxed text-sub">会社名・店舗名・担当者名・登録メールアドレスで検索できます。所在地・公開状態・利用状態の絞り込みは、<b>1つの店舗がすべての条件を満たす</b>会社だけが対象で、一致した店舗に印が付きます。会社そのものの所在地は未登録のため表示しません。</p>

@@ -21,7 +21,7 @@ const ACCENT = rgb(0.16, 0.36, 0.27);
 
 /** PDFに書く固定の文言。フォントのサブセットに必ず含める。 */
 const STATIC_TEXT =
-  "請求書番号請求日御中ご請求金額（税込）お支払期限取引内容数量金額（税抜）店舗：採用成立日小計消費税適用税率対象税抜お振込先銀行名支店名口座種別口座番号口座名義普通当座貯蓄お支払期限までに上記口座へお振込みくださいますようお願いいたします。登録番号〒様名円合計（）TEL年月日";
+  "請求書番号請求日御中ご請求金額（税込）お支払期限取引内容数量金額（税抜）店舗：採用成立日実施日入社予定日小計消費税適用税率対象税抜お振込先銀行名支店名口座種別口座番号口座名義普通当座貯蓄お支払期限までに上記口座へお振込みくださいますようお願いいたします。登録番号〒様名円合計（）TEL年月日";
 
 function collectChars(value: unknown): string {
   return collectCharsWith(STATIC_TEXT, value);
@@ -128,7 +128,7 @@ export async function renderInvoicePdf(prepared: PreparedInvoice): Promise<Uint8
   const descLines = [
     ...wrap(item.description, regular, 10.5, colQty - MARGIN - 40),
     ...wrap(`店舗：${item.store_name ?? c.store_name ?? ""}`, regular, 9, colQty - MARGIN - 40),
-    `採用成立日：${jpDate(item.hired_date)}`,
+    `${item.transaction_label ?? "採用成立日"}：${jpDate(item.hired_date)}`,
   ];
   const rowTop = y;
   descLines.forEach((line, i) => text(page, line, MARGIN + 8, y - i * 14, i === 0 ? 10.5 : 9, regular, i === 0 ? INK : SUB));

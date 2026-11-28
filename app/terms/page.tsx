@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/legal/legal-page";
 import { getLegalView } from "@/lib/legal/view";
+import { SalonPriceList } from "@/components/legal/salon-price-list";
+import { scoutLedgerEnabled } from "@/lib/billing/hire-flags";
 import { publicPageMetadata } from "@/lib/seo/metadata";
 
 export const metadata: Metadata = publicPageMetadata({ title: "利用規約 | Beauty Reach", description: "Beauty Reachの利用規約。", path: "/terms" });
@@ -16,5 +18,10 @@ export default async function TermsPage() {
       </main>
     );
   }
-  return <LegalPage view={view} other={{ href: "/privacy", label: "プライバシーポリシーを見る" }} />;
+  return (
+    <>
+      <LegalPage view={view} other={{ href: "/privacy", label: "プライバシーポリシーを見る" }} />
+      {scoutLedgerEnabled() ? <SalonPriceList /> : null}
+    </>
+  );
 }

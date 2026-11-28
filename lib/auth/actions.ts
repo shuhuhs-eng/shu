@@ -25,6 +25,7 @@ import {
   GUEST_SIGNUP_UNVERIFIED_COOKIE,
   CLAIM_TOKEN_COOKIE,
 } from "@/lib/diagnosis-handoff/constants";
+import { salonSelfSignupClosed, SALON_SIGNUP_CLOSED_MESSAGE } from "@/lib/auth/salon-signup";
 import { hashClaimToken, issueSignUpBinding } from "@/lib/diagnosis-handoff/new-account";
 import {
   signUpSchema,
@@ -187,6 +188,8 @@ export async function signUpSalonAction(
   _prevState: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
+  // 画面を経由しない直接の呼び出しも止める（閉鎖中は何も作らない）。
+  if (salonSelfSignupClosed()) return { error: SALON_SIGNUP_CLOSED_MESSAGE };
   return performSignUp("salon", formData);
 }
 

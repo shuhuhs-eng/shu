@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 const read = (p: string) => readFileSync(p, "utf8");
 
-test("美容師を探す: 地域検索の画面も旧画面も、店舗ダッシュボードと同じ従来の残数カード(ScoutQuotaCard)を使う（台帳方式の部品には依存しない）", () => {
+test("美容師を探す: 地域検索の画面も旧画面も、店舗ダッシュボードと同じ共通の残数表示(ScoutAllowance)を使う（台帳方式のときは台帳の残高）", () => {
   const p = read("app/salon/stores/[storeId]/stylists/page.tsx");
-  assert.ok(!p.includes("ScoutAllowance"));
-  assert.equal((p.match(/<ScoutQuotaCard quota=\{/g) ?? []).length, 2);
-  assert.ok(!read("app/salon/stores/[storeId]/page.tsx").includes("ScoutAllowance"));
+  assert.ok(p.includes('import { ScoutAllowance }') && !p.includes("ScoutQuotaCard"));
+  assert.equal((p.match(/<ScoutAllowance storeId=\{storeId\} quota=\{/g) ?? []).length, 2);
+  assert.ok(read("app/salon/stores/[storeId]/page.tsx").includes("ScoutAllowance"));
 });
 test("地域検索の画面: 近隣・全国・地域指定の3つの探し方と、モード・地域コードの受け渡し", () => {
   const a = read("app/salon/stores/[storeId]/stylists/area-candidates.tsx");

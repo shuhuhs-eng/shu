@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/hire-fee-charge",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/scout-expiry",
+      "schedule": "10 15 * * *"
     }
   ]
 }

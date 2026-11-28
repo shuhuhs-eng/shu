@@ -9,7 +9,7 @@ import { getStoreScouts, getStoreScoutQuota } from "@/lib/store-activity/actions
 import { getStoreRecruitingAccess } from "@/lib/contracts/recruiting-access-actions";
 import { canManageStoreHiringHint } from "@/lib/hiring/permissions";
 import { RECRUITING_PAUSED_MESSAGE } from "@/lib/contracts/recruiting-access";
-import { ScoutQuotaCard } from "@/components/store-activity/scout-quota-card";
+import { ScoutAllowance } from "@/components/store-activity/scout-allowance";
 import { StoreStylistCard } from "@/components/scouts/store-stylist-card";
 import type { PublicStylistForScout } from "@/lib/scouts/types";
 import { AVATAR_SIGNED_URL_EXPIRES_IN } from "@/lib/storage/avatar";
@@ -82,7 +82,7 @@ export default async function StoreStylistsPage({ params, searchParams }: Props)
         <h1 className="font-serif text-2xl font-bold text-ink">{store.store_name}</h1>
         <p className="mt-3 text-[13px] leading-relaxed text-charcoal">公開している美容師の中から、この店舗との相性を確認してスカウトを送れます。</p>
         {paused && <p role="status" className="mt-6 rounded-lg bg-surface2 px-4 py-3 text-[12.5px] leading-relaxed text-charcoal">{RECRUITING_PAUSED_MESSAGE}。スカウトの送信はできません。</p>}
-        <div className="mt-6"><ScoutQuotaCard quota={quotaV2} /></div>
+        <div className="mt-6"><ScoutAllowance storeId={storeId} quota={quotaV2} /></div>
         <AreaCandidatesBody supabase={supabase} storeId={storeId} mode={parseModeParam(sp.mode)} codes={parseCodesParam(sp.codes, 10)} canManage={manage} recruitingPaused={paused} />
       </main>
     );
@@ -160,7 +160,7 @@ export default async function StoreStylistsPage({ params, searchParams }: Props)
       )}
 
       <div className="mt-6">
-        <ScoutQuotaCard quota={quota} />
+        <ScoutAllowance storeId={storeId} quota={quota} />
       </div>
 
       {!candidateLoad.ok ? (

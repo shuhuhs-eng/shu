@@ -7,3 +7,8 @@
 export const flagEnabled = (v: string | undefined): boolean => v === "1";
 export function hireBillingEnabled(env: Record<string, string | undefined> = process.env): boolean { return flagEnabled(env.HIRE_BILLING_ENABLED); }
 export function scoutLedgerEnabled(env: Record<string, string | undefined> = process.env): boolean { return flagEnabled(env.SCOUT_LEDGER_ENABLED); }
+
+/** 本部によるサロンアカウント発行（0117・提案・未適用）。メール送信・認証アカウント作成を伴うため、既定オフ。有効を表す値は '1' だけ。 */
+export function salonAccountIssueEnabled(env: Record<string, string | undefined> = process.env): boolean { return flagEnabled(env.SALON_ACCOUNT_ISSUE_ENABLED); }
+/** 見学・体験料／採用料の手動請求・入金管理（0118・提案・未適用）。既定オフ。採用料の自動請求（HIRE_BILLING_ENABLED・auto_charge_enabled）とは別。 */
+export function manualBillingEnabled(env: Record<string, string | undefined> = process.env): boolean { return flagEnabled(env.MANUAL_BILLING_ENABLED); }

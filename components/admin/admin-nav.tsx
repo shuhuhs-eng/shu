@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { STAFF_MENU } from "@/lib/admin/staff-menu";
-import { hireBillingEnabled, scoutLedgerEnabled } from "@/lib/billing/hire-flags";
+import { hireBillingEnabled, manualBillingEnabled, scoutLedgerEnabled } from "@/lib/billing/hire-flags";
 
 const ITEMS = [
   // 一般向けサイトのホーム（エラー画面の「管理画面へ戻る」→/admin とは行き先を分けている）。スマホでも先頭で見えるよう最初に置く。
@@ -30,7 +30,7 @@ const STAFF_ITEMS = [{ href: "/", label: "HOME" }, { href: "/admin/staff", label
 /** 運営画面の共通ナビ（運営者だけに表示。layoutで権限を確認している）。スタッフには通常業務の画面だけを出す（権限の本体はDB）。 */
 export function AdminNav({ variant = "responsible" }: { variant?: "responsible" | "staff" }) {
   // 採用契約・スカウト台帳は機能フラグ（既定オフ）が有効なときだけ表示。スタッフには採用契約のみ（台帳は責任者のみ）。フラグがオフの間は従来と同じ。
-  const extra = [...(hireBillingEnabled() ? [{ href: "/admin/hire-agreements", label: "採用契約・採用料" }] : []), ...(scoutLedgerEnabled() && variant !== "staff" ? [{ href: "/admin/scout-ledger", label: "スカウト台帳" }] : [])];
+  const extra = [...(hireBillingEnabled() ? [{ href: "/admin/hire-agreements", label: "採用契約・採用料" }] : []), ...(scoutLedgerEnabled() && variant !== "staff" ? [{ href: "/admin/scout-ledger", label: "スカウト台帳" }] : []), ...(manualBillingEnabled() && variant !== "staff" ? [{ href: "/admin/manual-billing", label: "手動請求・入金" }] : [])];
   const base = variant === "staff" ? STAFF_ITEMS : ITEMS;
   const items = [...base, ...extra];
   return (
