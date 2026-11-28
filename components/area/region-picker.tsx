@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RegionAttribution } from "@/components/area/region-attribution";
 import { filterRegions, regionLabel, toggleRegion, type RegionRow } from "@/lib/area/regions";
 
 type Props = { rows: RegionRow[]; selected: string[]; max: number; onChange: (next: string[]) => void; onError?: (message: string | null) => void; disabled?: boolean };
@@ -57,6 +58,7 @@ export function RegionPicker({ rows, selected, max, onChange, onError, disabled 
           </details>
         ))}
       </div>
+      <RegionAttribution />
     </div>
   );
 }

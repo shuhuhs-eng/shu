@@ -44,3 +44,11 @@ test("地域名の検索: 希望勤務地・地域指定の選択画面と店舗
   // 選択中の市は絞り込みで消えない
   assert.ok(store.includes("c.code === city ||"));
 });
+
+test("出典表示: 希望勤務地・地域指定・店舗所在地の地域選択画面の下部に、指定の文言とリンクを出す", () => {
+  const a = read("components/area/region-attribution.tsx");
+  assert.ok(a.includes("https://www.e-stat.go.jp/municipalities/cities/areacode") && a.includes("https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2026.html"));
+  assert.ok(a.includes("e-Stat『標準地域コード』") && a.includes("『国土数値情報 行政区域データ（2026年版）』") && a.includes("を基にBeauty Reachが加工。") && a.includes('rel="noopener noreferrer"'));
+  assert.ok(read("components/area/region-picker.tsx").includes("<RegionAttribution />"));   // 希望勤務地(area-preference-form)と地域指定(manual-region-form)が使う
+  assert.ok(read("components/area/store-region-form.tsx").includes("<RegionAttribution />"));
+});

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { RegionAttribution } from "@/components/area/region-attribution";
 import { confirmStoreRegionAction } from "@/lib/area/actions";
 import { matchesRegionQuery, type RegionRow } from "@/lib/area/regions";
 
@@ -47,6 +48,7 @@ export function StoreRegionForm({ storeId, rows, initialCity, initialWard, finge
       )}
       <button type="button" onClick={submit} disabled={!canSubmit} className="mt-6 w-full rounded-full bg-ink px-5 py-3 text-[14px] font-semibold text-white disabled:opacity-50">{pending ? "確定中…" : "この所在地で確定する"}</button>
       {msg && <p role={msg.kind === "error" ? "alert" : "status"} className={`mt-3 text-[13px] leading-relaxed ${msg.kind === "error" ? "text-red-700" : "text-charcoal"}`}>{msg.text}{msg.kind === "error" && <> <button type="button" className="underline" onClick={() => window.location.reload()}>最新の内容を読み込み直す</button></>}</p>}
+      <RegionAttribution />
     </div>
   );
 }
