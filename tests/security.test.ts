@@ -44,3 +44,13 @@ test("logError: 生のエラーオブジェクト(details/hint)を出さない",
   assert.ok(!text.includes("a@b.c") && !text.includes("secret"));
   assert.ok(text.includes("23505"));
 });
+
+test("env: ANTHROPIC_API_KEY は Preview でだけ未設定を許す（本番は従来どおりエラー・他の変数は緩めない）", () => {
+  const errorKeys = (ps: ReturnType<typeof collectEnvProblems>) => ps.filter((p) => p.level === "error").map((p) => p.key);
+  assert.ok(errorKeys(collectEnvProblems({}, true)).includes("ANTHROPIC_API_KEY"));
+  assert.ok(errorKeys(collectEnvProblems({}, true, false)).includes("ANTHROPIC_API_KEY"));
+  const preview = collectEnvProblems({}, true, true);
+  assert.ok(!errorKeys(preview).includes("ANTHROPIC_API_KEY"));
+  assert.ok(preview.some((p) => p.key === "ANTHROPIC_API_KEY" && p.level === "warn"));
+  for (const k of ["CRON_SECRET", "SUPABASE_SERVICE_ROLE_KEY", "STRIPE_SECRET_KEY", "TURNSTILE_SECRET_KEY"]) assert.ok(errorKeys(preview).includes(k), k);
+});

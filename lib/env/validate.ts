@@ -10,7 +10,7 @@
  */
 import { siteUrlProblem } from "../site-url";
 
-export type EnvSpec = { key: string; kind: "required" | "productionOnly"; note: string };
+export type EnvSpec = { key: string; kind: "required" | "productionOnly"; note: string; optionalInPreview?: boolean };
 
 export const ENV_SPECS: EnvSpec[] = [
   { key: "NEXT_PUBLIC_SUPABASE_URL", kind: "required", note: "Supabase プロジェクトURL" },
@@ -18,7 +18,7 @@ export const ENV_SPECS: EnvSpec[] = [
   { key: "SUPABASE_SERVICE_ROLE_KEY", kind: "productionOnly", note: "未ログイン診断の保存・請求書PDF保管に必須" },
   { key: "NEXT_PUBLIC_SITE_URL", kind: "productionOnly", note: "メール認証/パスワード再設定のリダイレクト基点" },
   { key: "CRON_SECRET", kind: "productionOnly", note: "cron エンドポイントの認証" },
-  { key: "ANTHROPIC_API_KEY", kind: "productionOnly", note: "AI解説生成（未設定だと生成がスキップされる）" },
+  { key: "ANTHROPIC_API_KEY", kind: "productionOnly", note: "AI解説生成（未設定だと生成がスキップされる）", optionalInPreview: true },
   { key: "LEGAL_OPERATOR_NAME", kind: "productionOnly", note: "規約の運営者名（未設定だと /admin/legal から公開不可）" },
   { key: "LEGAL_OPERATOR_ADDRESS", kind: "productionOnly", note: "規約の運営者所在地" },
   { key: "LEGAL_CONTACT_EMAIL", kind: "productionOnly", note: "規約の問い合わせ先" },
@@ -33,7 +33,11 @@ export type EnvProblem = { key: string; level: "error" | "warn"; message: string
 
 type Env = Record<string, string | undefined>;
 
-export function collectEnvProblems(env: Env, isProduction: boolean): EnvProblem[] {
+/**
+ * isPreview: Vercel の Preview 環境（VERCEL_ENV=preview）のとき true。optionalInPreview の変数だけ、
+ * 未設定でも起動を止めず警告にする。本番（VERCEL_ENV=production やVercel外）では従来どおりエラー。
+ */
+export function collectEnvProblems(env: Env, isProduction: boolean, isPreview = false): EnvProblem[] {
   const problems: EnvProblem[] = [];
   const missing = (k: string) => !env[k] || !env[k]!.trim();
   for (const s of ENV_SPECS) {
@@ -41,7 +45,7 @@ export function collectEnvProblems(env: Env, isProduction: boolean): EnvProblem[
     if (s.kind === "required") {
       problems.push({ key: s.key, level: isProduction ? "error" : "warn", message: `${s.key} が未設定（${s.note}）` });
     } else if (isProduction) {
-      problems.push({ key: s.key, level: "error", message: `${s.key} が未設定（${s.note}）` });
+      problems.push({ key: s.key, level: isPreview && s.optionalInPreview ? "warn" : "error", message: `${s.key} が未設定（${s.note}）` });
     }
   }
   const site = env.NEXT_PUBLIC_SITE_URL;
